@@ -1,0 +1,696 @@
+import 'dart:math';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+import 'auth_form_validation.dart';
+
+abstract final class AppTheme {
+  static const accent = Color(0xFF0A66C2);
+  static const body = Color(0xFFE8E8E8);
+}
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  bool _isLogin = true;
+  String? _registerType;
+
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _confirmPassword = TextEditingController();
+  final _name = TextEditingController();
+  final _surname = TextEditingController();
+  final _companyName = TextEditingController();
+  final _piva = TextEditingController();
+  final _phone = TextEditingController();
+  final _refPerson = TextEditingController();
+  final _refRole = TextEditingController();
+  final _website = TextEditingController();
+
+  bool _obscure = true;
+  bool _busy = false;
+
+  String? _loginNotice;
+  String? _emailError;
+  String? _passwordError;
+  String? _registerNotice;
+  final Map<String, String> _registerFieldErrors = {};
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    _confirmPassword.dispose();
+    _name.dispose();
+    _surname.dispose();
+    _companyName.dispose();
+    _piva.dispose();
+    _phone.dispose();
+    _refPerson.dispose();
+    _refRole.dispose();
+    _website.dispose();
+    super.dispose();
+  }
+
+  void _clearLoginFeedback() {
+    _loginNotice = null;
+    _emailError = null;
+    _passwordError = null;
+  }
+
+  void _clearRegisterFeedback() {
+    _registerNotice = null;
+    _registerFieldErrors.clear();
+  }
+
+  String? _regError(String key) => _registerFieldErrors[key];
+
+  bool _isValidPiva(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    return digits.length == 11;
+  }
+
+  bool _validateRegisterForm({
+    required String email,
+    required String password,
+    required String confirm,
+  }) {
+    final errors = <String, String>{};
+
+    void requireField(String key, String value, {String? label}) {
+      if (value.trim().isEmpty) {
+        errors[key] = label != null ? '$label è obbligatorio.' : 'Campo obbligatorio.';
+      }
+    }
+
+    if (_registerType == 'public') {
+      requireField('name', _name.text, label: 'Il nome');
+      requireField('surname', _surname.text, label: 'Il cognome');
+    }
+
+    if (_registerType == 'company') {
+      requireField('companyName', _companyName.text, label: 'La ragione sociale');
+      if (_piva.text.trim().isEmpty) {
+        errors['piva'] = 'La Partita IVA è obbligatoria.';
+      } else if (!_isValidPiva(_piva.text)) {
+        errors['piva'] = 'La Partita IVA deve avere 11 cifre.';
+      }
+      requireField('phone', _phone.text, label: 'Il telefono');
+      requireField('refPerson', _refPerson.text, label: 'La persona di riferimento');
+      requireField('refRole', _refRole.text, label: 'Il ruolo');
+      requireField('website', _website.text, label: 'Il sito internet');
+    }
+
+    if (email.isEmpty) {
+      errors['email'] = 'L’email è obbligatoria.';
+    } else if (!AuthFormValidation.looksLikeValidEmail(email)) {
+      errors['email'] = 'L’indirizzo email non sembra corretto.';
+    }
+
+    if (password.isEmpty) {
+      errors['password'] = 'La password è obbligatoria.';
+    } else {
+      final pwdMsg = AuthFormValidation.passwordRuleMessage(password);
+      if (pwdMsg != null) errors['password'] = pwdMsg;
+    }
+
+    if (confirm.isEmpty) {
+      errors['confirmPassword'] = 'Conferma la password.';
+    } else if (password.isNotEmpty && password != confirm) {
+      errors['confirmPassword'] = 'Le password non coincidono.';
+    }
+
+    if (errors.isNotEmpty) {
+      setState(() {
+        _clearRegisterFeedback();
+        _registerFieldErrors.addAll(errors);
+      });
+      return false;
+    }
+
+    return true;
+  }
+
+  String _generateCpCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final rnd = Random.secure();
+    return List.generate(8, (_) => chars[rnd.nextInt(chars.length)]).join();
+  }
+
+  Future<void> _signIn() async {
+    final email = _email.text.trim();
+    final password = _password.text;
+
+    setState(() {
+      _busy = true;
+      _clearLoginFeedback();
+    });
+
+    final fieldErrors = AuthFormValidation.validateLogin(
+      email: email,
+      password: password,
+    );
+    if (fieldErrors.isNotEmpty) {
+      setState(() {
+        _busy = false;
+        _emailError = fieldErrors['email'];
+        _passwordError = fieldErrors['password'];
+      });
+      return;
+    }
+
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+    } on FirebaseAuthException catch (e) {
+      final feedback = await AuthFormValidation.resolveLoginAuthFailure(e, email);
+      if (!mounted) return;
+      setState(() {
+        _loginNotice = feedback.notice;
+        _emailError = feedback.emailError;
+        _passwordError = feedback.passwordError;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loginNotice = 'Errore di connessione. Verifica la rete.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Recupero password'),
+          content: const Text(
+            'Inserisci l’email con cui ti sei registrato.\n'
+            'Ti invieremo un link per reimpostare la password.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Ok'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException {
+      // Silenzioso per sicurezza (non rivelare se l'email esiste).
+    }
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Email inviata'),
+        content: Text(
+          'Se l’indirizzo è registrato, abbiamo inviato un’email a:\n\n$email\n\n'
+          'Controlla la posta (anche spam).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Chiudi'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showRegisterTypePopup() async {
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text('Tipo di registrazione'),
+        content: const Text('Seleziona il tipo di account'),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          SizedBox(
+            width: 120,
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, 'public'),
+              child: const Text('Utente'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 120,
+            child: FilledButton(
+              onPressed: () => Navigator.pop(context, 'company'),
+              child: const Text('Azienda'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _register() async {
+    if (_registerType == null) return;
+
+    final email = _email.text.trim();
+    final password = _password.text.trim();
+    final confirm = _confirmPassword.text.trim();
+
+    setState(() {
+      _busy = true;
+      _clearRegisterFeedback();
+    });
+
+    if (!_validateRegisterForm(
+      email: email,
+      password: password,
+      confirm: confirm,
+    )) {
+      setState(() => _busy = false);
+      return;
+    }
+
+    final alreadyRegistered =
+        await AuthFormValidation.emailRegisteredOnPlatform(email);
+    if (alreadyRegistered) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _registerNotice =
+            'Esiste già un account con questa email. Accedi o recupera la password.';
+      });
+      return;
+    }
+
+    try {
+      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final user = cred.user;
+      if (user == null) return;
+
+      await user.sendEmailVerification();
+
+      final cpCode = 'CP-${_generateCpCode()}';
+      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+
+      final baseUserData = {
+        'uid': user.uid,
+        'email': email,
+        'userCode': cpCode,
+        'type': _registerType,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      if (_registerType == 'public') {
+        await userRef.set({
+          ...baseUserData,
+          'name': _name.text.trim(),
+          'surname': _surname.text.trim(),
+          'onboardingDone': false,
+        });
+
+        await userRef.collection('seen_announcements').doc('_init').set({
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        await userRef.collection('saved_jobs').doc('_init').set({
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        await userRef.collection('consents_history').doc('_init').set({
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      if (_registerType == 'company') {
+        final companyName = _companyName.text.trim();
+        final firestore = FirebaseFirestore.instance;
+        final companyRef = firestore.collection('companies').doc(user.uid);
+
+        await firestore.runTransaction((tx) async {
+          tx.set(userRef, {
+            ...baseUserData,
+            'companyName': companyName,
+            'companyCode': cpCode,
+            'onboardingDone': false,
+            'status': 'active',
+          });
+
+          tx.set(companyRef, {
+            'companyId': user.uid,
+            'companyCode': cpCode,
+            'companyName': companyName,
+            'piva': _piva.text.trim(),
+            'phone': _phone.text.trim(),
+            'referencePerson': _refPerson.text.trim(),
+            'referenceRole': _refRole.text.trim(),
+            'website': _website.text.trim(),
+            'email': email,
+            'createdAt': FieldValue.serverTimestamp(),
+            'status': 'active',
+          });
+        });
+
+        try {
+          final workCodesRef = firestore.collection('work_codes');
+          await workCodesRef.doc('$cpCode-COL').set({
+            'companyId': user.uid,
+            'companyCode': cpCode,
+            'companyName': companyName,
+            'role': 'collaborator',
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          await workCodesRef.doc('$cpCode-SUP').set({
+            'companyId': user.uid,
+            'companyCode': cpCode,
+            'companyName': companyName,
+            'role': 'supervisor',
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        } catch (_) {}
+
+        await companyRef.collection('rules_history').doc('_init').set({
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        switch (e.code) {
+          case 'email-already-in-use':
+            _registerNotice =
+                'Esiste già un account con questa email. Accedi o recupera la password.';
+          case 'invalid-email':
+            _registerFieldErrors['email'] =
+                'L’indirizzo email non sembra corretto.';
+          case 'weak-password':
+            _registerFieldErrors['password'] =
+                'La password deve contenere almeno 8 caratteri e un carattere speciale.';
+          default:
+            _registerNotice =
+                'Registrazione non riuscita. Controlla i dati e riprova.';
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _registerNotice = 'Errore durante la registrazione. Riprova più tardi.';
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _buildNotice(String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFFE082)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(color: Color(0xFF5D4037), height: 1.4),
+      ),
+    );
+  }
+
+  Widget _field({
+    required TextEditingController controller,
+    required String label,
+    String? errorText,
+    bool obscure = false,
+    TextInputType? keyboardType,
+    VoidCallback? toggleObscure,
+    Iterable<String>? autofillHints,
+    void Function(String)? onSubmitted,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      autofillHints: autofillHints,
+      onSubmitted: onSubmitted,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        errorText: errorText,
+        suffixIcon: toggleObscure == null
+            ? null
+            : IconButton(
+                icon: Icon(
+                  obscure ? Icons.visibility : Icons.visibility_off,
+                ),
+                onPressed: toggleObscure,
+              ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.body,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Color(0xFFE0E0E0)),
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: const Border(
+                      left: BorderSide(color: AppTheme.accent, width: 4),
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text.rich(
+                        TextSpan(
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF111111),
+                          ),
+                          children: const [
+                            TextSpan(
+                              text: 'Credit',
+                              style: TextStyle(color: Colors.black),
+                            ),
+                            TextSpan(
+                              text: 'Calc',
+                              style: TextStyle(color: AppTheme.accent),
+                            ),
+                          ],
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _isLogin
+                            ? 'Accedi o registrati con le credenziali CreditCore.'
+                            : 'Crea un account CreditCore.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey.shade700),
+                      ),
+                      const SizedBox(height: 24),
+
+                      if (_isLogin && _loginNotice != null) ...[
+                        _buildNotice(_loginNotice!),
+                        const SizedBox(height: 16),
+                      ],
+                      if (!_isLogin && _registerNotice != null) ...[
+                        _buildNotice(_registerNotice!),
+                        const SizedBox(height: 16),
+                      ],
+
+                      if (!_isLogin && _registerType == 'public') ...[
+                        _field(
+                          controller: _name,
+                          label: 'Nome',
+                          errorText: _regError('name'),
+                        ),
+                        const SizedBox(height: 12),
+                        _field(
+                          controller: _surname,
+                          label: 'Cognome',
+                          errorText: _regError('surname'),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      if (!_isLogin && _registerType == 'company') ...[
+                        _field(
+                          controller: _companyName,
+                          label: 'Ragione sociale',
+                          errorText: _regError('companyName'),
+                        ),
+                        const SizedBox(height: 12),
+                        _field(
+                          controller: _piva,
+                          label: 'Partita IVA',
+                          keyboardType: TextInputType.number,
+                          errorText: _regError('piva'),
+                        ),
+                        const SizedBox(height: 12),
+                        _field(
+                          controller: _phone,
+                          label: 'Telefono',
+                          keyboardType: TextInputType.phone,
+                          errorText: _regError('phone'),
+                        ),
+                        const SizedBox(height: 12),
+                        _field(
+                          controller: _refPerson,
+                          label: 'Persona di riferimento',
+                          errorText: _regError('refPerson'),
+                        ),
+                        const SizedBox(height: 12),
+                        _field(
+                          controller: _refRole,
+                          label: 'Ruolo',
+                          errorText: _regError('refRole'),
+                        ),
+                        const SizedBox(height: 12),
+                        _field(
+                          controller: _website,
+                          label: 'Sito internet',
+                          errorText: _regError('website'),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      _field(
+                        controller: _email,
+                        label: 'Email',
+                        keyboardType: TextInputType.emailAddress,
+                        autofillHints: const [AutofillHints.email],
+                        errorText: _isLogin ? _emailError : _regError('email'),
+                      ),
+                      const SizedBox(height: 12),
+                      _field(
+                        controller: _password,
+                        label: 'Password',
+                        obscure: _obscure,
+                        autofillHints: const [AutofillHints.password],
+                        errorText:
+                            _isLogin ? _passwordError : _regError('password'),
+                        toggleObscure: () => setState(() => _obscure = !_obscure),
+                        onSubmitted: (_) {
+                          if (!_busy) {
+                            _isLogin ? _signIn() : _register();
+                          }
+                        },
+                      ),
+
+                      if (_isLogin) ...[
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _busy ? null : _resetPassword,
+                            child: const Text(
+                              'Password dimenticata?',
+                              style: TextStyle(color: AppTheme.accent),
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      if (!_isLogin) ...[
+                        const SizedBox(height: 12),
+                        _field(
+                          controller: _confirmPassword,
+                          label: 'Conferma password',
+                          obscure: true,
+                          errorText: _regError('confirmPassword'),
+                        ),
+                      ],
+
+                      const SizedBox(height: 20),
+                      FilledButton(
+                        onPressed: _busy
+                            ? null
+                            : (_isLogin ? _signIn : _register),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.accent,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: _busy
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(_isLogin ? 'Accedi' : 'Registrati'),
+                      ),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () async {
+                                  if (_isLogin) {
+                                    final type = await _showRegisterTypePopup();
+                                    if (type == null || !mounted) return;
+                                    setState(() {
+                                      _registerType = type;
+                                      _isLogin = false;
+                                      _clearLoginFeedback();
+                                      _clearRegisterFeedback();
+                                    });
+                                  } else {
+                                    setState(() {
+                                      _isLogin = true;
+                                      _registerType = null;
+                                      _clearRegisterFeedback();
+                                    });
+                                  }
+                                },
+                          child: Text(
+                            _isLogin
+                                ? 'Non hai un account? Registrati'
+                                : 'Hai già un account? Accedi',
+                            style: const TextStyle(color: AppTheme.accent),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

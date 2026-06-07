@@ -1,0 +1,32 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "creditform-d505d",
+          "appId": "1:418457726672:android:a90bd5726277915793f8d5",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "creditform-d505d",
+          "appId": "1:418457726672:ios:0e0da5c3dfd8c9f593f8d5",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "creditform-d505d",
+          "configurations": {
+            "android": "1:418457726672:android:a90bd5726277915793f8d5",
+            "ios": "1:418457726672:ios:0e0da5c3dfd8c9f593f8d5",
+            "macos": "1:418457726672:ios:0e0da5c3dfd8c9f593f8d5",
+            "windows": "1:418457726672:web:1b3f95595cd7a91893f8d5"
+          }
+        }
+      }
+    }
+  }
+}

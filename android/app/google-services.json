@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "418457726672",
+    "project_id": "creditform-d505d",
+    "storage_bucket": "creditform-d505d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:418457726672:android:a90bd5726277915793f8d5",
+        "android_client_info": {
+          "package_name": "com.creditcore.creditcalc"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyALeedNoxxo1sTVo_j53MmUcXtofQwls48"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:418457726672:android:00ed24a81f7afa4e93f8d5",
+        "android_client_info": {
+          "package_name": "com.example.admin_qr_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyALeedNoxxo1sTVo_j53MmUcXtofQwls48"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:418457726672:android:dd1887ce83f3290293f8d5",
+        "android_client_info": {
+          "package_name": "com.example.backoffice_admin_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyALeedNoxxo1sTVo_j53MmUcXtofQwls48"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
