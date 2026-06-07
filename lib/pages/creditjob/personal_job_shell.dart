@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/job_theme.dart';
+import '../../core/maintenance_service.dart';
 import '../../ui/layout/page_shell.dart';
+import '../../widgets/maintenance_section_gate.dart';
 
 /// Layout secondario per pagine CreditJob (tema verde sul contenuto).
 class PersonalJobShell extends StatelessWidget {
@@ -26,9 +28,12 @@ class PersonalJobShell extends StatelessWidget {
       bottomBar: bottomBar == null
           ? null
           : Theme(data: buildJobTheme(), child: bottomBar!),
-      body: Theme(
-        data: buildJobTheme(),
-        child: body,
+      body: MaintenanceSectionGate(
+        sectionName: MaintenanceService.creditJob,
+        child: Theme(
+          data: buildJobTheme(),
+          child: body,
+        ),
       ),
     );
   }

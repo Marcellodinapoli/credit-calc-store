@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/form_theme.dart';
+import '../../core/maintenance_service.dart';
 import '../../ui/layout/page_shell.dart';
+import '../../widgets/maintenance_section_gate.dart';
 
 class PersonalFormShell extends StatelessWidget {
   final String pageTitle;
@@ -25,9 +27,12 @@ class PersonalFormShell extends StatelessWidget {
       bottomBar: bottomBar == null
           ? null
           : Theme(data: buildFormTheme(), child: bottomBar!),
-      body: Theme(
-        data: buildFormTheme(),
-        child: body,
+      body: MaintenanceSectionGate(
+        sectionName: MaintenanceService.creditForm,
+        child: Theme(
+          data: buildFormTheme(),
+          child: body,
+        ),
       ),
     );
   }

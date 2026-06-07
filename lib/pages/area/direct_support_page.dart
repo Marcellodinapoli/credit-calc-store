@@ -583,6 +583,7 @@ class _DirectSupportPageState extends State<DirectSupportPage> {
 
     return PersonalAreaShell(
       pageTitle: "Assistenza diretta",
+      bypassMaintenance: true,
       body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
