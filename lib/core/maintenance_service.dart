@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 /// Sezioni configurabili da BackOffice (`settings/maintenance`).
 abstract final class MaintenanceService {
@@ -8,11 +11,61 @@ abstract final class MaintenanceService {
   static const creditCalc = 'CreditCalc';
   static const area = 'Area riservata';
 
+  static final ValueNotifier<Map<String, dynamic>?> data =
+      ValueNotifier<Map<String, dynamic>?>(null);
+
+  static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _subscription;
+
+  static DocumentReference<Map<String, dynamic>> get _doc =>
+      FirebaseFirestore.instance.collection('settings').doc('maintenance');
+
+  /// Avvia ascolto Firestore (idempotente).
+  static void start() {
+    if (_subscription != null) return;
+
+    unawaited(_loadFromServer());
+
+    _subscription = _doc.snapshots().listen(
+      (snapshot) {
+        data.value = snapshot.data();
+        if (kDebugMode) {
+          final payload = snapshot.data();
+          debugPrint(
+            '[Maintenance] enabled=${payload?['enabled']} '
+            'section=${payload?['section']} '
+            'blockedCreditCalc=${isSectionBlocked(payload, creditCalc)}',
+          );
+        }
+      },
+      onError: (Object error, StackTrace stack) {
+        if (kDebugMode) {
+          debugPrint('[Maintenance] snapshots error: $error');
+        }
+      },
+    );
+  }
+
+  static void stop() {
+    _subscription?.cancel();
+    _subscription = null;
+    data.value = null;
+  }
+
+  static Future<void> _loadFromServer() async {
+    try {
+      final snapshot = await _doc.get(const GetOptions(source: Source.server));
+      data.value = snapshot.data();
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('[Maintenance] server get error: $error');
+      }
+    }
+  }
+
+  /// Compatibilità con codice che usa ancora StreamBuilder.
   static Stream<DocumentSnapshot<Map<String, dynamic>>> watch() {
-    return FirebaseFirestore.instance
-        .collection('settings')
-        .doc('maintenance')
-        .snapshots();
+    start();
+    return _doc.snapshots();
   }
 
   static Map<String, dynamic>? dataFrom(
@@ -21,29 +74,25 @@ abstract final class MaintenanceService {
     return snapshot?.data();
   }
 
-  static bool isEnabled(Map<String, dynamic>? data) {
-    if (data == null) return false;
-    final enabled = data['enabled'];
-    if (enabled is bool) return enabled;
-    if (enabled is num) return enabled != 0;
-    if (enabled is String) {
-      final normalized = enabled.trim().toLowerCase();
-      return normalized == 'true' || normalized == '1';
-    }
-    return false;
+  static bool isEnabled(Map<String, dynamic>? payload) {
+    return payload?['enabled'] == true;
   }
 
-  static String blockedSectionName(Map<String, dynamic>? data) {
-    final raw = data?['section']?.toString().trim();
-    if (raw == null || raw.isEmpty) return all;
-    return raw;
+  static String blockedSectionName(Map<String, dynamic>? payload) {
+    return payload?['section']?.toString() ?? all;
   }
 
-  static bool isSectionBlocked(Map<String, dynamic>? data, String sectionName) {
-    if (!isEnabled(data)) return false;
+  static bool isSectionBlocked(
+    Map<String, dynamic>? payload,
+    String sectionName,
+  ) {
+    if (!isEnabled(payload)) return false;
 
-    final blocked = blockedSectionName(data);
+    final blocked = blockedSectionName(payload);
     if (blocked == all) return true;
     return blocked == sectionName;
   }
+
+  static bool get isCreditCalcBlocked =>
+      isSectionBlocked(data.value, creditCalc);
 }

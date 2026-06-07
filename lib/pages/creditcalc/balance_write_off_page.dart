@@ -13,7 +13,6 @@ import 'package:credit_calc_core/credit_calc_core.dart'
 import 'package:flutter/material.dart';
 
 import '../../core/adaptive_button_styles.dart';
-import '../../core/credit_calc_host.dart';
 import '../../ui/layout/adaptive_action_bar.dart';
 import 'repayment_plan_commission_export.dart';
 import 'repayment_plan_session_storage.dart';
@@ -1046,8 +1045,10 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   Widget build(BuildContext context) {
     final options = _creditorOptions;
 
-    return CreditCalcSecondaryLayout(
+    return wrapCreditCalcPage(
+      secondary: true,
       pageTitle: 'Saldo e stralcio',
+      current: CreditCalcNavItem.develop,
       bottomBar: options == null ? null : _actionBar(),
       body: options == null
           ? const Center(child: CircularProgressIndicator())

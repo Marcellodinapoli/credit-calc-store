@@ -15,7 +15,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/adaptive_button_styles.dart';
-import '../../core/credit_calc_host.dart';
 import '../../ui/layout/adaptive_action_bar.dart';
 import 'repayment_plan_commission_export.dart';
 import 'repayment_plan_session_storage.dart';
@@ -4385,8 +4384,10 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   Widget build(BuildContext context) {
     final options = _cachedCreditorOptions;
 
-    return CreditCalcSecondaryLayout(
+    return wrapCreditCalcPage(
+      secondary: true,
       pageTitle: 'Sviluppo piano di rientro',
+      current: CreditCalcNavItem.develop,
       bottomBar: options == null ? null : _buildPlanActionBar(options),
       body: options == null
           ? const Center(child: CircularProgressIndicator())
