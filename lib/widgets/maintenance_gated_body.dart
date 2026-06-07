@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../core/maintenance_service.dart';
@@ -16,9 +17,10 @@ class MaintenanceGatedBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<Map<String, dynamic>?>(
-      valueListenable: MaintenanceService.data,
-      builder: (context, payload, _) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: MaintenanceService.watch(),
+      builder: (context, snap) {
+        final payload = MaintenanceService.dataFrom(snap.data);
         if (MaintenanceService.isSectionBlocked(payload, sectionName)) {
           return MaintenanceBlockedView(sectionName: sectionName);
         }

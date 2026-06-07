@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:credit_calc_core/credit_calc_core.dart' show AnnouncementsTargeting;
 import 'package:flutter/foundation.dart';
 
 import 'local_notifications_service.dart';
@@ -40,7 +41,9 @@ class DesktopPushService {
     _seenIds.clear();
 
     final userDoc = await _firestore.collection('users').doc(uid).get();
-    _userType = (userDoc.data()?['type'] ?? 'all').toString();
+    _userType = AnnouncementsTargeting.normalizeUserType(
+      userDoc.data()?['type'],
+    );
 
     _announcementsSub = _firestore
         .collection('announcements')
@@ -95,9 +98,10 @@ class DesktopPushService {
     if (data == null) return;
     if (data['active'] == false) return;
 
-    final target = (data['target'] ?? 'all').toString();
-    final userType = _userType ?? 'all';
-    if (target != 'all' && target != userType) {
+    if (!AnnouncementsTargeting.isVisibleForUser(
+      data: data,
+      userType: _userType ?? 'public',
+    )) {
       _seenIds.add(doc.id);
       return;
     }

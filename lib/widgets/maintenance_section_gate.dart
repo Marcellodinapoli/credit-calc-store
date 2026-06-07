@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -96,9 +97,10 @@ class _MaintenanceSectionGateState extends State<MaintenanceSectionGate> {
   Widget build(BuildContext context) {
     if (!widget.enabled) return widget.child;
 
-    return ValueListenableBuilder<Map<String, dynamic>?>(
-      valueListenable: MaintenanceService.data,
-      builder: (context, payload, _) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: MaintenanceService.watch(),
+      builder: (context, snap) {
+        final payload = MaintenanceService.dataFrom(snap.data);
         final blocked = MaintenanceService.isSectionBlocked(
           payload,
           widget.sectionName,

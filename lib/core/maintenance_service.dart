@@ -27,12 +27,12 @@ abstract final class MaintenanceService {
 
     _subscription = _doc.snapshots().listen(
       (snapshot) {
-        data.value = snapshot.data();
+        final payload = snapshot.data();
+        data.value = payload;
         if (kDebugMode) {
-          final payload = snapshot.data();
           debugPrint(
-            '[Maintenance] enabled=${payload?['enabled']} '
-            'section=${payload?['section']} '
+            '[Maintenance] enabled=${isEnabled(payload)} '
+            'section=${blockedSectionName(payload)} '
             'blockedCreditCalc=${isSectionBlocked(payload, creditCalc)}',
           );
         }
@@ -75,11 +75,22 @@ abstract final class MaintenanceService {
   }
 
   static bool isEnabled(Map<String, dynamic>? payload) {
-    return payload?['enabled'] == true;
+    if (payload == null) return false;
+
+    final raw = payload['enabled'];
+    if (raw is bool) return raw;
+    if (raw is num) return raw != 0;
+    if (raw is String) {
+      final normalized = raw.trim().toLowerCase();
+      return normalized == 'true' || normalized == '1';
+    }
+    return false;
   }
 
   static String blockedSectionName(Map<String, dynamic>? payload) {
-    return payload?['section']?.toString() ?? all;
+    final section = payload?['section']?.toString().trim();
+    if (section == null || section.isEmpty) return all;
+    return section;
   }
 
   static bool isSectionBlocked(

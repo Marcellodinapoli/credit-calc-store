@@ -9,6 +9,7 @@ import 'auth/waiting_page.dart';
 import 'core/maintenance_service.dart';
 import 'services/fcm_service.dart';
 import 'shell/credit_calc_shell.dart';
+import 'widgets/maintenance_section_gate.dart';
 
 class CreditCalcApp extends StatefulWidget {
   const CreditCalcApp({super.key});
@@ -134,6 +135,10 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
       );
     }
 
-    return const CreditCalcShell();
+    return const MaintenanceSectionGate(
+      sectionName: MaintenanceService.creditCalc,
+      fullScreen: true,
+      child: CreditCalcShell(),
+    );
   }
 }
