@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../core/date_month_utils.dart';
 import '../core/euro_format.dart';
@@ -1528,13 +1527,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   String? _singlePracticeAmountError() {
     if (!_showPdrFeedback || _usesMultiPracticeForm) return null;
     return requiredFieldError(_isPracticeGrossEmpty(0));
-  }
-
-  String? _sharedMonthlyRateError() {
-    if (!_usesMultiPracticeForm) return null;
-    if (!_showPdrFeedback && !_showMultiPracticeAmountErrors) return null;
-    final rata = EuroFormat.parse(_rataMensileCondivisaCtrl.text);
-    return requiredFieldError(rata == null || rata <= 0);
   }
 
   String? _creditorFieldError() {
