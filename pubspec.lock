@@ -164,9 +164,11 @@ packages:
   credit_calc_core:
     dependency: "direct main"
     description:
-      path: "packages/credit_calc_core"
-      relative: true
-    source: path
+      path: "."
+      ref: main
+      resolved-ref: "3fdadb1b684b2ba4c4b6b80d242d23133a8b3d79"
+      url: "https://github.com/Marcellodinapoli/credit-calc-core.git"
+    source: git
     version: "1.0.0"
   cross_file:
     dependency: transitive
