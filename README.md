@@ -4,7 +4,7 @@ App ufficiale CreditCore per **Google Play**, **App Store**, **Microsoft Store**
 
 ## Dipendenze
 
-- **`packages/credit_calc_core`** — logica CreditCalc condivisa (nel repo, non più `creditcalc-tool`).
+- **[credit-calc-core](https://github.com/Marcellodinapoli/credit-calc-core)** — libreria condivisa con CreditPlanet (unica fonte Git).
 
 ## Sviluppo
 
@@ -12,7 +12,3 @@ App ufficiale CreditCore per **Google Play**, **App Store**, **Microsoft Store**
 flutter pub get
 flutter run
 ```
-
-## Allineamento con CreditPlanet
-
-La libreria `credit_calc_core` è la stessa struttura usata nel repo [Creditplanet](https://github.com/Marcellodinapoli/Creditplanet). Per aggiornamenti importanti, sincronizza `packages/credit_calc_core` tra i due progetti.

@@ -30,7 +30,9 @@ dependencies:
   speech_to_text: ^7.0.0
   flutter_tts: ^4.2.2
   credit_calc_core:
-    path: packages/credit_calc_core
+    git:
+      url: https://github.com/Marcellodinapoli/credit-calc-core.git
+      ref: main
 
 dev_dependencies:
   flutter_test:
