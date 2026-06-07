@@ -166,7 +166,7 @@ packages:
     description:
       path: "."
       ref: main
-      resolved-ref: "3fdadb1b684b2ba4c4b6b80d242d23133a8b3d79"
+      resolved-ref: bf81465903e73ef69bc48f8937de13cd7cac3f27
       url: "https://github.com/Marcellodinapoli/credit-calc-core.git"
     source: git
     version: "1.0.0"
