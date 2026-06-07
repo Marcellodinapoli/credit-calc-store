@@ -5,12 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/dimensions.dart';
-import '../core/maintenance_service.dart';
 import '../pages/creditcalc/commissions_page.dart';
 import '../pages/creditcalc/creditors_page.dart';
 import '../pages/creditcalc/develop_page.dart';
 import '../ui/layout/page_shell.dart';
-import '../widgets/maintenance_blocked_view.dart';
 import 'credit_core_account_menu_sheet.dart';
 import 'credit_core_site_actions.dart';
 
@@ -79,52 +77,20 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
   Widget build(BuildContext context) {
     final compact = Dimensions.useCompactShell(context);
 
-    return StreamBuilder(
-      stream: MaintenanceService.watch(),
-      builder: (context, maintenanceSnap) {
-        final maintenanceData = MaintenanceService.dataFrom(maintenanceSnap.data);
-        final calcBlocked = MaintenanceService.isSectionBlocked(
-          maintenanceData,
-          MaintenanceService.creditCalc,
-        );
+    if (compact) {
+      return _MobileShell(
+        section: _section,
+        onSectionChanged: (item) => setState(() => _section = item),
+        onMenu: _showAccountMenu,
+        child: _sectionPage(_section),
+      );
+    }
 
-        if (calcBlocked) {
-          return Scaffold(
-            backgroundColor: PageShellTheme.scaffoldBackground,
-            appBar: AppBar(
-              backgroundColor: PageShellTheme.appBarBackground,
-              title: const _BrandTitle(),
-              actions: [
-                const AnnouncementsBellButton(iconColor: Colors.black87),
-                IconButton(
-                  tooltip: 'Menu',
-                  onPressed: _showAccountMenu,
-                  icon: const Icon(Icons.more_vert),
-                ),
-              ],
-            ),
-            body: const MaintenanceBlockedView(
-              sectionName: MaintenanceService.creditCalc,
-            ),
-          );
-        }
-
-        if (compact) {
-          return _MobileShell(
-            section: _section,
-            onSectionChanged: (item) => setState(() => _section = item),
-            onMenu: _showAccountMenu,
-            child: _sectionPage(_section),
-          );
-        }
-
-        return _DesktopShell(
-          section: _section,
-          onSectionChanged: (item) => setState(() => _section = item),
-          onLogout: _logout,
-          child: _sectionPage(_section),
-        );
-      },
+    return _DesktopShell(
+      section: _section,
+      onSectionChanged: (item) => setState(() => _section = item),
+      onLogout: _logout,
+      child: _sectionPage(_section),
     );
   }
 }

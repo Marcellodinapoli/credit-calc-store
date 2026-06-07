@@ -22,11 +22,21 @@ abstract final class MaintenanceService {
   }
 
   static bool isEnabled(Map<String, dynamic>? data) {
-    return data?['enabled'] == true;
+    if (data == null) return false;
+    final enabled = data['enabled'];
+    if (enabled is bool) return enabled;
+    if (enabled is num) return enabled != 0;
+    if (enabled is String) {
+      final normalized = enabled.trim().toLowerCase();
+      return normalized == 'true' || normalized == '1';
+    }
+    return false;
   }
 
   static String blockedSectionName(Map<String, dynamic>? data) {
-    return data?['section']?.toString() ?? all;
+    final raw = data?['section']?.toString().trim();
+    if (raw == null || raw.isEmpty) return all;
+    return raw;
   }
 
   static bool isSectionBlocked(Map<String, dynamic>? data, String sectionName) {

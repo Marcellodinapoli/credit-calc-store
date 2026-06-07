@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../core/maintenance_service.dart';
@@ -20,7 +21,7 @@ class MaintenanceSectionGate extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!enabled) return child;
 
-    return StreamBuilder(
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: MaintenanceService.watch(),
       builder: (context, snapshot) {
         final data = MaintenanceService.dataFrom(snapshot.data);
