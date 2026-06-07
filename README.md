@@ -1,16 +1,18 @@
-# credit_calc
+# CreditCalc Store
 
-A new Flutter project.
+App ufficiale CreditCore per **Google Play**, **App Store**, **Microsoft Store** e **Mac App Store**.
 
-## Getting Started
+## Dipendenze
 
-This project is a starting point for a Flutter application.
+- **`packages/credit_calc_core`** — logica CreditCalc condivisa (nel repo, non più `creditcalc-tool`).
 
-A few resources to get you started if this is your first Flutter project:
+## Sviluppo
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+```bash
+flutter pub get
+flutter run
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Allineamento con CreditPlanet
+
+La libreria `credit_calc_core` è la stessa struttura usata nel repo [Creditplanet](https://github.com/Marcellodinapoli/Creditplanet). Per aggiornamenti importanti, sincronizza `packages/credit_calc_core` tra i due progetti.

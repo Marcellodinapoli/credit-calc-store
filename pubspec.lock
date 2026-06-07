@@ -164,7 +164,7 @@ packages:
   credit_calc_core:
     dependency: "direct main"
     description:
-      path: "../creditcalc-tool/packages/credit_calc_core"
+      path: "packages/credit_calc_core"
       relative: true
     source: path
     version: "1.0.0"
