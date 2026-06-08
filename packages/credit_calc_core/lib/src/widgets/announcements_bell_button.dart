@@ -66,8 +66,20 @@ class AnnouncementsBellButton extends StatelessWidget {
                   .collection('seen_announcements')
                   .snapshots(),
               builder: (context, seenSnap) {
+                if (!seenSnap.hasData) {
+                  return IconButton(
+                    tooltip: 'Notifiche',
+                    onPressed: () => _openAnnouncements(context),
+                    icon: Icon(
+                      Icons.notifications,
+                      color: iconColor,
+                      size: iconSize,
+                    ),
+                  );
+                }
+
                 final seenIds =
-                    seenSnap.data?.docs.map((e) => e.id).toSet() ?? {};
+                    seenSnap.data!.docs.map((e) => e.id).toSet();
                 final unread = announcements
                     .where((doc) => !seenIds.contains(doc.id))
                     .length;

@@ -57,6 +57,27 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# flutter_local_notifications_windows include atlbase.h without adding ATL paths.
+if(TARGET flutter_local_notifications_windows)
+  file(GLOB _creditcalc_atl_include_dirs
+    "$ENV{VCToolsInstallDir}atlmfc/include"
+    "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/*/atlmfc/include"
+    "C:/Program Files/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/*/atlmfc/include"
+  )
+  foreach(_atl_dir ${_creditcalc_atl_include_dirs})
+    if(EXISTS "${_atl_dir}/atlbase.h")
+      target_include_directories(flutter_local_notifications_windows PRIVATE "${_atl_dir}")
+      get_filename_component(_msvc_dir "${_atl_dir}" DIRECTORY)
+      get_filename_component(_msvc_dir "${_msvc_dir}" DIRECTORY)
+      set(_atl_lib "${_msvc_dir}/atlmfc/lib/x64")
+      if(EXISTS "${_atl_lib}/atls.lib")
+        target_link_libraries(flutter_local_notifications_windows PRIVATE "${_atl_lib}/atls.lib")
+        target_link_options(flutter_local_notifications_windows PRIVATE "/LIBPATH:${_atl_lib}")
+      endif()
+      break()
+    endif()
+  endforeach()
+endif()
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

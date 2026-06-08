@@ -1,0 +1,7 @@
+﻿FILE UNICO DA DISTRIBUIRE
+=========================
+
+  C:\FlutterProjects\credit-calc-store\dist\CreditCalc-1.0.6-Setup.exe
+
+Cartella applicazione (sviluppo/test):
+  C:\FlutterProjects\credit-calc-store\dist\CreditCalc-1.0.6-win64\CreditCalc.exe
