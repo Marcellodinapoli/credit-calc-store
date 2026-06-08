@@ -17,6 +17,8 @@ export 'src/pages/balance_write_off_page.dart';
 export 'src/widgets/announcements_bell_button.dart';
 export 'src/pages/commission_collections_page.dart';
 export 'src/pages/commission_collections_shared.dart';
+export 'src/pages/commission_creditor_data_access.dart';
+export 'src/pages/commission_entry_data_access.dart';
 export 'src/pages/commission_entry_page.dart';
 export 'src/pages/commission_export_dialog.dart';
 export 'src/pages/commission_payment_resolver.dart';

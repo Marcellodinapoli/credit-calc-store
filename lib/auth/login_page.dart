@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,8 +7,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../offline/services/connectivity_service.dart';
 import '../services/biometric_service.dart';
 import 'auth_form_validation.dart';
+import 'registration_privacy_consents_page.dart';
 
 abstract final class AppTheme {
   static const accent = Color(0xFF0A66C2);
@@ -17,7 +20,7 @@ abstract final class AppTheme {
 class LoginPage extends StatefulWidget {
   /// Sblocco dopo riapertura app (sessione Firebase ancora attiva, non è un logout).
   final bool unlockMode;
-  final VoidCallback? onUnlocked;
+  final Future<void> Function()? onUnlocked;
 
   const LoginPage({
     super.key,
@@ -60,6 +63,7 @@ class _LoginPageState extends State<LoginPage> {
   String? _passwordError;
   String? _registerNotice;
   final Map<String, String> _registerFieldErrors = {};
+  bool _privacyAccepted = false;
 
   @override
   void initState() {
@@ -84,16 +88,13 @@ class _LoginPageState extends State<LoginPage> {
     final savedPassword = await _secureStorage.read(key: 'credit_calc_password');
     if (!mounted) return;
 
+    final biometricAvailable = await _biometricService.isBiometricAvailable();
+
+    if (!mounted) return;
     setState(() {
-      _showBiometricButton = true;
+      _showBiometricButton = biometricAvailable;
       _hasSavedCredentials = savedEmail != null && savedPassword != null;
     });
-
-    if (widget.unlockMode) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _signInBiometric(autoPrompt: true);
-      });
-    }
   }
 
   Future<void> _saveCredentials(String email, String password) async {
@@ -101,7 +102,27 @@ class _LoginPageState extends State<LoginPage> {
     await _secureStorage.write(key: 'credit_calc_password', value: password);
   }
 
-  Future<void> _signInBiometric({bool autoPrompt = false}) async {
+  Future<bool> _matchesSavedCredentials({
+    required String email,
+    required String password,
+  }) async {
+    final savedEmail = await _secureStorage.read(key: 'credit_calc_email');
+    final savedPassword = await _secureStorage.read(key: 'credit_calc_password');
+    if (savedPassword == null) return false;
+
+    final current = FirebaseAuth.instance.currentUser;
+    final emailOk = email.isEmpty ||
+        email == savedEmail ||
+        (current?.email != null && email == current!.email);
+    return emailOk && password == savedPassword;
+  }
+
+  bool _isNetworkAuthError(FirebaseAuthException e) {
+    return e.code == 'network-request-failed' ||
+        e.code == 'too-many-requests';
+  }
+
+  Future<void> _signInBiometric() async {
     if (!widget.unlockMode && !_hasSavedCredentials) {
       if (!mounted) return;
       setState(() {
@@ -116,13 +137,12 @@ class _LoginPageState extends State<LoginPage> {
     final authError = await _biometricService.authenticate();
     if (authError != null) {
       if (!mounted) return;
-      if (autoPrompt && authError == 'Autenticazione annullata.') return;
       setState(() => _loginNotice = authError);
       return;
     }
 
     if (widget.unlockMode) {
-      widget.onUnlocked?.call();
+      await widget.onUnlocked?.call();
       return;
     }
 
@@ -138,13 +158,24 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
+    final current = FirebaseAuth.instance.currentUser;
+    if (current != null && current.email == email) {
+      return;
+    }
+
     setState(() => _busy = true);
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          )
+          .timeout(const Duration(seconds: 8));
     } on FirebaseAuthException catch (e) {
+      if (_isNetworkAuthError(e) &&
+          FirebaseAuth.instance.currentUser?.email == email) {
+        return;
+      }
       final feedback = await AuthFormValidation.resolveLoginAuthFailure(e, email);
       if (!mounted) return;
       setState(() {
@@ -152,9 +183,26 @@ class _LoginPageState extends State<LoginPage> {
         _emailError = feedback.emailError;
         _passwordError = feedback.passwordError;
       });
-    } catch (_) {
+    } on TimeoutException {
+      if (FirebaseAuth.instance.currentUser?.email == email) {
+        return;
+      }
       if (!mounted) return;
-      setState(() => _loginNotice = 'Errore di connessione. Verifica la rete.');
+      setState(() {
+        _loginNotice =
+            'Connessione non disponibile. Se hai bloccato l\'app con «Esci» '
+            'offline, usa la biometria su quella schermata oppure riapri l\'app.';
+      });
+    } catch (_) {
+      if (FirebaseAuth.instance.currentUser?.email == email) {
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _loginNotice =
+            'Accesso non disponibile senza connessione. Riprova quando la rete '
+            'è attiva oppure sblocca l\'app con la biometria.';
+      });
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -185,6 +233,10 @@ class _LoginPageState extends State<LoginPage> {
   void _clearRegisterFeedback() {
     _registerNotice = null;
     _registerFieldErrors.clear();
+  }
+
+  void _resetPrivacyAcceptance() {
+    _privacyAccepted = false;
   }
 
   String? _regError(String key) => _registerFieldErrors[key];
@@ -244,6 +296,11 @@ class _LoginPageState extends State<LoginPage> {
       errors['confirmPassword'] = 'Le password non coincidono.';
     }
 
+    if (!_privacyAccepted) {
+      errors['privacy'] =
+          'Devi leggere e accettare l\'informativa su privacy e consensi.';
+    }
+
     if (errors.isNotEmpty) {
       setState(() {
         _clearRegisterFeedback();
@@ -283,13 +340,41 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
+    if (widget.unlockMode) {
+      if (await _matchesSavedCredentials(email: email, password: password)) {
+        await widget.onUnlocked?.call();
+        setState(() => _busy = false);
+        return;
+      }
+      if (!await ConnectivityService.isOnline()) {
+        if (!mounted) return;
+        setState(() {
+          _busy = false;
+          _loginNotice =
+              'Senza connessione usa la biometria o la password già salvata '
+              'su questo dispositivo.';
+        });
+        return;
+      }
+    } else if (!await ConnectivityService.isOnline()) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _loginNotice =
+            'Senza connessione non è possibile accedere con email e password. '
+            'Se hai già effettuato l\'accesso, chiudi l\'app e riaprila per '
+            'sbloccarla con la biometria.';
+      });
+      return;
+    }
+
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
       if (widget.unlockMode) {
-        widget.onUnlocked?.call();
+        await widget.onUnlocked?.call();
         return;
       }
       try {
@@ -363,6 +448,21 @@ class _LoginPageState extends State<LoginPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _openPrivacyConsents() async {
+    final accepted = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const RegistrationPrivacyConsentsPage(),
+      ),
+    );
+    if (accepted == true && mounted) {
+      setState(() {
+        _privacyAccepted = true;
+        _registerFieldErrors.remove('privacy');
+      });
+    }
   }
 
   Future<String?> _showRegisterTypePopup() async {
@@ -467,6 +567,7 @@ class _LoginPageState extends State<LoginPage> {
         await userRef.collection('consents_history').doc('_init').set({
           'createdAt': FieldValue.serverTimestamp(),
         });
+        await _saveRegistrationPrivacyConsent(userRef);
       }
 
       if (_registerType == 'company') {
@@ -519,6 +620,7 @@ class _LoginPageState extends State<LoginPage> {
         await companyRef.collection('rules_history').doc('_init').set({
           'createdAt': FieldValue.serverTimestamp(),
         });
+        await _saveRegistrationPrivacyConsent(userRef);
       }
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
@@ -546,6 +648,61 @@ class _LoginPageState extends State<LoginPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Widget _buildPrivacyConsentRow() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _openPrivacyConsents,
+          icon: Icon(
+            _privacyAccepted
+                ? Icons.check_circle_outline
+                : Icons.privacy_tip_outlined,
+            color: _privacyAccepted ? Colors.green.shade700 : AppTheme.accent,
+          ),
+          label: Text(
+            _privacyAccepted
+                ? 'Privacy e consensi accettati'
+                : 'Leggi privacy e consensi *',
+            style: TextStyle(
+              color: _privacyAccepted ? Colors.green.shade800 : AppTheme.accent,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+            side: BorderSide(
+              color: _privacyAccepted
+                  ? Colors.green.shade400
+                  : AppTheme.accent,
+            ),
+          ),
+        ),
+        if (!_privacyAccepted)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(
+              'Obbligatorio: apri il documento, scorri fino in fondo e spunta il consenso.',
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _saveRegistrationPrivacyConsent(DocumentReference userRef) async {
+    await userRef.collection('consents_history').doc('privacy_registration').set({
+      'type': 'privacy_and_consents',
+      'version': registrationPrivacyConsentsVersion,
+      'acceptedAt': FieldValue.serverTimestamp(),
+      'source': 'registration',
+    });
   }
 
   Widget _buildNotice(String text) {
@@ -635,7 +792,7 @@ class _LoginPageState extends State<LoginPage> {
                               style: TextStyle(color: Colors.black),
                             ),
                             TextSpan(
-                              text: 'Calc',
+                              text: 'Core',
                               style: TextStyle(color: AppTheme.accent),
                             ),
                           ],
@@ -644,9 +801,12 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        _isLogin
-                            ? 'Accedi o registrati con le credenziali CreditCore.'
-                            : 'Crea un account CreditCore.',
+                        widget.unlockMode
+                            ? 'Sblocca l\'app con biometria. Anche offline, se hai '
+                                'già effettuato l\'accesso su questo dispositivo.'
+                            : _isLogin
+                                ? 'Accedi o registrati con le credenziali CreditCore.'
+                                : 'Crea un account CreditCore.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.grey.shade700),
                       ),
@@ -658,6 +818,10 @@ class _LoginPageState extends State<LoginPage> {
                       ],
                       if (!_isLogin && _registerNotice != null) ...[
                         _buildNotice(_registerNotice!),
+                        const SizedBox(height: 16),
+                      ],
+                      if (!_isLogin && _regError('privacy') != null) ...[
+                        _buildNotice(_regError('privacy')!),
                         const SizedBox(height: 16),
                       ],
 
@@ -761,6 +925,8 @@ class _LoginPageState extends State<LoginPage> {
                           obscure: true,
                           errorText: _regError('confirmPassword'),
                         ),
+                        const SizedBox(height: 16),
+                        _buildPrivacyConsentRow(),
                       ],
 
                       const SizedBox(height: 20),
@@ -790,7 +956,7 @@ class _LoginPageState extends State<LoginPage> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: FilledButton(
-                                onPressed: _signInBiometric,
+                                onPressed: _busy ? null : _signInBiometric,
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppTheme.accent,
                                   padding:
@@ -849,6 +1015,7 @@ class _LoginPageState extends State<LoginPage> {
                                     setState(() {
                                       _registerType = type;
                                       _isLogin = false;
+                                      _resetPrivacyAcceptance();
                                       _clearLoginFeedback();
                                       _clearRegisterFeedback();
                                     });
@@ -856,6 +1023,7 @@ class _LoginPageState extends State<LoginPage> {
                                     setState(() {
                                       _isLogin = true;
                                       _registerType = null;
+                                      _resetPrivacyAcceptance();
                                       _clearRegisterFeedback();
                                     });
                                   }

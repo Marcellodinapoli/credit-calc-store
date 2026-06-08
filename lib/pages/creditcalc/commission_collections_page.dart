@@ -1,4 +1,3 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart'
     hide
         CommissionCollectionsHelper,
@@ -6,6 +5,7 @@ import 'package:credit_calc_core/credit_calc_core.dart'
         CommissionPaymentTypeTotals;
 import 'package:flutter/material.dart';
 
+import '../../offline/repository/credit_calc_repository.dart';
 import 'commission_collections_shared.dart';
 
 class CommissionCollectionsPage extends StatefulWidget {
@@ -263,7 +263,7 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
 
   Widget _summaryCard({
     required CommissionMonthKey? month,
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> filtered,
+    required List<CreditCalcRecord> filtered,
     required double totalCollected,
     required double totalCommission,
     required List<CommissionPaymentTypeTotals> byPaymentType,
@@ -359,10 +359,7 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
     if (confirm != true || !mounted) return;
 
     try {
-      await FirebaseFirestore.instance
-          .collection('calculations')
-          .doc(docId)
-          .delete();
+      await CreditCalcRepository.instance.deleteCalculation(docId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Incasso eliminato.')),
@@ -375,8 +372,8 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
     }
   }
 
-  Widget _entryTile(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
+  Widget _entryTile(CreditCalcRecord doc) {
+    final data = doc.data;
     final docId = doc.id;
     final date = CommissionCollectionsHelper.entryDate(data);
     final company = CommissionCollectionsHelper.companyName(data);
@@ -463,10 +460,11 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
       secondary: true,
       pageTitle: 'Elenco incassi',
       current: CreditCalcNavItem.commissions,
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirestoreUserScope.userCalculations().snapshots(),
+      body: StreamBuilder<List<CreditCalcRecord>>(
+        stream: CreditCalcRepository.instance.watchCalculationRecords(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -479,12 +477,13 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
             );
           }
 
-          final allDocs =
-              CommissionCollectionsHelper.commissionDocs(snapshot.data);
+          final allDocs = CommissionCollectionsHelper.commissionRecords(
+            snapshot.data,
+          );
           final monthsWithIncassi =
-              CommissionCollectionsHelper.monthsForFilter(allDocs);
+              CommissionCollectionsHelper.monthsForFilterRecords(allDocs);
           final monthOptions =
-              CommissionCollectionsHelper.monthsForFilterDropdown(allDocs);
+              CommissionCollectionsHelper.monthsForFilterDropdownRecords(allDocs);
 
           if (!_appliedInitialMonth) {
             _appliedInitialMonth = true;
@@ -504,15 +503,18 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
             });
           }
 
-          final paymentLabels = CommissionCollectionsHelper.paymentLabelsInMonth(
+          final paymentLabels =
+              CommissionCollectionsHelper.paymentLabelsInMonthRecords(
             allDocs,
             _selectedMonth,
           );
-          final companyNames = CommissionCollectionsHelper.companyNamesInMonth(
+          final companyNames =
+              CommissionCollectionsHelper.companyNamesInMonthRecords(
             allDocs,
             _selectedMonth,
           );
-          final creditorNames = CommissionCollectionsHelper.creditorNamesInMonth(
+          final creditorNames =
+              CommissionCollectionsHelper.creditorNamesInMonthRecords(
             allDocs,
             _selectedMonth,
           );
@@ -538,7 +540,7 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
             });
           }
 
-          final filtered = CommissionCollectionsHelper.filterDocs(
+          final filtered = CommissionCollectionsHelper.filterRecords(
             allDocs,
             month: _selectedMonth,
             selectedCompanyName: _selectedCompanyName,
@@ -547,11 +549,11 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
           );
 
           final totalCollected =
-              CommissionCollectionsHelper.totalCollected(filtered);
+              CommissionCollectionsHelper.totalCollectedRecords(filtered);
           final totalCommission =
-              CommissionCollectionsHelper.totalCommission(filtered);
+              CommissionCollectionsHelper.totalCommissionRecords(filtered);
           final byPaymentType =
-              CommissionCollectionsHelper.totalsByPaymentType(filtered);
+              CommissionCollectionsHelper.totalsByPaymentTypeRecords(filtered);
 
           return ListView(
             children: [

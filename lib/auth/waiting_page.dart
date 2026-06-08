@@ -5,6 +5,7 @@ import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../offline/services/connectivity_service.dart';
 import '../pages/area/direct_support_page.dart';
 import 'login_page.dart';
 
@@ -42,7 +43,22 @@ Future<({Map<String, dynamic> source, bool fromCompany})?> findAccountBlockSourc
 
 /// Restituisce lo stato waiting (`pending`, `blocked`, `standby`, …) o `null` se accesso ok.
 Future<String?> resolveWaitingAccess(User user) async {
-  await user.reload();
+  final online = await ConnectivityService.isOnline();
+
+  if (!online) {
+    final current = FirebaseAuth.instance.currentUser ?? user;
+    if (!current.emailVerified) return 'pending';
+    return null;
+  }
+
+  try {
+    await user.reload();
+  } catch (_) {
+    final current = FirebaseAuth.instance.currentUser ?? user;
+    if (!current.emailVerified) return 'pending';
+    return null;
+  }
+
   final current = FirebaseAuth.instance.currentUser;
   if (current == null) return 'pending';
 
@@ -50,14 +66,18 @@ Future<String?> resolveWaitingAccess(User user) async {
     return 'pending';
   }
 
-  final userDoc =
-      await FirebaseFirestore.instance.collection('users').doc(current.uid).get();
-  if (!userDoc.exists) return null;
+  try {
+    final userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(current.uid).get();
+    if (!userDoc.exists) return null;
 
-  final block = await findAccountBlockSource(userDoc.data()!, current.uid);
-  if (block == null) return null;
+    final block = await findAccountBlockSource(userDoc.data()!, current.uid);
+    if (block == null) return null;
 
-  return (block.source['status'] ?? 'blocked').toString();
+    return (block.source['status'] ?? 'blocked').toString();
+  } catch (_) {
+    return null;
+  }
 }
 
 class WaitingPage extends StatefulWidget {

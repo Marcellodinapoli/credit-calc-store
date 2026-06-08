@@ -1,6 +1,5 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart'
     hide
         CommissionCollectionsHelper,
@@ -9,6 +8,8 @@ import 'package:credit_calc_core/credit_calc_core.dart'
 import 'commission_collections_shared.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import '../../offline/repository/credit_calc_repository.dart';
 
 class CreditorDetailPage extends StatefulWidget {
   final String creditorId;
@@ -192,12 +193,9 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
 
   Future<void> _loadData() async {
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('creditors')
-          .doc(widget.creditorId)
-          .get();
+      final doc = await CreditCalcRepository.instance.getCreditor(widget.creditorId);
 
-      if (!doc.exists) {
+      if (doc == null) {
         if (mounted) {
           setState(() {
             _isExistingCreditor = false;
@@ -208,7 +206,7 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
       }
 
       _isExistingCreditor = true;
-      final data = doc.data() ?? {};
+      final data = doc.data;
       final payments =
           (data['paymentCoordinates'] as Map<String, dynamic>?) ?? {};
       final methods =
@@ -394,10 +392,7 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
     setState(() => _saving = true);
     try {
       final maxAgePdr = int.tryParse(_maxAgePdrCtrl.text.trim());
-      final ref = FirebaseFirestore.instance
-          .collection('creditors')
-          .doc(widget.creditorId);
-      final existing = await ref.get();
+      final existing = await CreditCalcRepository.instance.getCreditor(widget.creditorId);
 
       final data = <String, dynamic>{
         'displayLabel': _displayLabelCtrl.text.trim(),
@@ -427,15 +422,13 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
           'effettiCambiari': _effettiCambiari,
           'bollettiniPostali': _bollettiniPostali,
         },
-        'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      if (!existing.exists) {
-        data['createdAt'] = FieldValue.serverTimestamp();
-      }
-      data['userId'] = userId;
-
-      await ref.set(data, SetOptions(merge: true));
+      await CreditCalcRepository.instance.saveCreditor(
+        id: widget.creditorId,
+        data: data,
+        isNew: existing == null,
+      );
 
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop(true);
@@ -451,9 +444,9 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
 
   Future<void> _deleteCreditor() async {
     try {
-      final snapshot = await FirestoreUserScope.userCalculations().get();
-      final linked = CommissionCollectionsHelper.countLinkedIncassi(
-        CommissionCollectionsHelper.commissionDocs(snapshot),
+      final records = await CreditCalcRepository.instance.getCalculationRecords();
+      final linked = CommissionCollectionsHelper.countLinkedIncassiRecords(
+        CommissionCollectionsHelper.commissionRecords(records),
         widget.creditorId,
       );
 
@@ -507,10 +500,7 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
       if (confirm != true || !mounted) return;
 
       setState(() => _deleting = true);
-      await FirebaseFirestore.instance
-          .collection('creditors')
-          .doc(widget.creditorId)
-          .delete();
+      await CreditCalcRepository.instance.deleteCreditor(widget.creditorId);
 
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop('deleted');

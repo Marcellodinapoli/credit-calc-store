@@ -1,6 +1,5 @@
-﻿import 'dart:async';
+import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart'
     hide
         BalanceWriteOffPage,
@@ -13,6 +12,9 @@ import 'package:credit_calc_core/credit_calc_core.dart'
 import 'package:flutter/material.dart';
 
 import '../../core/adaptive_button_styles.dart';
+import '../../offline/repository/credit_calc_repository.dart';
+import '../../offline/services/repayment_plan_draft_controller.dart';
+import '../../offline/services/repayment_plan_draft_service.dart';
 import '../../ui/layout/adaptive_action_bar.dart';
 import 'repayment_plan_commission_export.dart';
 import 'repayment_plan_session_storage.dart';
@@ -45,7 +47,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
 
   String? _creditorId;
   List<_CreditorOption>? _creditorOptions;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _creditorsSub;
+  StreamSubscription<List<CreditCalcRecord>>? _creditorsSub;
 
   final _debitoCtrl = TextEditingController();
   final _percentCtrl = TextEditingController();
@@ -68,18 +70,24 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
 
   final _scrollController = ScrollController();
   final _resultsKey = GlobalKey();
+  late final RepaymentPlanDraftController _draftController;
 
   @override
   void initState() {
     super.initState();
+    _draftController = RepaymentPlanDraftController(
+      planType: RepaymentPlanDraftService.typeBalanceWriteOff,
+      collectState: _draftState,
+      applyState: _applyDraftState,
+    );
     _sessionCommissionDocIds.addAll(RepaymentPlanSessionStorage.readIds());
-    _creditorsSub =
-        FirestoreUserScope.creditorsOrdered().snapshots().listen((snap) {
+    _creditorsSub = CreditCalcRepository.instance
+        .watchCreditorRecords()
+        .listen((records) {
       if (!mounted) return;
-      final docs = FirestoreUserScope.sortCreditorsByCreatedAt(snap.docs);
-      final options = docs
+      final options = records
           .map((doc) {
-            final name = (doc.data()['name'] ?? 'Senza nome').toString().trim();
+            final name = (doc.data['name'] ?? 'Senza nome').toString().trim();
             return _CreditorOption(
               id: doc.id,
               name: name.isEmpty ? 'Senza nome' : name,
@@ -98,8 +106,49 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     });
   }
 
+  Map<String, dynamic> _draftState() => {
+        'creditorId': _creditorId ?? '',
+        'debito': _debitoCtrl.text,
+        'percent': _percentCtrl.text,
+        'stralciato': _stralciatoCtrl.text,
+        'residuo': _residuoCtrl.text,
+        'installmentCount': _installmentCount,
+        'firstPaymentDate': _firstPaymentDate.millisecondsSinceEpoch,
+        'paymentMethodKey': _paymentMethodKey ?? '',
+      };
+
+  void _applyDraftState(Map<String, dynamic> state) {
+    _isResetting = true;
+    final creditorId = state['creditorId']?.toString();
+    setState(() {
+      _creditorId =
+          creditorId != null && creditorId.isNotEmpty ? creditorId : null;
+      _debitoCtrl.text = state['debito']?.toString() ?? '';
+      _percentCtrl.text = state['percent']?.toString() ?? '';
+      _stralciatoCtrl.text = state['stralciato']?.toString() ?? '';
+      _residuoCtrl.text = state['residuo']?.toString() ?? '';
+      _installmentCount = state['installmentCount'] is int
+          ? state['installmentCount'] as int
+          : int.tryParse('${state['installmentCount']}') ?? 1;
+      final ms = state['firstPaymentDate'];
+      if (ms is int) {
+        _firstPaymentDate = DateTime.fromMillisecondsSinceEpoch(ms);
+      }
+      final key = state['paymentMethodKey']?.toString();
+      _paymentMethodKey = key != null && key.isNotEmpty ? key : null;
+      _calcolato = false;
+      _installments = const [];
+      _calcError = null;
+    });
+    if (_creditorId != null) {
+      unawaited(_loadPaymentOptions(_creditorId!));
+    }
+    _isResetting = false;
+  }
+
   @override
   void dispose() {
+    _draftController.dispose();
     _creditorsSub?.cancel();
     _scrollController.dispose();
     _debitoCtrl.dispose();
@@ -121,6 +170,9 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   void _touchForm() {
     _resetCalcolo();
     setState(() {});
+    if (!_isResetting) {
+      _draftController.scheduleSave();
+    }
   }
 
   double? get _debito => EuroFormat.parse(_debitoCtrl.text);
@@ -230,13 +282,10 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   }
 
   Future<void> _loadPaymentOptions(String creditorId) async {
-    final doc = await FirebaseFirestore.instance
-        .collection('creditors')
-        .doc(creditorId)
-        .get();
+    final doc = await CreditCalcRepository.instance.getCreditor(creditorId);
     if (!mounted) return;
     final options =
-        CommissionPaymentResolver.entryOptions(doc.data() ?? {});
+        CommissionPaymentResolver.entryOptions(doc?.data ?? {});
     setState(() {
       _paymentOptions = options;
       if (_paymentMethodKey != null &&
@@ -261,6 +310,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
       _firstPaymentDate = DateTime(picked.year, picked.month, picked.day);
       _resetCalcolo();
     });
+    _draftController.scheduleSave();
   }
 
   void _syncSessionCommissionDocIds(Iterable<String> ids) {
@@ -585,13 +635,11 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   }
 
   void _exitPlanScreen() {
-    RepaymentPlanSessionStorage.clear();
+    _resetForm();
     final navigator = Navigator.of(context, rootNavigator: true);
     if (navigator.canPop()) {
       navigator.pop();
-      return;
     }
-    _resetForm();
   }
 
   String _formatDate(DateTime date) => formatCommissionExportDate(date);
@@ -817,6 +865,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
                       _resetCalcolo();
                     });
                     _loadPaymentOptions(id);
+                    _draftController.scheduleSave();
                   },
                 ),
               ),
@@ -1045,14 +1094,21 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   Widget build(BuildContext context) {
     final options = _creditorOptions;
 
-    return wrapCreditCalcPage(
-      secondary: true,
-      pageTitle: 'Saldo e stralcio',
-      current: CreditCalcNavItem.develop,
-      bottomBar: options == null ? null : _actionBar(),
-      body: options == null
-          ? const Center(child: CircularProgressIndicator())
-          : _buildScrollContent(options),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _exitPlanScreen();
+      },
+      child: wrapCreditCalcPage(
+        secondary: true,
+        pageTitle: 'Saldo e stralcio',
+        current: CreditCalcNavItem.develop,
+        bottomBar: options == null ? null : _actionBar(),
+        body: options == null
+            ? const Center(child: CircularProgressIndicator())
+            : _buildScrollContent(options),
+      ),
     );
   }
 }

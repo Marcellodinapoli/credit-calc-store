@@ -9,8 +9,8 @@ import 'auth/login_page.dart';
 import 'auth/waiting_page.dart';
 import 'core/maintenance_service.dart';
 import 'services/fcm_service.dart';
-import 'shell/credit_calc_shell.dart';
-import 'widgets/maintenance_section_gate.dart';
+import 'offline/credit_calc_bootstrap_gate.dart';
+import 'offline/credit_calc_runtime.dart';
 
 class CreditCalcApp extends StatefulWidget {
   const CreditCalcApp({super.key});
@@ -81,6 +81,7 @@ class _AuthGateState extends State<_AuthGate> {
         if (snapshot.hasData) {
           return BiometricLockGate(
             lockOnStart: _sessionAtLaunch,
+            onUnlocked: CreditCalcRuntime.reclaimSessionAfterUnlock,
             child: _AuthenticatedShell(
               key: ValueKey(snapshot.data!.uid),
               user: snapshot.data!,
@@ -114,12 +115,20 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
   }
 
   Future<void> _checkAccess() async {
-    final status = await resolveWaitingAccess(widget.user);
-    if (!mounted) return;
-    setState(() {
-      _waitingStatus = status;
-      _checkingAccess = false;
-    });
+    try {
+      final status = await resolveWaitingAccess(widget.user);
+      if (!mounted) return;
+      setState(() {
+        _waitingStatus = status;
+        _checkingAccess = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _waitingStatus = null;
+        _checkingAccess = false;
+      });
+    }
   }
 
   void _onAccessGranted() {
@@ -142,10 +151,6 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
       );
     }
 
-    return const MaintenanceSectionGate(
-      sectionName: MaintenanceService.creditCalc,
-      fullScreen: true,
-      child: CreditCalcShell(),
-    );
+    return const CreditCalcBootstrapGate();
   }
 }

@@ -1,0 +1,464 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ------------------------------------------------------------------
+    // PENDING LOGINS  (BackOffice ↔ App Sicurezza)
+    // ------------------------------------------------------------------
+    match /pendingLogins/{docId} {
+
+      allow create, delete: if request.auth != null
+        && request.auth.token.admin == true;
+
+      allow read, list, update: if request.auth != null;
+    }
+    
+    // ------------------------------------------------------------------
+// SECURITY LOGS (BackOffice Sicurezza)
+// ------------------------------------------------------------------
+match /security_logs/{docId} {
+
+  allow read, list: if request.auth != null;
+
+  allow create, update, delete: if request.auth != null
+    && request.auth.token.admin == true;
+}
+
+    // ------------------------------------------------------------------
+    // SECURITY DEVICES (FCM TOKENS)
+    // ------------------------------------------------------------------
+    match /security_devices/{deviceId} {
+
+      allow create, update: if request.auth != null
+        && deviceId == "admin_device";
+
+      allow read: if request.auth != null
+        && request.auth.token.admin == true;
+
+      allow delete: if false;
+    }
+  
+
+// ------------------------------------------------------------------
+// ANNOUNCEMENTS
+// ------------------------------------------------------------------
+match /announcements/{docId} {
+
+  allow read, list: if request.auth != null;
+
+  allow create, update, delete: if request.auth != null
+    && request.auth.token.admin == true;
+}
+
+// ------------------------------------------------------------------
+// SEEN ANNOUNCEMENTS
+// ------------------------------------------------------------------
+match /users/{userId}/seen_announcements/{docId} {
+
+  allow get, list: if request.auth != null
+    && (request.auth.uid == userId || request.auth.token.admin == true);
+
+  allow create, update: if request.auth != null
+    && request.auth.uid == userId;
+
+  allow delete: if request.auth != null
+    && request.auth.uid == userId;
+}
+
+// Collection group: BackOffice legge quante letture ha ogni annuncio
+match /{path=**}/seen_announcements/{docId} {
+  allow read, list: if request.auth != null
+    && request.auth.token.admin == true;
+}
+
+    // ------------------------------------------------------------------
+    // COURSES / QUIZ / ROLEPLAY / MEDIA
+    // ------------------------------------------------------------------
+    match /courses/{docId} {
+      allow create, update, delete: if request.auth != null
+        && request.auth.token.admin == true;
+      allow read: if request.auth != null;
+    }
+
+    match /quiz/{docId} {
+      allow create, update, delete: if request.auth != null
+        && request.auth.token.admin == true;
+      allow read: if request.auth != null;
+    }
+
+    match /roleplay/{docId} {
+      allow create, update, delete: if request.auth != null
+        && request.auth.token.admin == true;
+      allow read: if request.auth != null;
+    }
+
+    match /media/{docId} {
+      allow create, update, delete: if request.auth != null
+        && request.auth.token.admin == true;
+      allow read: if request.auth != null;
+    }
+
+  // ------------------------------------------------------------------
+// JOB OFFERS
+// ------------------------------------------------------------------
+match /job_offers/{docId} {
+
+  // Lettura pubblica: solo offerte approvate e online
+  // Admin: tutte le offerte (BackOffice)
+  // Azienda: le proprie offerte (anche pending/bozze)
+  allow read: if (resource.data.status == "approved"
+                  && resource.data.online == true)
+              || (request.auth != null && request.auth.token.admin == true)
+              || (request.auth != null
+                  && exists(/databases/$(database)/documents/companies/$(request.auth.uid))
+                  && resource.data.companyId == request.auth.uid);
+
+  allow create, update, delete: if (request.auth != null && request.auth.token.admin == true) ||
+    (request.auth != null &&
+     exists(/databases/$(database)/documents/companies/$(request.auth.uid)) &&
+     (request.resource.data.companyId == request.auth.uid ||
+      resource.data.companyId == request.auth.uid));
+}
+
+// ------------------------------------------------------------------
+// JOB APPLICATIONS
+// ------------------------------------------------------------------
+match /job_applications/{docId} {
+
+  allow create: if request.auth != null
+    && request.resource.data.userId == request.auth.uid;
+
+  // FIX: semplificato
+  allow read: if request.auth != null;
+
+  allow update, delete: if request.auth != null
+    && request.auth.token.admin == true;
+
+  allow delete: if request.auth != null
+    && request.auth.uid == resource.data.userId;
+
+  allow update: if request.auth != null
+    && exists(/databases/$(database)/documents/companies/$(request.auth.uid))
+    && request.auth.uid == resource.data.companyId;
+}
+
+// ------------------------------------------------------------------
+// CREDITCALC — CREDITORI / PROVVIGIONI (solo dati propri)
+// ------------------------------------------------------------------
+match /creditors/{docId} {
+  allow read: if request.auth != null && (
+    request.auth.token.admin == true
+    || resource.data.userId == request.auth.uid
+  );
+
+  allow create: if request.auth != null
+    && request.resource.data.userId == request.auth.uid;
+
+  allow update: if request.auth != null && (
+    request.auth.token.admin == true
+    || (resource.data.userId == request.auth.uid
+      && request.resource.data.userId == request.auth.uid)
+  );
+
+  allow delete: if request.auth != null && (
+    request.auth.token.admin == true
+    || resource.data.userId == request.auth.uid
+  );
+}
+
+match /applications/{docId} {
+  allow read, update: if request.auth != null && (
+    request.auth.token.admin == true
+    || resource.data.userId == request.auth.uid
+  );
+
+  allow create: if request.auth != null
+    && request.resource.data.userId == request.auth.uid;
+
+  allow delete: if request.auth != null
+    && request.auth.token.admin == true;
+}
+
+match /calculations/{docId} {
+  allow read: if request.auth != null && (
+    request.auth.token.admin == true
+    || resource.data.userId == request.auth.uid
+  );
+
+  allow create: if request.auth != null
+    && request.resource.data.userId == request.auth.uid;
+
+  allow update, delete: if request.auth != null && (
+    request.auth.token.admin == true
+    || resource.data.userId == request.auth.uid
+  );
+}
+
+// ------------------------------------------------------------------
+// CREDITCALC — SESSIONE UNICA (App Mobile / Web)
+// Documento: credit_calc_sessions/{userId}
+// ------------------------------------------------------------------
+match /credit_calc_sessions/{userId} {
+
+  allow read: if request.auth != null && (
+    request.auth.uid == userId
+    || request.auth.token.admin == true
+  );
+
+  allow create: if request.auth != null
+    && request.auth.uid == userId
+    && request.resource.data.userId == request.auth.uid;
+
+  allow update: if request.auth != null
+    && request.auth.uid == userId
+    && resource.data.userId == request.auth.uid
+    && (
+      !request.resource.data.keys().hasAny(['userId'])
+      || request.resource.data.userId == request.auth.uid
+    );
+
+  allow delete: if request.auth != null && (
+    request.auth.uid == userId
+    || request.auth.token.admin == true
+  );
+}
+
+// ------------------------------------------------------------------
+// PLATFORM CONFIG — CreditCalc desktop OTA (BackOffice + app)
+// Documento: platform_config/credit_calc_desktop
+// ------------------------------------------------------------------
+match /platform_config/{docId} {
+
+  allow read: if request.auth != null;
+
+  allow create, delete: if request.auth != null
+    && request.auth.token.admin == true;
+
+  allow update: if request.auth != null && (
+    request.auth.token.admin == true
+    || (
+      docId == 'credit_calc_desktop'
+      && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['downloadCount'])
+      && request.resource.data.downloadCount
+          == resource.data.get('downloadCount', 0) + 1
+    )
+  );
+}
+
+// ------------------------------------------------------------------
+// JOB OFFER RULES ACCEPTANCE
+// ------------------------------------------------------------------
+match /job_offer_rules_acceptance/{docId} {
+
+  allow create: if request.auth != null;
+  allow read: if request.auth != null;
+
+  allow update, delete: if request.auth != null
+    && request.auth.token.admin == true;
+}
+
+// ------------------------------------------------------------------
+// COMPANIES (FIX REGISTRAZIONE)
+// ------------------------------------------------------------------
+match /companies/{companyId} {
+
+  // 🔥 FIX: permetti create durante registrazione
+  allow create: if request.auth != null;
+
+  allow read: if request.auth != null;
+
+  allow update: if request.auth != null; // ✅ FIX
+
+  allow delete: if request.auth != null
+    && request.auth.token.admin == true;
+}
+
+// ------------------------------------------------------------------
+// RULES HISTORY
+// ------------------------------------------------------------------
+match /companies/{companyId}/rules_history/{docId} {
+
+  allow create: if request.auth != null
+    && request.auth.uid == companyId;
+
+  allow read: if request.auth != null
+    && request.auth.uid == companyId;
+
+  allow update, delete: if request.auth != null
+    && request.auth.token.admin == true;
+}
+
+    // ------------------------------------------------------------------
+    // USER PROGRESS
+    // ------------------------------------------------------------------
+    match /userProgress/{userId} {
+      allow read, write, delete: if request.auth != null
+        && request.auth.token.admin == true;
+
+      allow read, write: if request.auth != null
+        && request.auth.uid == userId;
+
+      match /courses/{courseId} {
+        allow read, write: if request.auth != null
+          && request.auth.uid == userId;
+        allow delete: if request.auth != null
+          && request.auth.token.admin == true;
+      }
+    }
+
+    match /listening_progress/{userId} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == userId;
+    }
+
+    // ------------------------------------------------------------------
+    // WORK — segnalazioni supervisor → backoffice (blocco utente)
+    // ------------------------------------------------------------------
+    match /work_user_reports/{docId} {
+
+      allow create: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.type == 'work'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workRole == 'supervisor'
+        && request.resource.data.supervisorUid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.requestedAction == 'block';
+
+      allow read, update, delete: if request.auth != null
+        && request.auth.token.admin == true;
+    }
+
+    // ------------------------------------------------------------------
+    // USERS
+    // ------------------------------------------------------------------
+    match /users/{userId} {
+
+      allow create: if request.auth != null
+        && request.auth.uid == userId;
+
+      allow get: if request.auth != null && (
+        request.auth.uid == userId ||
+        request.auth.token.admin == true
+      );
+
+      allow list: if request.auth != null && (
+        request.auth.token.admin == true ||
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.type == "company" &&
+          resource.data.type == "work" &&
+          resource.data.companyCode ==
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userCode
+        )
+      );
+
+      allow update: if request.auth != null && (
+        request.auth.uid == userId ||
+        request.auth.token.admin == true
+      );
+
+      allow delete: if request.auth != null
+        && request.auth.token.admin == true;
+
+      match /saved_jobs/{jobId} {
+        allow read, write: if request.auth != null
+          && request.auth.uid == userId;
+      }
+    }
+
+// ------------------------------------------------------------------
+// WORK CODES (FIX SICUREZZA)
+// ------------------------------------------------------------------
+match /work_codes/{code} {
+  allow read: if true;
+  allow create: if request.auth != null;
+  allow update, delete: if request.auth != null
+    && request.auth.token.admin == true;
+}
+
+ // ------------------------------------------------------------------
+// SETTINGS
+// ------------------------------------------------------------------
+match /settings/{docId} {
+
+  allow read: if request.auth != null;
+
+  allow create, update: if request.auth != null
+    && request.auth.token.admin == true;
+
+  allow delete: if request.auth != null
+    && request.auth.token.admin == true;
+
+  match /{subCollection}/{docSubId} {
+
+    allow read: if request.auth != null;
+
+    allow create, update, delete: if request.auth != null
+      && request.auth.token.admin == true;
+  }
+}
+
+    // ------------------------------------------------------------------
+    // NOTIFICATIONS
+    // ------------------------------------------------------------------
+    match /notifications/{docId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null
+        && request.auth.token.admin == true;
+    }
+
+    // ------------------------------------------------------------------
+    // SUPPORT
+    // ------------------------------------------------------------------
+    match /support/{ticketId} {
+
+      allow create: if request.auth != null;
+
+      allow list: if request.auth != null
+        && request.auth.token.admin == true;
+
+      allow read, update, delete: if request.auth != null && (
+        request.auth.token.admin == true ||
+        resource.data.userId == request.auth.uid
+      );
+
+      match /messages/{msgId} {
+        allow create, read, update, delete: if request.auth != null;
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // COMMUNITY
+    // ------------------------------------------------------------------
+    match /community/{docId} {
+
+      allow create, list: if request.auth != null;
+
+      allow get: if request.auth != null && (
+        resource.data.status == 'approved' ||
+        request.auth.token.admin == true
+      );
+
+      allow update, delete: if request.auth != null
+        && request.auth.token.admin == true;
+    }
+
+    match /community/{topicId}/messages/{msgId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null || request.auth.token.admin == true;
+      allow write: if request.auth.token.admin == true;
+    }
+
+    // ------------------------------------------------------------------
+    // DEBUG / CLEANUP COLLECTIONS
+    // ------------------------------------------------------------------
+    match /{col}/{docId} {
+
+      allow read: if request.auth != null;
+
+      allow delete: if request.auth != null
+        && request.auth.token.admin == true
+        && col in ['temp', 'debug', 'test', 'old_progress', 'backup_old'];
+    }
+
+  }
+}

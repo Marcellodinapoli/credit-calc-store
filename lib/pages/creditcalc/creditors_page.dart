@@ -1,8 +1,8 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart'
     hide CreditorDetailPage, CreditorsPage;
 import 'package:flutter/material.dart';
 
+import '../../offline/repository/credit_calc_repository.dart';
 import 'creditor_detail_page.dart';
 
 class CreditorsPage extends StatelessWidget {
@@ -55,8 +55,7 @@ class CreditorsPage extends StatelessWidget {
 
   Future<void> _addCreditor(BuildContext context, int currentCount) async {
     final label = 'Creditore ${currentCount + 1}';
-    final docId =
-        FirebaseFirestore.instance.collection('creditors').doc().id;
+    final docId = CreditCalcRepository.instance.newCreditorId();
 
     if (!context.mounted) return;
 
@@ -90,10 +89,11 @@ class CreditorsPage extends StatelessWidget {
     return wrapCreditCalcPage(
       pageTitle: 'Lista creditori',
       current: CreditCalcNavItem.creditors,
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirestoreUserScope.creditorsOrdered().snapshots(),
+      body: StreamBuilder<List<CreditCalcRecord>>(
+        stream: CreditCalcRepository.instance.watchCreditorRecords(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -106,9 +106,7 @@ class CreditorsPage extends StatelessWidget {
             );
           }
 
-          final docs = FirestoreUserScope.sortCreditorsByCreatedAt(
-            snapshot.data?.docs ?? const [],
-          );
+          final docs = snapshot.data ?? const [];
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -143,7 +141,7 @@ class CreditorsPage extends StatelessWidget {
                               const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final doc = docs[index];
-                            final data = doc.data();
+                            final data = doc.data;
                             final name = (data['name'] ?? '').toString();
                             final notes = (data['notes'] ?? '').toString();
                             final maxAgeRaw = data['maxAge'];

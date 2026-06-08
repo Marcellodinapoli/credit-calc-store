@@ -1,8 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart'
     hide CommissionCollectionsHelper;
 import 'package:flutter/material.dart';
 
+import '../../offline/repository/credit_calc_repository.dart';
 import 'commission_collections_shared.dart';
 import 'commission_statistics_section.dart';
 
@@ -31,10 +31,11 @@ class CommissionStatisticsPage extends StatelessWidget {
       secondary: true,
       pageTitle: 'Statistiche provvigioni',
       current: CreditCalcNavItem.commissions,
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirestoreUserScope.userCalculations().snapshots(),
+      body: StreamBuilder<List<CreditCalcRecord>>(
+        stream: CreditCalcRepository.instance.watchCalculationRecords(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -52,7 +53,7 @@ class CommissionStatisticsPage extends StatelessWidget {
           }
 
           final docs =
-              CommissionCollectionsHelper.commissionDocs(snapshot.data);
+              CommissionCollectionsHelper.commissionRecords(snapshot.data);
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),

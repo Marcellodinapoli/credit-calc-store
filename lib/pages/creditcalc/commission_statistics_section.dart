@@ -1,7 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart' show AppCardTheme;
 import 'package:flutter/material.dart';
 
+import '../../offline/repository/credit_calc_repository.dart';
 import 'commission_collections_shared.dart';
 import 'commission_statistics.dart';
 
@@ -13,7 +13,7 @@ class CommissionStatisticsSection extends StatefulWidget {
     required this.docs,
   });
 
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final List<CreditCalcRecord> docs;
 
   @override
   State<CommissionStatisticsSection> createState() =>
@@ -132,8 +132,8 @@ class _CommissionStatisticsSectionState
     );
   }
 
-  Widget _monthlyContent(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
-    final byMonth = CommissionStatisticsHelper.totalsByMonth(docs);
+  Widget _monthlyContent(List<CreditCalcRecord> docs) {
+    final byMonth = CommissionStatisticsHelper.totalsByMonthRecords(docs);
     final now = CommissionMonthKey.fromDate(DateTime.now());
     final previous = CommissionStatisticsHelper.previousMonth(now);
 
@@ -181,7 +181,7 @@ class _CommissionStatisticsSectionState
                   label: CommissionCollectionsHelper.monthLabel(entry.key),
                   totals: entry.totals,
                   paymentTypes:
-                      CommissionStatisticsHelper.paymentTypesInMonth(
+                      CommissionStatisticsHelper.paymentTypesInMonthRecords(
                     docs,
                     entry.key,
                   ),
@@ -193,8 +193,8 @@ class _CommissionStatisticsSectionState
     );
   }
 
-  Widget _yearlyContent(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
-    final byYear = CommissionStatisticsHelper.totalsByYear(docs);
+  Widget _yearlyContent(List<CreditCalcRecord> docs) {
+    final byYear = CommissionStatisticsHelper.totalsByYearRecords(docs);
     final currentYear = DateTime.now().year;
     final previousYear = currentYear - 1;
 
@@ -235,7 +235,7 @@ class _CommissionStatisticsSectionState
               _PeriodDetailEntry(
                 label: '${entry.year}',
                 totals: entry.totals,
-                paymentTypes: CommissionStatisticsHelper.paymentTypesInYear(
+                paymentTypes: CommissionStatisticsHelper.paymentTypesInYearRecords(
                   docs,
                   entry.year,
                 ),

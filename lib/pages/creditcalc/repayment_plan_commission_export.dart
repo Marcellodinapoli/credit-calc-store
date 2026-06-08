@@ -1,4 +1,4 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart'
     hide
         RepaymentPlanCommissionExporter,
@@ -10,6 +10,8 @@ import 'package:credit_calc_core/credit_calc_core.dart'
         showPlanCancelWithCommissionsDialog;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import '../../offline/repository/credit_calc_repository.dart';
 
 /// Scelta nel dialog dopo «Annulla» con incassi registrati in sessione.
 enum PlanCancelWithCommissionsAction {
@@ -161,18 +163,16 @@ abstract final class RepaymentPlanCommissionExporter {
       );
     }
 
-    final creditorDoc = await FirebaseFirestore.instance
-        .collection('creditors')
-        .doc(request.creditorId)
-        .get();
-    if (!creditorDoc.exists) {
+    final creditorDoc =
+        await CreditCalcRepository.instance.getCreditor(request.creditorId);
+    if (creditorDoc == null) {
       return const RepaymentPlanCommissionExportResult(
         savedCount: 0,
         errors: ['Creditore non trovato.'],
       );
     }
 
-    final creditorData = creditorDoc.data() ?? {};
+    final creditorData = creditorDoc.data;
     final options = CommissionPaymentResolver.entryOptions(creditorData);
 
     final pdrKey = pdrCommissionKeyForPlanMethod(request.planPaymentMethod);
@@ -276,23 +276,24 @@ abstract final class RepaymentPlanCommissionExporter {
       );
     }
 
-    final collection = FirebaseFirestore.instance.collection('calculations');
     final toDelete = <String>[];
     final errors = <String>[];
 
     for (final id in uniqueIds) {
       try {
-        final snap = await collection.doc(id).get();
-        if (!snap.exists) {
+        final records =
+            await CreditCalcRepository.instance.getCalculationRecords();
+        final match = records.where((r) => r.id == id).toList();
+        if (match.isEmpty) {
           toDelete.add(id);
           continue;
         }
-        final data = snap.data();
-        if (data?['userId'] != userId) {
+        final data = match.first.data;
+        if (data['userId'] != userId) {
           errors.add('Permesso negato per l\'incasso selezionato.');
           continue;
         }
-        if (data?['type'] != 'commission_entry') {
+        if (data['type'] != 'commission_entry') {
           errors.add('Documento incasso non valido.');
           continue;
         }
@@ -304,21 +305,12 @@ abstract final class RepaymentPlanCommissionExporter {
 
     var deleted = 0;
     final deletedIds = <String>[];
-    for (var offset = 0; offset < toDelete.length; offset += 400) {
-      final chunk = toDelete.skip(offset).take(400).toList();
-      final batch = FirebaseFirestore.instance.batch();
-      for (final id in chunk) {
-        batch.delete(collection.doc(id));
-      }
-      try {
-        await batch.commit();
-        deleted += chunk.length;
-        deletedIds.addAll(chunk);
-      } catch (e) {
-        errors.add(
-          'Errore durante l\'eliminazione degli incassi: $e',
-        );
-      }
+    try {
+      await CreditCalcRepository.instance.deleteCalculationsBatch(toDelete);
+      deleted = toDelete.length;
+      deletedIds.addAll(toDelete);
+    } catch (e) {
+      errors.add('Errore durante l\'eliminazione degli incassi: $e');
     }
 
     if (deleted == 0 && errors.isEmpty) {
@@ -346,20 +338,14 @@ abstract final class RepaymentPlanCommissionExporter {
       );
     }
 
-    final batch = FirebaseFirestore.instance.batch();
-    final collection = FirebaseFirestore.instance.collection('calculations');
-    final now = FieldValue.serverTimestamp();
-    final docIds = <String>[];
-
-    for (final payload in payloads) {
-      final ref = collection.doc();
-      payload['createdAt'] = now;
-      batch.set(ref, payload);
-      docIds.add(ref.id);
-    }
-
     try {
-      await batch.commit();
+      final docIds =
+          await CreditCalcRepository.instance.createCalculationsBatch(payloads);
+      return RepaymentPlanCommissionExportResult(
+        savedCount: docIds.length,
+        errors: errors,
+        savedDocIds: docIds,
+      );
     } catch (_) {
       return RepaymentPlanCommissionExportResult(
         savedCount: 0,
@@ -369,12 +355,6 @@ abstract final class RepaymentPlanCommissionExporter {
         ],
       );
     }
-
-    return RepaymentPlanCommissionExportResult(
-      savedCount: docIds.length,
-      errors: errors,
-      savedDocIds: docIds,
-    );
   }
 
   /// Registra incassi da rate (saldo e stralcio o piani con calendario).
@@ -402,11 +382,9 @@ abstract final class RepaymentPlanCommissionExporter {
       );
     }
 
-    final creditorDoc = await FirebaseFirestore.instance
-        .collection('creditors')
-        .doc(creditorId)
-        .get();
-    if (!creditorDoc.exists) {
+    final creditorDoc =
+        await CreditCalcRepository.instance.getCreditor(creditorId);
+    if (creditorDoc == null) {
       return const RepaymentPlanCommissionExportResult(
         savedCount: 0,
         errors: ['Creditore non trovato.'],
@@ -414,7 +392,7 @@ abstract final class RepaymentPlanCommissionExporter {
     }
 
     final options =
-        CommissionPaymentResolver.entryOptions(creditorDoc.data() ?? {});
+        CommissionPaymentResolver.entryOptions(creditorDoc.data);
     final payment = _optionForKey(options, paymentMethodKey);
     if (payment == null) {
       return RepaymentPlanCommissionExportResult(

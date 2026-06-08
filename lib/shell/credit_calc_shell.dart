@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:credit_calc_core/credit_calc_core.dart'
     hide CommissionsPage, CreditorsPage, DevelopPage;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../auth/biometric_lock_gate.dart';
 import '../core/dimensions.dart';
+import '../offline/credit_calc_runtime.dart';
+import '../offline/services/connectivity_service.dart';
 import '../pages/creditcalc/commissions_page.dart';
+import '../pages/creditcalc/credit_calc_settings_page.dart';
 import '../pages/creditcalc/creditors_page.dart';
 import '../pages/creditcalc/develop_page.dart';
 import '../ui/layout/page_shell.dart';
@@ -22,12 +28,59 @@ class CreditCalcShell extends StatefulWidget {
 class _CreditCalcShellState extends State<CreditCalcShell> {
   CreditCalcNavItem _section = CreditCalcNavItem.creditors;
 
+  @override
+  void initState() {
+    super.initState();
+    CreditCalcRuntime.writeBlockedMessage.addListener(_onWriteBlocked);
+    unawaited(CreditCalcRuntime.refreshPendingSyncCount());
+  }
+
+  @override
+  void dispose() {
+    CreditCalcRuntime.writeBlockedMessage.removeListener(_onWriteBlocked);
+    super.dispose();
+  }
+
+  void _onWriteBlocked() {
+    final message = CreditCalcRuntime.writeBlockedMessage.value;
+    if (message == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 6)),
+    );
+    CreditCalcRuntime.writeBlockedMessage.value = null;
+  }
+
+  Future<void> _openSettings() async {
+    if (!CreditCalcRuntime.isReady) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CreditCalcSettingsPage(
+          modePrefs: CreditCalcRuntime.modePrefs!,
+          sessionService: CreditCalcRuntime.sessionService!,
+          syncEngine: CreditCalcRuntime.syncEngine!,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    unawaited(CreditCalcRuntime.refreshPendingSyncCount());
+  }
+
   Future<void> _logout() async {
+    final pending = CreditCalcRuntime.pendingSyncCount.value;
+    final online = await ConnectivityService.isOnline();
+    final canSoftLock = !online && await BiometricLockGate.canLockWithBiometric();
+    if (!mounted) return;
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Esci'),
-        content: const Text('Vuoi uscire dall\'account CreditCore?'),
+        content: Text(
+          _logoutDialogMessage(
+            pending: pending,
+            softLock: canSoftLock,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -35,14 +88,49 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Esci'),
+            child: Text(canSoftLock ? 'Blocca app' : 'Esci'),
           ),
         ],
       ),
     );
     if (ok != true) return;
-    await FirebaseAuth.instance.signOut();
+
+    CreditCalcRuntime.realtimeSync?.stop();
+    try {
+      await CreditCalcRuntime.sessionService
+          ?.releaseSession()
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {}
+
+    if (canSoftLock) {
+      BiometricLockGate.lockAgain();
+      return;
+    }
+
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {}
+
+    CreditCalcRuntime.clear();
     // AuthGate (home) reagisce ad authStateChanges e mostra di nuovo LoginPage.
+  }
+
+  String _logoutDialogMessage({
+    required int pending,
+    required bool softLock,
+  }) {
+    final pendingText = pending > 0
+        ? 'Hai $pending modifiche non ancora sincronizzate. Restano su '
+            'questo dispositivo e verranno inviate al prossimo accesso '
+            'con internet.\n\n'
+        : '';
+
+    if (softLock) {
+      return '${pendingText}Senza connessione l\'app verrà bloccata su questo '
+          'dispositivo. Potrai rientrare con la biometria quando vuoi.';
+    }
+
+    return '${pendingText}Vuoi uscire dall\'account CreditCore?';
   }
 
   void _showAccountMenu() {
@@ -82,6 +170,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
         section: _section,
         onSectionChanged: (item) => setState(() => _section = item),
         onMenu: _showAccountMenu,
+        onSettings: _openSettings,
         child: _sectionPage(_section),
       );
     }
@@ -90,6 +179,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
       section: _section,
       onSectionChanged: (item) => setState(() => _section = item),
       onLogout: _logout,
+      onSettings: _openSettings,
       child: _sectionPage(_section),
     );
   }
@@ -99,12 +189,14 @@ class _MobileShell extends StatelessWidget {
   final CreditCalcNavItem section;
   final ValueChanged<CreditCalcNavItem> onSectionChanged;
   final VoidCallback onMenu;
+  final Future<void> Function() onSettings;
   final Widget child;
 
   const _MobileShell({
     required this.section,
     required this.onSectionChanged,
     required this.onMenu,
+    required this.onSettings,
     required this.child,
   });
 
@@ -117,6 +209,7 @@ class _MobileShell extends StatelessWidget {
         title: const _BrandTitle(),
         actions: [
           const AnnouncementsBellButton(iconColor: Colors.black87),
+          _SettingsIconButton(onPressed: onSettings),
           IconButton(
             tooltip: 'Menu',
             onPressed: onMenu,
@@ -155,12 +248,14 @@ class _DesktopShell extends StatelessWidget {
   final CreditCalcNavItem section;
   final ValueChanged<CreditCalcNavItem> onSectionChanged;
   final Future<void> Function() onLogout;
+  final Future<void> Function() onSettings;
   final Widget child;
 
   const _DesktopShell({
     required this.section,
     required this.onSectionChanged,
     required this.onLogout,
+    required this.onSettings,
     required this.child,
   });
 
@@ -174,6 +269,7 @@ class _DesktopShell extends StatelessWidget {
             section: section,
             onSectionChanged: onSectionChanged,
             onLogout: onLogout,
+            onSettings: onSettings,
           ),
           Expanded(
             child: Column(
@@ -192,6 +288,7 @@ class _DesktopShell extends StatelessWidget {
                             const Spacer(),
                             const AnnouncementsBellButton(iconColor: Colors.black87),
                             const CreditCoreSiteIconButton(),
+                            _SettingsIconButton(onPressed: onSettings),
                             IconButton(
                               tooltip: 'Esci',
                               onPressed: () => onLogout(),
@@ -218,11 +315,13 @@ class _SideNav extends StatelessWidget {
   final CreditCalcNavItem section;
   final ValueChanged<CreditCalcNavItem> onSectionChanged;
   final Future<void> Function() onLogout;
+  final Future<void> Function() onSettings;
 
   const _SideNav({
     required this.section,
     required this.onSectionChanged,
     required this.onLogout,
+    required this.onSettings,
   });
 
   @override
@@ -268,6 +367,15 @@ class _SideNav extends StatelessWidget {
               const CreditCoreSiteListTile(dense: true),
               ListTile(
                 dense: true,
+                leading: _SettingsNavIcon(),
+                title: const Text(
+                  'Impostazioni',
+                  style: TextStyle(fontSize: 14),
+                ),
+                onTap: () => onSettings(),
+              ),
+              ListTile(
+                dense: true,
                 leading: const Icon(Icons.logout, size: 20),
                 title: const Text('Esci', style: TextStyle(fontSize: 14)),
                 onTap: () => onLogout(),
@@ -308,6 +416,53 @@ class _NavTile extends StatelessWidget {
         ),
       ),
       onTap: onTap,
+    );
+  }
+}
+
+class _SettingsIconButton extends StatelessWidget {
+  final Future<void> Function() onPressed;
+
+  const _SettingsIconButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: CreditCalcRuntime.pendingSyncCount,
+      builder: (context, pending, _) {
+        final label = pending > 99 ? '99+' : '$pending';
+        return Badge(
+          isLabelVisible: pending > 0,
+          label: Text(label),
+          backgroundColor: Colors.red.shade700,
+          child: IconButton(
+            tooltip: pending > 0
+                ? '$pending modifiche in attesa di internet'
+                : 'Impostazioni CreditCalc',
+            onPressed: () => onPressed(),
+            icon: const Icon(Icons.settings_outlined),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SettingsNavIcon extends StatelessWidget {
+  const _SettingsNavIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: CreditCalcRuntime.pendingSyncCount,
+      builder: (context, pending, _) {
+        return Badge(
+          isLabelVisible: pending > 0,
+          smallSize: 8,
+          backgroundColor: Colors.red.shade700,
+          child: const Icon(Icons.settings_outlined, size: 20),
+        );
+      },
     );
   }
 }

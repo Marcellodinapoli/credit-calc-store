@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart'
     hide
         CommissionInstallmentPayment,
@@ -15,6 +14,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/adaptive_button_styles.dart';
+import '../../offline/repository/credit_calc_repository.dart';
+import '../../offline/services/repayment_plan_draft_controller.dart';
+import '../../offline/services/repayment_plan_draft_service.dart';
 import '../../ui/layout/adaptive_action_bar.dart';
 import 'repayment_plan_commission_export.dart';
 import 'repayment_plan_session_storage.dart';
@@ -1194,7 +1196,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   String? _creditorId;
   _CreditorOption? _creditor;
   List<_CreditorOption>? _cachedCreditorOptions;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _creditorsSub;
+  StreamSubscription<List<CreditCalcRecord>>? _creditorsSub;
   List<_PracticeDebt> _previewOrderedDebts = const [];
 
   final _importo1Ctrl = TextEditingController();
@@ -1257,10 +1259,16 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   final _resultsKey = GlobalKey();
   final FocusNode _accontoFocusNode = FocusNode();
   late final Listenable _formAmountFieldsListenable;
+  late final RepaymentPlanDraftController _draftController;
 
   @override
   void initState() {
     super.initState();
+    _draftController = RepaymentPlanDraftController(
+      planType: RepaymentPlanDraftService.typeStandard,
+      collectState: _draftState,
+      applyState: _applyDraftState,
+    );
     _accontoFocusNode.addListener(_onAccontoFocusChange);
     _formAmountFieldsListenable = Listenable.merge([
       _importo1Ctrl,
@@ -1275,11 +1283,75 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       _modPhase3MonthsCtrl,
       _modPhase3AmountCtrl,
     ]);
-    _creditorsSub =
-        FirestoreUserScope.creditorsOrdered().snapshots().listen(
-      _applyCreditorsSnapshot,
-    );
+    _creditorsSub = CreditCalcRepository.instance
+        .watchCreditorRecords()
+        .listen(_applyCreditorsRecords);
     _sessionCommissionDocIds.addAll(RepaymentPlanSessionStorage.readIds());
+  }
+
+  Map<String, dynamic> _draftState() => {
+        ..._currentFormSnapshot(),
+        'modulatedPhases': _modulatedVisiblePhaseCount,
+      };
+
+  void _applyDraftState(Map<String, dynamic> state) {
+    _isResettingForm = true;
+    final snap = state.map((key, value) => MapEntry(key, value.toString()));
+    setState(() {
+      _cadenza = snap['cadenza'] ?? 'Mensile';
+      _monthlyPlanCount = int.tryParse(snap['monthlyPlans'] ?? '1') ?? 1;
+      final creditorId = snap['creditorId'];
+      _creditorId =
+          creditorId != null && creditorId.isNotEmpty ? creditorId : null;
+      _metodo = snap['metodo'] ?? '';
+      _modalitaRate = _RepaymentSplitMode.values.firstWhere(
+        (mode) => mode.name == snap['modalita'],
+        orElse: () => _RepaymentSplitMode.lastAdjustment,
+      );
+      _planSizingMode = _PlanSizingMode.values.firstWhere(
+        (mode) => mode.name == snap['planSizing'],
+        orElse: () => _PlanSizingMode.automatic,
+      );
+      _manualTarget = _ManualSizingTarget.values.firstWhere(
+        (mode) => mode.name == snap['manualTarget'],
+        orElse: () => _ManualSizingTarget.byInstallmentAmount,
+      );
+      _importo1Ctrl.text = snap['i1'] ?? '';
+      _importo2Ctrl.text = snap['i2'] ?? '';
+      _importo3Ctrl.text = snap['i3'] ?? '';
+      _accontoCtrl.text = snap['acconto'] ?? '0,00 €';
+      _rataMensileCondivisaCtrl.text = snap['rata'] ?? '';
+      _birthYearCtrl.text = snap['birth'] ?? '';
+      _desiredInstallmentCtrl.text = snap['desiredRata'] ?? '';
+      _desiredInstallmentCountCtrl.text = snap['desiredCount'] ?? '';
+      _modPhase1MonthsCtrl.text = snap['mod1m'] ?? '';
+      _modPhase1AmountCtrl.text = snap['mod1a'] ?? '';
+      _modPhase2MonthsCtrl.text = snap['mod2m'] ?? '';
+      _modPhase2AmountCtrl.text = snap['mod2a'] ?? '';
+      _modPhase3MonthsCtrl.text = snap['mod3m'] ?? '';
+      _modPhase3AmountCtrl.text = snap['mod3a'] ?? '';
+      _modulatedVisiblePhaseCount =
+          int.tryParse('${state['modulatedPhases'] ?? '1'}') ?? 1;
+      final start = _parseDraftDate(snap['start']);
+      if (start != null) _dataInizio = start;
+      _calcolato = false;
+      _formSnapshotAtCalcolo = null;
+      _installmentPlan = null;
+      _modulatedPlan = null;
+      _multiPracticePlan = null;
+    });
+    _isResettingForm = false;
+  }
+
+  DateTime? _parseDraftDate(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    final parts = raw.split('/');
+    if (parts.length != 3) return null;
+    final day = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final year = int.tryParse(parts[2]);
+    if (day == null || month == null || year == null) return null;
+    return DateTime(year, month, day);
   }
 
   void _syncSessionCommissionDocIds(Iterable<String> ids) {
@@ -1294,6 +1366,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   @override
   void dispose() {
+    _draftController.dispose();
     _creditorsSub?.cancel();
     _accontoFocusNode.removeListener(_onAccontoFocusChange);
     _accontoFocusNode.dispose();
@@ -1373,15 +1446,17 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   }
 
   void _resetCalcoloIfNeeded() {
-    if (!_hasFormChangedSinceCalcolo()) return;
-    _resetCalcolo();
+    if (_hasFormChangedSinceCalcolo()) {
+      _resetCalcolo();
+    }
+    if (!_isResettingForm) {
+      _draftController.scheduleSave();
+    }
   }
 
-  void _applyCreditorsSnapshot(
-    QuerySnapshot<Map<String, dynamic>> snap,
-  ) {
+  void _applyCreditorsRecords(List<CreditCalcRecord> records) {
     if (!mounted) return;
-    final options = _optionsFromSnapshot(snap);
+    final options = _optionsFromRecords(records);
 
     if (_creditorId != null) {
       _CreditorOption? match;
@@ -1998,6 +2073,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   void _resetForm() {
     _isResettingForm = true;
+    unawaited(_draftController.clear());
     FocusManager.instance.primaryFocus?.unfocus();
     _accontoFocusNode.unfocus();
 
@@ -2930,6 +3006,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         if (_parseBirthYear() != null) _showBirthYearInfo = true;
         _resetCalcolo();
       });
+      _draftController.scheduleSave();
     }
   }
 
@@ -2953,12 +3030,9 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     return bands;
   }
 
-  List<_CreditorOption> _optionsFromSnapshot(
-    QuerySnapshot<Map<String, dynamic>> snap,
-  ) {
-    final docs = FirestoreUserScope.sortCreditorsByCreatedAt(snap.docs);
+  List<_CreditorOption> _optionsFromRecords(List<CreditCalcRecord> docs) {
     return docs.map((doc) {
-      final data = doc.data();
+      final data = doc.data;
       final name = (data['name'] ?? 'Senza nome').toString().trim();
       final maxAgeRaw = data['maxAgePdr'] ?? data['maxAge'];
       final maxAgePdr = maxAgeRaw is int
@@ -4197,6 +4271,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
           ),
         ),
       );
+      _resetForm();
       return;
     }
 
@@ -4210,6 +4285,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
           duration: const Duration(seconds: 8),
         ),
       );
+      _resetForm();
       return;
     }
 
@@ -4307,13 +4383,11 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   }
 
   void _exitPlanScreen() {
-    RepaymentPlanSessionStorage.clear();
+    _resetForm();
     final navigator = Navigator.of(context, rootNavigator: true);
     if (navigator.canPop()) {
       navigator.pop();
-      return;
     }
-    _resetForm();
   }
 
   Widget _buildPlanActionBar(List<_CreditorOption> options) {
@@ -4384,14 +4458,21 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   Widget build(BuildContext context) {
     final options = _cachedCreditorOptions;
 
-    return wrapCreditCalcPage(
-      secondary: true,
-      pageTitle: 'Sviluppo piano di rientro',
-      current: CreditCalcNavItem.develop,
-      bottomBar: options == null ? null : _buildPlanActionBar(options),
-      body: options == null
-          ? const Center(child: CircularProgressIndicator())
-          : _buildScrollContent(options),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _exitPlanScreen();
+      },
+      child: wrapCreditCalcPage(
+        secondary: true,
+        pageTitle: 'Sviluppo piano di rientro',
+        current: CreditCalcNavItem.develop,
+        bottomBar: options == null ? null : _buildPlanActionBar(options),
+        body: options == null
+            ? const Center(child: CircularProgressIndicator())
+            : _buildScrollContent(options),
+      ),
     );
   }
 
@@ -4475,6 +4556,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
             _resetCalcolo();
           });
           _refreshModulatedValidation();
+          _draftController.scheduleSave();
         },
         decoration: appFormFieldDecoration(
           'Creditore',

@@ -1,7 +1,8 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'commission_entry_data_access.dart';
 import '../core/euro_format.dart';
 import '../core/theme/app_card_theme.dart';
 import '../core/theme/app_form_fields.dart';
@@ -159,12 +160,10 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
   Future<void> _loadEntry() async {
     setState(() => _loadingEntry = true);
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('calculations')
-          .doc(widget.entryId)
-          .get();
+      final data = await CommissionEntryDataAccess.instance
+          .loadEntry(widget.entryId!);
 
-      if (!doc.exists) {
+      if (data == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Incasso non trovato.')),
@@ -173,7 +172,6 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
         return;
       }
 
-      final data = doc.data() ?? {};
       final date = CommissionCollectionsHelper.entryDate(data);
       if (date != null) _collectionDate = date;
 
@@ -244,11 +242,8 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
     });
 
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('creditors')
-          .doc(id)
-          .get();
-      final data = doc.data() ?? {};
+      final data =
+          await CommissionEntryDataAccess.instance.loadCreditorData(id) ?? {};
       final options = CommissionPaymentResolver.entryOptions(data);
 
       if (!mounted) return;
@@ -335,14 +330,10 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      final collection =
-          FirebaseFirestore.instance.collection('calculations');
-      if (_isEditing) {
-        await collection.doc(widget.entryId).set(payload, SetOptions(merge: true));
-      } else {
-        payload['createdAt'] = FieldValue.serverTimestamp();
-        await collection.add(payload);
-      }
+      await CommissionEntryDataAccess.instance.saveEntry(
+        payload: payload,
+        entryId: _isEditing ? widget.entryId : null,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop(true);

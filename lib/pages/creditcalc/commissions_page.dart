@@ -1,4 +1,3 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart'
     hide
         CommissionCollectionsHelper,
@@ -6,6 +5,7 @@ import 'package:credit_calc_core/credit_calc_core.dart'
         CommissionMonthKey;
 import 'package:flutter/material.dart';
 
+import '../../offline/repository/credit_calc_repository.dart';
 import '../../services/read_state_service.dart';
 import 'commission_collections_page.dart';
 import 'commission_collections_shared.dart';
@@ -49,16 +49,14 @@ class _CommissionsPageState extends State<CommissionsPage> {
     await ReadStateService.setCommissionsPreviewVisible(next);
   }
 
-  Widget _compactPreview(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> allDocs,
-  ) {
+  Widget _compactPreview(List<CreditCalcRecord> allDocs) {
     final currentMonth = CommissionMonthKey.fromDate(DateTime.now());
-    final monthDocs = CommissionCollectionsHelper.filterDocs(
+    final monthDocs = CommissionCollectionsHelper.filterRecords(
       allDocs,
       month: currentMonth,
     );
     final totalCommission =
-        CommissionCollectionsHelper.totalCommission(monthDocs);
+        CommissionCollectionsHelper.totalCommissionRecords(monthDocs);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -133,8 +131,8 @@ class _CommissionsPageState extends State<CommissionsPage> {
               ),
             ),
           ),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirestoreUserScope.userCalculations().snapshots(),
+          StreamBuilder<List<CreditCalcRecord>>(
+            stream: CreditCalcRepository.instance.watchCalculationRecords(),
             builder: (context, snapshot) {
               if (!_previewPreferenceLoaded) {
                 return const SizedBox.shrink();
@@ -158,7 +156,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                 }
 
                 return _compactPreview(
-                  CommissionCollectionsHelper.commissionDocs(snapshot.data),
+                  CommissionCollectionsHelper.commissionRecords(snapshot.data),
                 );
               }
 

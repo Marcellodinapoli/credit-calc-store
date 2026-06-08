@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../core/euro_format.dart';
 import '../core/theme/app_action_styles.dart';
@@ -57,198 +57,229 @@ Future<CommissionExportDialogResult?> showCommissionExportDialog({
   List<CommissionExportScheduleLine> scheduledPayments = const [],
   DateTime? initialCollectionDate,
 }) {
-  final companyCtrl = TextEditingController();
-  var collectionDate = DateTime(
-    (initialCollectionDate ?? DateTime.now()).year,
-    (initialCollectionDate ?? DateTime.now()).month,
-    (initialCollectionDate ?? DateTime.now()).day,
+  return showDialog<CommissionExportDialogResult>(
+    context: context,
+    builder: (dialogContext) => _CommissionExportDialog(
+      description: description,
+      hasPaymentsAfterCurrentMonth: hasPaymentsAfterCurrentMonth,
+      scheduledPayments: scheduledPayments,
+      initialCollectionDate: initialCollectionDate,
+    ),
   );
-  var dateMode = CommissionExportDateMode.singleDate;
+}
 
-  final showScheduleChoice = hasPaymentsAfterCurrentMonth &&
-      scheduledPayments.isNotEmpty;
+class _CommissionExportDialog extends StatefulWidget {
+  const _CommissionExportDialog({
+    required this.description,
+    required this.hasPaymentsAfterCurrentMonth,
+    required this.scheduledPayments,
+    this.initialCollectionDate,
+  });
 
-  CommissionExportDialogResult buildResult(String name) {
+  final String description;
+  final bool hasPaymentsAfterCurrentMonth;
+  final List<CommissionExportScheduleLine> scheduledPayments;
+  final DateTime? initialCollectionDate;
+
+  @override
+  State<_CommissionExportDialog> createState() => _CommissionExportDialogState();
+}
+
+class _CommissionExportDialogState extends State<_CommissionExportDialog> {
+  late final TextEditingController _companyCtrl;
+  late DateTime _collectionDate;
+  var _dateMode = CommissionExportDateMode.singleDate;
+
+  bool get _showScheduleChoice =>
+      widget.hasPaymentsAfterCurrentMonth &&
+      widget.scheduledPayments.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _companyCtrl = TextEditingController();
+    final initial = widget.initialCollectionDate ?? DateTime.now();
+    _collectionDate = DateTime(initial.year, initial.month, initial.day);
+  }
+
+  @override
+  void dispose() {
+    _companyCtrl.dispose();
+    super.dispose();
+  }
+
+  CommissionExportDialogResult _buildResult(String name) {
     return CommissionExportDialogResult(
       companyName: name,
-      collectionDate: collectionDate,
-      dateMode: showScheduleChoice
-          ? dateMode
+      collectionDate: _collectionDate,
+      dateMode: _showScheduleChoice
+          ? _dateMode
           : CommissionExportDateMode.singleDate,
     );
   }
 
-  return showDialog<CommissionExportDialogResult>(
-    context: context,
-    builder: (dialogContext) {
-      return StatefulBuilder(
-        builder: (context, setDialogState) {
-          final useScheduleList = showScheduleChoice &&
-              dateMode == CommissionExportDateMode.respectSchedule;
+  void _confirm() {
+    final name = _companyCtrl.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(context, _buildResult(name));
+  }
 
-          return AlertDialog(
-            title: const Text('Registra incassi in provvigioni'),
-            content: SizedBox(
-              width: 420,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      description,
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.45,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    if (showScheduleChoice) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        'Alcune rate hanno data successiva al mese in corso. '
-                        'Come vuoi registrare gli incassi?',
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.45,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade800,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      RadioListTile<CommissionExportDateMode>(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Unico incasso nella data scelta',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                        subtitle: Text(
-                          'Tutto l\'importo nella data del calendario sotto.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        value: CommissionExportDateMode.singleDate,
-                        groupValue: dateMode,
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setDialogState(() => dateMode = v);
-                        },
-                      ),
-                      RadioListTile<CommissionExportDateMode>(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Rispetta le date dei pagamenti previsti',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                        subtitle: Text(
-                          'Un incasso per ogni rata, anche nei mesi successivi.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        value: CommissionExportDateMode.respectSchedule,
-                        groupValue: dateMode,
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setDialogState(() => dateMode = v);
-                        },
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    if (useScheduleList)
-                      _scheduledPaymentsList(scheduledPayments)
-                    else ...[
-                      Text(
-                        'Data incasso',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade800,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      InkWell(
-                        onTap: () async {
-                          final picked = await showDatePicker(
-                            context: dialogContext,
-                            initialDate: collectionDate,
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime(2100),
-                          );
-                          if (picked != null) {
-                            setDialogState(
-                              () => collectionDate = DateTime(
-                                picked.year,
-                                picked.month,
-                                picked.day,
-                              ),
-                            );
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(4),
-                        child: InputDecorator(
-                          decoration:
-                              appFormFieldDecoration('Seleziona data'),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  formatCommissionExportDate(collectionDate),
-                                ),
-                              ),
-                              Icon(
-                                Icons.calendar_today_outlined,
-                                size: 20,
-                                color: Colors.grey.shade600,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: companyCtrl,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: appFormFieldDecoration(
-                        'Ragione sociale debitore',
-                      ).copyWith(
-                        hintText: 'Nome committente / debitore',
-                      ),
-                      autofocus: !useScheduleList,
-                      onSubmitted: (_) {
-                        final name = companyCtrl.text.trim();
-                        if (name.isEmpty) return;
-                        Navigator.pop(dialogContext, buildResult(name));
-                      },
-                    ),
-                  ],
+  @override
+  Widget build(BuildContext context) {
+    final useScheduleList =
+        _showScheduleChoice && _dateMode == CommissionExportDateMode.respectSchedule;
+
+    return AlertDialog(
+      title: const Text('Registra incassi in provvigioni'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.description,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.45,
+                  color: Colors.grey.shade700,
                 ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                style: AppActionStyles.cancelText,
-                child: const Text('Annulla'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final name = companyCtrl.text.trim();
-                  if (name.isEmpty) return;
-                  Navigator.pop(dialogContext, buildResult(name));
-                },
-                child: const Text('Conferma'),
+              if (_showScheduleChoice) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Alcune rate hanno data successiva al mese in corso. '
+                  'Come vuoi registrare gli incassi?',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.45,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                RadioListTile<CommissionExportDateMode>(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Unico incasso nella data scelta',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  subtitle: Text(
+                    'Tutto l\'importo nella data del calendario sotto.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  value: CommissionExportDateMode.singleDate,
+                  groupValue: _dateMode,
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _dateMode = v);
+                  },
+                ),
+                RadioListTile<CommissionExportDateMode>(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Rispetta le date dei pagamenti previsti',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  subtitle: Text(
+                    'Un incasso per ogni rata, anche nei mesi successivi.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  value: CommissionExportDateMode.respectSchedule,
+                  groupValue: _dateMode,
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _dateMode = v);
+                  },
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (useScheduleList)
+                _scheduledPaymentsList(widget.scheduledPayments)
+              else ...[
+                Text(
+                  'Data incasso',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _collectionDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) {
+                      setState(
+                        () => _collectionDate = DateTime(
+                          picked.year,
+                          picked.month,
+                          picked.day,
+                        ),
+                      );
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: InputDecorator(
+                    decoration: appFormFieldDecoration('Seleziona data'),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            formatCommissionExportDate(_collectionDate),
+                          ),
+                        ),
+                        Icon(
+                          Icons.calendar_today_outlined,
+                          size: 20,
+                          color: Colors.grey.shade600,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: _companyCtrl,
+                textCapitalization: TextCapitalization.words,
+                decoration: appFormFieldDecoration(
+                  'Ragione sociale debitore',
+                ).copyWith(
+                  hintText: 'Nome committente / debitore',
+                ),
+                autofocus: !useScheduleList,
+                onSubmitted: (_) => _confirm(),
               ),
             ],
-          );
-        },
-      );
-    },
-  ).whenComplete(companyCtrl.dispose);
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          style: AppActionStyles.cancelText,
+          child: const Text('Annulla'),
+        ),
+        FilledButton(
+          onPressed: _confirm,
+          child: const Text('Conferma'),
+        ),
+      ],
+    );
+  }
 }
 
 Widget _scheduledPaymentsList(List<CommissionExportScheduleLine> lines) {

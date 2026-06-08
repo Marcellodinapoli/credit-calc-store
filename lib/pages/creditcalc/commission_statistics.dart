@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../offline/repository/credit_calc_repository.dart';
 import 'commission_collections_shared.dart';
 
 class CommissionPeriodTotals {
@@ -173,4 +174,82 @@ abstract final class CommissionStatisticsHelper {
     int year,
   ) =>
       CommissionCollectionsHelper.totalsByPaymentType(docsInYear(docs, year));
+
+  static CommissionPeriodTotals totalsForRecords(List<CreditCalcRecord> docs) {
+    if (docs.isEmpty) return CommissionPeriodTotals.zero;
+    return CommissionPeriodTotals(
+      collected: CommissionCollectionsHelper.totalCollectedRecords(docs),
+      commission: CommissionCollectionsHelper.totalCommissionRecords(docs),
+      practiceCount: docs.length,
+    );
+  }
+
+  static Map<CommissionMonthKey, CommissionPeriodTotals> totalsByMonthRecords(
+    List<CreditCalcRecord> docs,
+  ) {
+    final grouped = <CommissionMonthKey, List<CreditCalcRecord>>{};
+    for (final doc in docs) {
+      final date = CommissionCollectionsHelper.entryDate(doc.data);
+      if (date == null) continue;
+      final key = CommissionMonthKey.fromDate(date);
+      grouped.putIfAbsent(key, () => []).add(doc);
+    }
+    return {
+      for (final entry in grouped.entries)
+        entry.key: totalsForRecords(entry.value),
+    };
+  }
+
+  static Map<int, CommissionPeriodTotals> totalsByYearRecords(
+    List<CreditCalcRecord> docs,
+  ) {
+    final grouped = <int, List<CreditCalcRecord>>{};
+    for (final doc in docs) {
+      final date = CommissionCollectionsHelper.entryDate(doc.data);
+      if (date == null) continue;
+      grouped.putIfAbsent(date.year, () => []).add(doc);
+    }
+    return {
+      for (final entry in grouped.entries)
+        entry.key: totalsForRecords(entry.value),
+    };
+  }
+
+  static List<CreditCalcRecord> recordsInMonth(
+    List<CreditCalcRecord> docs,
+    CommissionMonthKey key,
+  ) {
+    return docs.where((doc) {
+      final date = CommissionCollectionsHelper.entryDate(doc.data);
+      if (date == null) return false;
+      return CommissionMonthKey.fromDate(date) == key;
+    }).toList();
+  }
+
+  static List<CreditCalcRecord> recordsInYear(
+    List<CreditCalcRecord> docs,
+    int year,
+  ) {
+    return docs.where((doc) {
+      final date = CommissionCollectionsHelper.entryDate(doc.data);
+      if (date == null) return false;
+      return date.year == year;
+    }).toList();
+  }
+
+  static List<CommissionPaymentTypeTotals> paymentTypesInMonthRecords(
+    List<CreditCalcRecord> docs,
+    CommissionMonthKey key,
+  ) =>
+      CommissionCollectionsHelper.totalsByPaymentTypeRecords(
+        recordsInMonth(docs, key),
+      );
+
+  static List<CommissionPaymentTypeTotals> paymentTypesInYearRecords(
+    List<CreditCalcRecord> docs,
+    int year,
+  ) =>
+      CommissionCollectionsHelper.totalsByPaymentTypeRecords(
+        recordsInYear(docs, year),
+      );
 }

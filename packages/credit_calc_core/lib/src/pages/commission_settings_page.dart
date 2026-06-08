@@ -1,7 +1,6 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../core/firestore_user_scope.dart';
+import 'commission_creditor_data_access.dart';
 import '../core/theme/app_action_styles.dart';
 import '../core/theme/app_card_theme.dart';
 import '../layout/credit_calc_page_host.dart';
@@ -9,38 +8,24 @@ import '../nav/credit_calc_nav.dart';
 
 import 'commission_payment_resolver.dart';
 
-class CreditorPick {
-  final String id;
-  final String name;
-
-  const CreditorPick({required this.id, required this.name});
-}
-
 class CommissionCreditorPicker {
   CommissionCreditorPicker._();
 
   static String creditorLabel(
     int index,
     Map<String, dynamic> data,
-  ) {
-    final clientName = (data['clientName'] ?? '').toString().trim();
-    if (clientName.isNotEmpty) return clientName;
-
-    final name = (data['name'] ?? data['displayLabel'] ?? '').toString().trim();
-    if (name.isEmpty) return 'Creditore ${index + 1}';
-    if (name.toLowerCase().startsWith('creditore')) return name;
-    return 'Creditore ${index + 1}: $name';
-  }
+  ) =>
+      creditorDisplayLabel(index, data);
 
   static Future<CreditorPick?> _pickFromDialog(
     BuildContext context, {
     String tileSubtitle = 'Imposta provvigioni',
   }) async {
-    final snapshot = await FirestoreUserScope.creditorsOrdered().get();
+    final creditors =
+        await CommissionCreditorDataAccess.instance.listCreditorsForPicker();
     if (!context.mounted) return null;
 
-    final docs = FirestoreUserScope.sortCreditorsByCreatedAt(snapshot.docs);
-    if (docs.isEmpty) {
+    if (creditors.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -68,27 +53,23 @@ class CommissionCreditorPicker {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Totale creditori: ${docs.length}',
+                    'Totale creditori: ${creditors.length}',
                     style: Theme.of(ctx).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
                   Expanded(
                     child: ListView.separated(
                       shrinkWrap: true,
-                      itemCount: docs.length,
+                      itemCount: creditors.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (_, index) {
-                        final doc = docs[index];
-                        final label = creditorLabel(index, doc.data());
+                        final pick = creditors[index];
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
-                          title: Text(label),
+                          title: Text(pick.name),
                           subtitle: Text(tileSubtitle),
                           trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.pop(
-                            ctx,
-                            CreditorPick(id: doc.id, name: label),
-                          ),
+                          onTap: () => Navigator.pop(ctx, pick),
                         );
                       },
                     ),
@@ -237,12 +218,9 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
   Future<void> _loadSettings() async {
     setState(() => _loading = true);
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('creditors')
-          .doc(_creditorId)
-          .get();
-
-      final data = doc.data() ?? {};
+      final data = await CommissionCreditorDataAccess.instance
+              .loadCreditor(_creditorId) ??
+          {};
       final settings =
           (data['commissionSettings'] as Map<String, dynamic>?) ?? {};
 
@@ -300,13 +278,10 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
           },
       };
 
-      await FirebaseFirestore.instance
-          .collection('creditors')
-          .doc(_creditorId)
-          .set({
-        'commissionSettings': payload,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      await CommissionCreditorDataAccess.instance.saveCommissionSettings(
+        creditorId: _creditorId,
+        commissionSettings: payload,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop(true);

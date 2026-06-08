@@ -1,6 +1,8 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:credit_calc_core/credit_calc_core.dart' show EuroFormat;
+
+import '../../offline/repository/credit_calc_repository.dart';
 
 class CommissionMonthKey {
   final int year;
@@ -84,12 +86,31 @@ abstract final class CommissionCollectionsHelper {
         .toList();
   }
 
+  static List<CreditCalcRecord> commissionRecords(
+    List<CreditCalcRecord>? records,
+  ) {
+    return (records ?? [])
+        .where((r) => (r.data['type'] ?? '') == 'commission_entry')
+        .toList();
+  }
+
   static Set<CommissionMonthKey> availableMonths(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) {
     final months = <CommissionMonthKey>{};
     for (final doc in docs) {
       final date = entryDate(doc.data());
+      if (date != null) months.add(CommissionMonthKey.fromDate(date));
+    }
+    return months;
+  }
+
+  static Set<CommissionMonthKey> availableMonthsFromRecords(
+    List<CreditCalcRecord> docs,
+  ) {
+    final months = <CommissionMonthKey>{};
+    for (final doc in docs) {
+      final date = entryDate(doc.data);
       if (date != null) months.add(CommissionMonthKey.fromDate(date));
     }
     return months;
@@ -110,11 +131,31 @@ abstract final class CommissionCollectionsHelper {
       });
   }
 
+  static List<CommissionMonthKey> monthsForFilterRecords(
+    List<CreditCalcRecord> docs,
+  ) {
+    return availableMonthsFromRecords(docs).toList()
+      ..sort((a, b) {
+        if (a.year != b.year) return b.year.compareTo(a.year);
+        return b.month.compareTo(a.month);
+      });
+  }
+
   /// Opzioni filtro mese: sempre il mese in corso + mesi con incassi.
   static List<CommissionMonthKey> monthsForFilterDropdown(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) {
     final months = monthsForFilter(docs);
+    final now = currentMonth;
+    if (months.isEmpty) return [now];
+    if (months.contains(now)) return months;
+    return [now, ...months];
+  }
+
+  static List<CommissionMonthKey> monthsForFilterDropdownRecords(
+    List<CreditCalcRecord> docs,
+  ) {
+    final months = monthsForFilterRecords(docs);
     final now = currentMonth;
     if (months.isEmpty) return [now];
     if (months.contains(now)) return months;
@@ -232,6 +273,122 @@ abstract final class CommissionCollectionsHelper {
           )
           .length;
 
+  static int countLinkedIncassiRecords(
+    List<CreditCalcRecord> docs,
+    String creditorId,
+  ) =>
+      docs
+          .where(
+            (doc) =>
+                (doc.data['type'] ?? '') == 'commission_entry' &&
+                (doc.data['creditorId'] ?? '').toString() == creditorId,
+          )
+          .length;
+
+  static List<CreditCalcRecord> filterRecords(
+    List<CreditCalcRecord> docs, {
+    CommissionMonthKey? month,
+    String? selectedCompanyName,
+    String? paymentLabelFilter,
+    String? selectedCreditorName,
+  }) {
+    return docs.where((doc) {
+      final data = doc.data;
+      final date = entryDate(data);
+      if (date == null) return false;
+      if (!_matchesMonthFilter(date, month)) return false;
+
+      if (selectedCompanyName != null &&
+          selectedCompanyName.isNotEmpty &&
+          companyName(data) != selectedCompanyName) {
+        return false;
+      }
+
+      if (paymentLabelFilter != null &&
+          paymentLabelFilter.isNotEmpty &&
+          paymentLabel(data) != paymentLabelFilter) {
+        return false;
+      }
+
+      if (selectedCreditorName != null &&
+          selectedCreditorName.isNotEmpty &&
+          creditorName(data) != selectedCreditorName) {
+        return false;
+      }
+
+      return true;
+    }).toList()
+      ..sort((a, b) {
+        final da = entryDate(a.data);
+        final db = entryDate(b.data);
+        if (da == null || db == null) return 0;
+        return db.compareTo(da);
+      });
+  }
+
+  static List<String> companyNamesInMonthRecords(
+    List<CreditCalcRecord> docs,
+    CommissionMonthKey? month,
+  ) {
+    final names = <String>{};
+    for (final doc in docs) {
+      final data = doc.data;
+      final date = entryDate(data);
+      if (date == null) continue;
+      if (!_matchesMonthFilter(date, month)) continue;
+      final name = companyName(data);
+      if (name.isNotEmpty) names.add(name);
+    }
+    final sorted = names.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted;
+  }
+
+  static List<String> paymentLabelsInMonthRecords(
+    List<CreditCalcRecord> docs,
+    CommissionMonthKey? month,
+  ) {
+    final labels = <String>{};
+    for (final doc in docs) {
+      final data = doc.data;
+      final date = entryDate(data);
+      if (date == null) continue;
+      if (!_matchesMonthFilter(date, month)) continue;
+      final label = paymentLabel(data);
+      if (label.isNotEmpty) labels.add(label);
+    }
+    final sorted = labels.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted;
+  }
+
+  static List<String> creditorNamesInMonthRecords(
+    List<CreditCalcRecord> docs,
+    CommissionMonthKey? month,
+  ) {
+    final names = <String>{};
+    for (final doc in docs) {
+      final data = doc.data;
+      final date = entryDate(data);
+      if (date == null) continue;
+      if (!_matchesMonthFilter(date, month)) continue;
+      final name = creditorName(data);
+      if (name.isNotEmpty) names.add(name);
+    }
+    final sorted = names.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return sorted;
+  }
+
+  static double totalCollectedRecords(List<CreditCalcRecord> docs) =>
+      docs.fold(0, (total, doc) => total + numField(doc.data, 'amountCollected'));
+
+  static double totalCommissionRecords(List<CreditCalcRecord> docs) =>
+      docs.fold(
+        0,
+        (total, doc) => total + entryCommissionTotal(doc.data),
+      );
+
   static double totalCollected(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) =>
@@ -261,6 +418,40 @@ abstract final class CommissionCollectionsHelper {
 
     for (final doc in docs) {
       final data = doc.data();
+      final label = paymentLabel(data);
+      final key = label.isEmpty ? 'Non specificata' : label;
+
+      final existing = grouped[key];
+      final commissionTotal = entryCommissionTotal(data);
+      if (existing == null) {
+        grouped[key] = CommissionPaymentTypeTotals(
+          label: key,
+          collected: numField(data, 'amountCollected'),
+          commission: commissionTotal,
+          practiceCount: 1,
+        );
+      } else {
+        grouped[key] = CommissionPaymentTypeTotals(
+          label: key,
+          collected: existing.collected + numField(data, 'amountCollected'),
+          commission: existing.commission + commissionTotal,
+          practiceCount: existing.practiceCount + 1,
+        );
+      }
+    }
+
+    final sorted = grouped.values.toList()
+      ..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+    return sorted;
+  }
+
+  static List<CommissionPaymentTypeTotals> totalsByPaymentTypeRecords(
+    List<CreditCalcRecord> docs,
+  ) {
+    final grouped = <String, CommissionPaymentTypeTotals>{};
+
+    for (final doc in docs) {
+      final data = doc.data;
       final label = paymentLabel(data);
       final key = label.isEmpty ? 'Non specificata' : label;
 
