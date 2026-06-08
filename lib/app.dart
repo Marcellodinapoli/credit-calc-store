@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'auth/biometric_lock_gate.dart';
 import 'auth/login_page.dart';
 import 'auth/waiting_page.dart';
 import 'core/maintenance_service.dart';
@@ -42,6 +43,7 @@ class _AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<_AuthGate> {
   StreamSubscription<User?>? _authSub;
+  final bool _sessionAtLaunch = FirebaseAuth.instance.currentUser != null;
 
   @override
   void initState() {
@@ -68,16 +70,21 @@ class _AuthGateState extends State<_AuthGate> {
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
+      initialData: FirebaseAuth.instance.currentUser,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            snapshot.data == null) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
         if (snapshot.hasData) {
-          return _AuthenticatedShell(
-            key: ValueKey(snapshot.data!.uid),
-            user: snapshot.data!,
+          return BiometricLockGate(
+            lockOnStart: _sessionAtLaunch,
+            child: _AuthenticatedShell(
+              key: ValueKey(snapshot.data!.uid),
+              user: snapshot.data!,
+            ),
           );
         }
         return const LoginPage();

@@ -2,8 +2,11 @@ import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../services/biometric_service.dart';
 import 'auth_form_validation.dart';
 
 abstract final class AppTheme {
@@ -12,15 +15,30 @@ abstract final class AppTheme {
 }
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  /// Sblocco dopo riapertura app (sessione Firebase ancora attiva, non è un logout).
+  final bool unlockMode;
+  final VoidCallback? onUnlocked;
+
+  const LoginPage({
+    super.key,
+    this.unlockMode = false,
+    this.onUnlocked,
+  });
 
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+  final _biometricService = BiometricService();
+
   bool _isLogin = true;
   String? _registerType;
+  bool _showBiometricButton = false;
+  bool _hasSavedCredentials = false;
 
   final _email = TextEditingController();
   final _password = TextEditingController();
@@ -42,6 +60,105 @@ class _LoginPageState extends State<LoginPage> {
   String? _passwordError;
   String? _registerNotice;
   final Map<String, String> _registerFieldErrors = {};
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.unlockMode) {
+      _email.text = FirebaseAuth.instance.currentUser?.email ?? '';
+    }
+    _prepareBiometricUi();
+  }
+
+  Future<void> _prepareBiometricUi() async {
+    if (kIsWeb) return;
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+      case TargetPlatform.iOS:
+        break;
+      default:
+        return;
+    }
+
+    final savedEmail = await _secureStorage.read(key: 'credit_calc_email');
+    final savedPassword = await _secureStorage.read(key: 'credit_calc_password');
+    if (!mounted) return;
+
+    setState(() {
+      _showBiometricButton = true;
+      _hasSavedCredentials = savedEmail != null && savedPassword != null;
+    });
+
+    if (widget.unlockMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _signInBiometric(autoPrompt: true);
+      });
+    }
+  }
+
+  Future<void> _saveCredentials(String email, String password) async {
+    await _secureStorage.write(key: 'credit_calc_email', value: email);
+    await _secureStorage.write(key: 'credit_calc_password', value: password);
+  }
+
+  Future<void> _signInBiometric({bool autoPrompt = false}) async {
+    if (!widget.unlockMode && !_hasSavedCredentials) {
+      if (!mounted) return;
+      setState(() {
+        _loginNotice =
+            'Per usare la biometria, accedi prima una volta con email e password.';
+      });
+      return;
+    }
+
+    setState(() => _clearLoginFeedback());
+
+    final authError = await _biometricService.authenticate();
+    if (authError != null) {
+      if (!mounted) return;
+      if (autoPrompt && authError == 'Autenticazione annullata.') return;
+      setState(() => _loginNotice = authError);
+      return;
+    }
+
+    if (widget.unlockMode) {
+      widget.onUnlocked?.call();
+      return;
+    }
+
+    final email = await _secureStorage.read(key: 'credit_calc_email');
+    final password = await _secureStorage.read(key: 'credit_calc_password');
+    if (email == null || password == null) {
+      if (!mounted) return;
+      setState(() {
+        _loginNotice =
+            'Per usare la biometria, accedi prima una volta con email e password.';
+        _hasSavedCredentials = false;
+      });
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+    } on FirebaseAuthException catch (e) {
+      final feedback = await AuthFormValidation.resolveLoginAuthFailure(e, email);
+      if (!mounted) return;
+      setState(() {
+        _loginNotice = feedback.notice;
+        _emailError = feedback.emailError;
+        _passwordError = feedback.passwordError;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loginNotice = 'Errore di connessione. Verifica la rete.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -171,6 +288,20 @@ class _LoginPageState extends State<LoginPage> {
         email: email,
         password: password,
       );
+      if (widget.unlockMode) {
+        widget.onUnlocked?.call();
+        return;
+      }
+      try {
+        await _saveCredentials(email, password);
+        if (mounted) setState(() => _hasSavedCredentials = true);
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _loginNotice =
+              'Accesso riuscito, ma la biometria non è stata attivata su questo dispositivo.';
+        });
+      }
     } on FirebaseAuthException catch (e) {
       final feedback = await AuthFormValidation.resolveLoginAuthFailure(e, email);
       if (!mounted) return;
@@ -633,31 +764,85 @@ class _LoginPageState extends State<LoginPage> {
                       ],
 
                       const SizedBox(height: 20),
-                      FilledButton(
-                        onPressed: _busy
-                            ? null
-                            : (_isLogin ? _signIn : _register),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppTheme.accent,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: _busy
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
+                      if (_isLogin && _showBiometricButton)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: _busy ? null : _signIn,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppTheme.accent,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 14),
                                 ),
-                              )
-                            : Text(_isLogin ? 'Accedi' : 'Registrati'),
-                      ),
-                      const SizedBox(height: 12),
-                      Center(
-                        child: TextButton(
+                                child: _busy
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Text('Accedi'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: _signInBiometric,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppTheme.accent,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 14),
+                                ),
+                                child: const Text('Biometria'),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        FilledButton(
                           onPressed: _busy
                               ? null
-                              : () async {
+                              : (_isLogin ? _signIn : _register),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppTheme.accent,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: _busy
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(_isLogin ? 'Accedi' : 'Registrati'),
+                        ),
+                      if (_isLogin &&
+                          _showBiometricButton &&
+                          !_hasSavedCredentials &&
+                          !widget.unlockMode) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Per attivare la biometria, accedi prima con email e password.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 13,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                      if (!widget.unlockMode) ...[
+                        const SizedBox(height: 12),
+                        Center(
+                          child: TextButton(
+                            onPressed: _busy
+                                ? null
+                                : () async {
                                   if (_isLogin) {
                                     final type = await _showRegisterTypePopup();
                                     if (type == null || !mounted) return;
@@ -683,6 +868,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                       ),
+                      ],
                     ],
                   ),
                 ),

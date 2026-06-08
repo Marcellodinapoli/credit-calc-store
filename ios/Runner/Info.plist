@@ -51,5 +51,7 @@
 	</array>
 	<key>FirebaseAppDelegateProxyEnabled</key>
 	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>CreditCalc usa Face ID per proteggere l'accesso all'app.</string>
 </dict>
 </plist>
