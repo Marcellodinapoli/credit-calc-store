@@ -1,6 +1,101 @@
 import 'package:flutter/material.dart';
 
 import '../../core/dimensions.dart';
+import '../../core/theme/project_colors.dart';
+
+enum BrandedPageProject { calc, form, job, area }
+
+/// Nome progetto + titolo pagina (stile CreditCalcDefaultLayout).
+class BrandedPageTitleRow extends StatelessWidget {
+  final BrandedPageProject project;
+  final String pageTitle;
+  final double pageTitleFontSize;
+  final FontWeight pageTitleWeight;
+  final Color pageTitleColor;
+
+  const BrandedPageTitleRow({
+    super.key,
+    required this.project,
+    required this.pageTitle,
+    this.pageTitleFontSize = 20,
+    this.pageTitleWeight = FontWeight.w600,
+    this.pageTitleColor = Colors.black87,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _projectLabel(),
+        if (pageTitle.isNotEmpty) ...[
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              '· $pageTitle',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: pageTitleFontSize,
+                fontWeight: pageTitleWeight,
+                color: pageTitleColor,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _projectLabel() {
+    switch (project) {
+      case BrandedPageProject.calc:
+        return Text.rich(
+          TextSpan(
+            children: const [
+              TextSpan(
+                text: 'Credit',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+              TextSpan(
+                text: 'Calc',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: ProjectColors.calc,
+                ),
+              ),
+            ],
+          ),
+        );
+      case BrandedPageProject.form:
+        return const Text(
+          'CreditForm',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: ProjectColors.form,
+          ),
+        );
+      case BrandedPageProject.job:
+        return const Text(
+          'CreditJob',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: ProjectColors.job,
+          ),
+        );
+      case BrandedPageProject.area:
+        return const Text(
+          'CreditCore',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: ProjectColors.area,
+          ),
+        );
+    }
+  }
+}
 
 abstract final class PageShellTheme {
   static const Color appBarBackground = Color(0xFFECEFF1);
@@ -12,6 +107,7 @@ abstract final class PageShellTheme {
 /// Header secondario con freccia e titolo neri (non usa AppBar Material 3).
 class SecondaryPageScaffold extends StatelessWidget {
   final String pageTitle;
+  final BrandedPageProject? project;
   final Widget body;
   final Widget? bottomBar;
   final bool padded;
@@ -19,6 +115,7 @@ class SecondaryPageScaffold extends StatelessWidget {
   const SecondaryPageScaffold({
     super.key,
     required this.pageTitle,
+    this.project,
     required this.body,
     this.bottomBar,
     this.padded = true,
@@ -54,16 +151,21 @@ class SecondaryPageScaffold extends StatelessWidget {
                       icon: const Icon(Icons.arrow_back, color: Colors.black),
                     ),
                     Expanded(
-                      child: Text(
-                        pageTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: project == null
+                          ? Text(
+                              pageTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )
+                          : BrandedPageTitleRow(
+                              project: project!,
+                              pageTitle: pageTitle,
+                            ),
                     ),
                     const SizedBox(width: 8),
                   ],
@@ -92,6 +194,7 @@ class SecondaryPageScaffold extends StatelessWidget {
 
 class PageShellBody extends StatelessWidget {
   final String? pageTitle;
+  final BrandedPageProject? project;
   final Widget child;
   final bool showPageTitle;
 
@@ -99,6 +202,7 @@ class PageShellBody extends StatelessWidget {
     super.key,
     required this.child,
     this.pageTitle,
+    this.project,
     this.showPageTitle = true,
   });
 
@@ -118,13 +222,21 @@ class PageShellBody extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (showPageTitle && pageTitle != null && pageTitle!.isNotEmpty) ...[
-              Text(
-                pageTitle!,
-                style: TextStyle(
-                  fontSize: titleSize,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              project == null
+                  ? Text(
+                      pageTitle!,
+                      style: TextStyle(
+                        fontSize: titleSize,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : BrandedPageTitleRow(
+                      project: project!,
+                      pageTitle: pageTitle!,
+                      pageTitleFontSize: titleSize,
+                      pageTitleWeight: FontWeight.bold,
+                      pageTitleColor: Colors.black,
+                    ),
               SizedBox(height: spacing),
             ],
             Expanded(

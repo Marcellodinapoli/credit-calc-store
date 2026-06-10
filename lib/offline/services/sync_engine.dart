@@ -148,6 +148,160 @@ class SyncEngine {
     }
   }
 
+  /// `true` se i conteggi coincidono ma la copia locale è incompleta o corrotta.
+  Future<bool> needsRepairSync() async {
+    if (!await ConnectivityService.isOnline()) return false;
+    if (!await modePrefs.isInitialSyncDoneLocally()) return false;
+
+    final pending = await _db.pendingRecords(userId);
+    final hasPendingSynced = pending.any(
+      (row) => _syncedCollections.contains(row['collection'] as String),
+    );
+    if (hasPendingSynced) return false;
+
+    final localCount = await _localRecordCount();
+    if (localCount == 0) return false;
+
+    late final QuerySnapshot<Map<String, dynamic>> remoteCreditors;
+    late final QuerySnapshot<Map<String, dynamic>> remoteCalculations;
+    try {
+      remoteCreditors = await _firestore
+          .collection('creditors')
+          .where('userId', isEqualTo: userId)
+          .get();
+      remoteCalculations = await _firestore
+          .collection('calculations')
+          .where('userId', isEqualTo: userId)
+          .get();
+    } catch (_) {
+      return false;
+    }
+
+    final remoteTotal =
+        remoteCreditors.docs.length + remoteCalculations.docs.length;
+    if (remoteTotal == 0) return false;
+
+    final localCreditors = await _db.recordsForUser(
+      userId: userId,
+      collection: 'creditors',
+    );
+    final localCalculations = await _db.recordsForUser(
+      userId: userId,
+      collection: 'calculations',
+    );
+
+    final localCreditorIds = {
+      for (final row in localCreditors)
+        if (row['payload']['_deleted'] != true) row['id'] as String,
+    };
+    final localCalculationIds = {
+      for (final row in localCalculations)
+        if (row['payload']['_deleted'] != true) row['id'] as String,
+    };
+
+    final remoteCreditorIds = remoteCreditors.docs.map((d) => d.id).toSet();
+    final remoteCalculationIds = remoteCalculations.docs.map((d) => d.id).toSet();
+
+    if (!_sameIdSet(localCreditorIds, remoteCreditorIds) ||
+        !_sameIdSet(localCalculationIds, remoteCalculationIds)) {
+      return true;
+    }
+
+    for (final doc in remoteCreditors.docs) {
+      final local = await _db.recordById(collection: 'creditors', id: doc.id);
+      if (local == null) return true;
+      final localPayload = Map<String, dynamic>.from(local['payload'] as Map);
+      if (_isLocalPayloadStale(
+        localPayload,
+        doc.data(),
+        const [
+          'clientName',
+          'name',
+          'displayLabel',
+          'pdrRows',
+          'commissionSettings',
+          'notes',
+          'iban',
+        ],
+      )) {
+        return true;
+      }
+    }
+
+    for (final doc in remoteCalculations.docs) {
+      final local =
+          await _db.recordById(collection: 'calculations', id: doc.id);
+      if (local == null) return true;
+      final localPayload = Map<String, dynamic>.from(local['payload'] as Map);
+      if (_isLocalPayloadStale(
+        localPayload,
+        doc.data(),
+        const [
+          'creditorId',
+          'amount',
+          'commissionType',
+          'date',
+          'paymentDate',
+        ],
+      )) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /// Al login: aggiorna se in ritardo, altrimenti ripara la copia locale se corrotta.
+  Future<SyncRunResult?> catchUpOrRepairIfNeeded() async {
+    if (!await ConnectivityService.isOnline()) return null;
+    await sessionService.ensureLocalSession();
+
+    if (await isBehindRemote()) {
+      return runSync();
+    }
+    if (await needsRepairSync()) {
+      return repairSync();
+    }
+    return null;
+  }
+
+  bool _sameIdSet(Set<String> local, Set<String> remote) {
+    if (local.length != remote.length) return false;
+    for (final id in local) {
+      if (!remote.contains(id)) return false;
+    }
+    return true;
+  }
+
+  bool _isLocalPayloadStale(
+    Map<String, dynamic> local,
+    Map<String, dynamic> remote,
+    List<String> importantKeys,
+  ) {
+    final remoteKeys = remote.keys
+        .where((k) => k != 'userId' && k != 'updatedAt' && k != 'createdAt')
+        .length;
+    final localKeys = local.keys
+        .where((k) => k != 'userId' && k != 'updatedAt' && k != 'createdAt')
+        .length;
+    if (remoteKeys > localKeys + 1) return true;
+
+    for (final key in importantKeys) {
+      if (_hasContent(remote[key]) && !_hasContent(local[key])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _hasContent(dynamic value) {
+    if (value == null) return false;
+    if (value is String) return value.trim().isNotEmpty;
+    if (value is List) return value.isNotEmpty;
+    if (value is Map) return value.isNotEmpty;
+    return true;
+  }
+
   /// Sync completa: prima sync se necessaria, altrimenti push + pull incrementale.
   Future<SyncRunResult> runSync() async {
     if (!await ConnectivityService.isOnline()) {

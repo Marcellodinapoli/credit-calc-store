@@ -95,6 +95,12 @@ class _LoginPageState extends State<LoginPage> {
       _showBiometricButton = biometricAvailable;
       _hasSavedCredentials = savedEmail != null && savedPassword != null;
     });
+
+    if (widget.unlockMode && biometricAvailable) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_signInBiometric());
+      });
+    }
   }
 
   Future<void> _saveCredentials(String email, String password) async {
@@ -172,9 +178,11 @@ class _LoginPageState extends State<LoginPage> {
           )
           .timeout(const Duration(seconds: 8));
     } on FirebaseAuthException catch (e) {
-      if (_isNetworkAuthError(e) &&
-          FirebaseAuth.instance.currentUser?.email == email) {
-        return;
+      if (_isNetworkAuthError(e)) {
+        final restored = FirebaseAuth.instance.currentUser;
+        if (restored != null && restored.email == email) {
+          return;
+        }
       }
       final feedback = await AuthFormValidation.resolveLoginAuthFailure(e, email);
       if (!mounted) return;
@@ -347,6 +355,13 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
       if (!await ConnectivityService.isOnline()) {
+        final current = FirebaseAuth.instance.currentUser;
+        if (current != null &&
+            (email.isEmpty || current.email == email)) {
+          await widget.onUnlocked?.call();
+          setState(() => _busy = false);
+          return;
+        }
         if (!mounted) return;
         setState(() {
           _busy = false;

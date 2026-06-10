@@ -23,6 +23,7 @@ class PersonalAreaShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return SecondaryPageScaffold(
       pageTitle: pageTitle,
+      project: BrandedPageProject.area,
       bottomBar: bottomBar,
       body: MaintenanceSectionGate(
         sectionName: MaintenanceService.area,

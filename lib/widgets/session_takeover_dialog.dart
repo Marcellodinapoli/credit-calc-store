@@ -9,6 +9,7 @@ Future<bool> showSessionTakeoverDialog(
   return showDialog<bool>(
     context: context,
     barrierDismissible: false,
+    useRootNavigator: true,
     builder: (ctx) => AlertDialog(
       title: const Text('Sessione già attiva'),
       content: Text(
@@ -20,11 +21,12 @@ Future<bool> showSessionTakeoverDialog(
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
+          onPressed: () =>
+              Navigator.of(ctx, rootNavigator: true).pop(false),
           child: const Text('Annulla'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(ctx, true),
+          onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(true),
           child: const Text('Continua qui'),
         ),
       ],

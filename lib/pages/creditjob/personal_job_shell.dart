@@ -24,6 +24,7 @@ class PersonalJobShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return SecondaryPageScaffold(
       pageTitle: pageTitle,
+      project: BrandedPageProject.job,
       padded: padded,
       bottomBar: bottomBar == null
           ? null

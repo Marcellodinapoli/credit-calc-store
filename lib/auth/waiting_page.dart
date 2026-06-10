@@ -46,8 +46,8 @@ Future<String?> resolveWaitingAccess(User user) async {
   final online = await ConnectivityService.isOnline();
 
   if (!online) {
-    final current = FirebaseAuth.instance.currentUser ?? user;
-    if (!current.emailVerified) return 'pending';
+    // Sessione Firebase già attiva: consenti l'accesso offline con biometria.
+    // Verifica email/account riprende quando torna la rete.
     return null;
   }
 

@@ -44,6 +44,8 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
   StreamSubscription<bool>? _connectivitySub;
   Timer? _heartbeat;
   String? _sessionRevokedMessage;
+  bool _remoteSessionHandshakeComplete = false;
+  Future<void>? _claimRemoteSessionTask;
 
   @override
   void initState() {
@@ -87,7 +89,8 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     } catch (_) {
       if (!mounted) return;
       final done = await _modePrefs?.isInitialSyncDoneLocally() ?? false;
-      if (done) {
+      final localCount = await _syncEngine?.localRecordCount() ?? 0;
+      if (done || localCount > 0) {
         await _continueAfterMode();
       } else {
         setState(() => _step = _BootstrapStep.offlineSyncRequired);
@@ -120,6 +123,28 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
   }
 
   Future<void> _claimRemoteSessionWhenOnline() async {
+    if (_remoteSessionHandshakeComplete) return;
+
+    final inFlight = _claimRemoteSessionTask;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+
+    final task = _claimRemoteSessionWhenOnlineImpl();
+    _claimRemoteSessionTask = task;
+    try {
+      await task;
+    } finally {
+      if (identical(_claimRemoteSessionTask, task)) {
+        _claimRemoteSessionTask = null;
+      }
+    }
+  }
+
+  Future<void> _claimRemoteSessionWhenOnlineImpl() async {
+    if (_remoteSessionHandshakeComplete) return;
+
     final session = _sessionService;
     if (session == null || !await ConnectivityService.isOnline()) return;
 
@@ -141,6 +166,7 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
         const Duration(seconds: 60),
         (_) => _sessionService?.touchActivity(),
       );
+      _remoteSessionHandshakeComplete = true;
       if (tookOver) {
         await _syncAfterHandoff();
       }
@@ -150,29 +176,9 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
   }
 
   Future<void> _syncAfterHandoff() async {
-    if (!mounted) return;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Expanded(
-              child: Text('Sincronizzazione dati in corso…'),
-            ),
-          ],
-        ),
-      ),
+    await _runCatchUpOrRepairSync(
+      loadingMessage: 'Sincronizzazione dati in corso…',
     );
-    try {
-      final result = await _syncEngine?.runSync();
-      if (result?.success == true) {
-        _notifyRepositoryDataChanged();
-      }
-    } catch (_) {}
-    if (mounted) Navigator.of(context, rootNavigator: true).pop();
   }
 
   void _ensureRealtimeSync() {
@@ -221,8 +227,19 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
       realtimeSync: _realtimeSync,
     );
 
-    final done = await _modePrefs!.isInitialSyncDoneLocally();
-    if (!done) {
+    var done = await _modePrefs!.isInitialSyncDoneLocally();
+    final localCount = await _syncEngine!.localRecordCount();
+    final hasLocalCache = done || localCount > 0;
+
+    if (!done && localCount > 0) {
+      await _modePrefs!.markInitialSyncComplete(
+        recordCount: localCount,
+        dataVersion: 'offline-cache',
+      );
+      done = true;
+    }
+
+    if (!hasLocalCache) {
       if (!mounted) return;
       if (!await ConnectivityService.isOnline()) {
         setState(() => _step = _BootstrapStep.offlineSyncRequired);
@@ -242,22 +259,36 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
   }
 
   Future<void> _syncCatchUpIfNeeded() async {
+    await _runCatchUpOrRepairSync(
+      loadingMessage: 'Aggiornamento copia locale da Firebase…',
+    );
+  }
+
+  Future<void> _runCatchUpOrRepairSync({
+    required String loadingMessage,
+  }) async {
     final engine = _syncEngine;
     if (engine == null) return;
-    await _sessionService?.ensureLocalSession();
-    if (!await engine.isBehindRemote()) return;
+
+    final needsRepair = await engine.needsRepairSync();
+    final behind = await engine.isBehindRemote();
+    if (!behind && !needsRepair) return;
 
     if (!mounted) return;
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
+      builder: (ctx) => AlertDialog(
         content: Row(
           children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
+            const CircularProgressIndicator(),
+            const SizedBox(width: 20),
             Expanded(
-              child: Text('Aggiornamento copia locale da Firebase…'),
+              child: Text(
+                needsRepair
+                    ? 'Ripristino copia locale da Firebase…'
+                    : loadingMessage,
+              ),
             ),
           ],
         ),
@@ -265,8 +296,8 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     );
 
     try {
-      final result = await engine.runSync();
-      if (result.success) {
+      final result = await engine.catchUpOrRepairIfNeeded();
+      if (result?.success == true) {
         _notifyRepositoryDataChanged();
       }
     } catch (_) {}

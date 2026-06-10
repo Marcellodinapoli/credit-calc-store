@@ -711,6 +711,7 @@ class ContestationDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return SecondaryPageScaffold(
       pageTitle: item.title,
+      project: BrandedPageProject.form,
       body: Center(
         child: FilledButton(
           onPressed: () => Navigator.pop(context, true),

@@ -68,10 +68,10 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
   Future<void> _logout() async {
     final pending = CreditCalcRuntime.pendingSyncCount.value;
     final online = await ConnectivityService.isOnline();
-    final canSoftLock = !online && await BiometricLockGate.canLockWithBiometric();
+    final canSoftLock = await BiometricLockGate.canLockWithBiometric();
     if (!mounted) return;
 
-    final ok = await showDialog<bool>(
+    final action = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Esci'),
@@ -79,21 +79,30 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
           _logoutDialogMessage(
             pending: pending,
             softLock: canSoftLock,
+            online: online,
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Annulla'),
           ),
+          if (canSoftLock && online)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'signout'),
+              child: const Text('Esci dall\'account'),
+            ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(
+              ctx,
+              canSoftLock ? 'lock' : 'signout',
+            ),
             child: Text(canSoftLock ? 'Blocca app' : 'Esci'),
           ),
         ],
       ),
     );
-    if (ok != true) return;
+    if (action == null) return;
 
     CreditCalcRuntime.realtimeSync?.stop();
     try {
@@ -102,7 +111,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
           .timeout(const Duration(seconds: 5));
     } catch (_) {}
 
-    if (canSoftLock) {
+    if (action == 'lock') {
       BiometricLockGate.lockAgain();
       return;
     }
@@ -118,6 +127,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
   String _logoutDialogMessage({
     required int pending,
     required bool softLock,
+    required bool online,
   }) {
     final pendingText = pending > 0
         ? 'Hai $pending modifiche non ancora sincronizzate. Restano su '
@@ -126,8 +136,8 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
         : '';
 
     if (softLock) {
-      return '${pendingText}Senza connessione l\'app verrà bloccata su questo '
-          'dispositivo. Potrai rientrare con la biometria quando vuoi.';
+      return '${pendingText}L\'app verrà bloccata su questo dispositivo. '
+          'Potrai rientrare con la biometria, anche senza connessione.';
     }
 
     return '${pendingText}Vuoi uscire dall\'account CreditCore?';

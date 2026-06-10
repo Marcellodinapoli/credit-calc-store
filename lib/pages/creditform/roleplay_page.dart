@@ -210,6 +210,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
 
     return SecondaryPageScaffold(
       pageTitle: 'Roleplay',
+      project: BrandedPageProject.form,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

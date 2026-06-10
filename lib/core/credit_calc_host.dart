@@ -50,6 +50,7 @@ class CreditCalcPrimaryLayout extends StatelessWidget {
 
         return PageShellBody(
           pageTitle: pageTitle,
+          project: BrandedPageProject.calc,
           child: blocked
               ? const MaintenanceBlockedView(
                   sectionName: MaintenanceService.creditCalc,
@@ -88,6 +89,7 @@ class CreditCalcSecondaryLayout extends StatelessWidget {
 
         return SecondaryPageScaffold(
           pageTitle: pageTitle,
+          project: BrandedPageProject.calc,
           padded: padded,
           bottomBar: bottomBar,
           body: blocked
