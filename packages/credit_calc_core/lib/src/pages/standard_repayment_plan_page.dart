@@ -164,14 +164,8 @@ class _RepaymentInstallmentPlan {
     final lastAmount = lastCents / 100;
     final recoveredCents = equalCents * (n - 1) + lastCents;
 
-    final usingChosenRate =
-        chosenInstallmentAmount != null && chosenInstallmentAmount > 0;
-
     if (equalAmount + 1e-9 < minRata) return null;
-    // Con rata mensile scelta: le prime n−1 seguono la rata; l'ultima di conguaglio
-    // può essere inferiore al minimo creditore (solo chiude i centesimi).
-    if (!usingChosenRate && lastAmount + 1e-9 < minRata) return null;
-    if (usingChosenRate && lastAmount + 1e-9 < 0.01) return null;
+    if (lastAmount + 1e-9 < minRata) return null;
 
     if (recoveredCents != totalCents) return null;
 
@@ -245,23 +239,109 @@ class _RepaymentInstallmentPlan {
     return null;
   }
 
+  /// Dilazioni necessarie con rate tutte uguali, rispettando il minimo rata.
+  static int? installmentCountForMinAmount({
+    required double netAmount,
+    required double minInstallment,
+  }) {
+    if (netAmount <= 0) return null;
+
+    final minRata = minInstallment > 0 ? minInstallment : 0.01;
+    if (netAmount + 1e-9 < minRata) return null;
+
+    var n = (netAmount / minRata).floor();
+    if (n < 1) n = 1;
+
+    while (n > 1 && (netAmount / n).floor() + 1e-9 < minRata) {
+      n--;
+    }
+
+    if ((netAmount / n).floor() + 1e-9 < minRata) return null;
+    return n;
+  }
+
+  /// Conguaglio automatico: (n−1) rate uguali + ultima che chiude al centesimo,
+  /// entrambe non inferiori al minimo creditore.
+  static int? installmentCountForLastAdjustment({
+    required double netAmount,
+    required double minInstallment,
+  }) {
+    if (netAmount <= 0) return null;
+
+    final minRata = minInstallment > 0 ? minInstallment : 0.01;
+    final minCents = (minRata * 100).round();
+    final totalCents = (netAmount * 100).round();
+    if (totalCents < minCents) return null;
+
+    final nStart = (netAmount / minRata).floor();
+    for (var n = nStart < 1 ? 1 : nStart; n >= 1; n--) {
+      if (n == 1) {
+        if (totalCents >= minCents) return 1;
+        continue;
+      }
+
+      final equalCents = (netAmount / n).floor() * 100;
+      if (equalCents < minCents) continue;
+
+      final lastCents = totalCents - equalCents * (n - 1);
+      if (lastCents < minCents || lastCents <= 0) continue;
+      if (equalCents * (n - 1) + lastCents != totalCents) continue;
+      return n;
+    }
+    return null;
+  }
+
+  /// Conguaglio manuale per importo rata desiderato.
+  static int? installmentCountForDesiredLastAdjustment({
+    required double netAmount,
+    required double desiredInstallment,
+    required double minInstallment,
+  }) {
+    if (netAmount <= 0 || desiredInstallment <= 0) return null;
+
+    final minRata = minInstallment > 0 ? minInstallment : 0.01;
+    if (desiredInstallment + 1e-9 < minRata) return null;
+
+    final totalCents = (netAmount * 100).round();
+    final equalCents = (desiredInstallment * 100).round();
+    final minCents = (minRata * 100).round();
+    if (equalCents < minCents) return null;
+
+    if (totalCents <= equalCents) {
+      return totalCents >= minCents ? 1 : null;
+    }
+
+    final n = ((totalCents - minCents) / equalCents).floor() + 1;
+    if (n < 1) return null;
+
+    final lastCents = totalCents - equalCents * (n - 1);
+    if (lastCents < minCents || lastCents <= 0) return null;
+    if (equalCents * (n - 1) + lastCents != totalCents) return null;
+    return n;
+  }
+
   static ({int n, bool capped})? _resolveInstallmentCount({
     required double netAmount,
     required int maxInstallments,
     required double minInstallment,
+    required _RepaymentSplitMode mode,
   }) {
     if (maxInstallments <= 0 || netAmount <= 0) return null;
 
-    final minRata = minInstallment > 0 ? minInstallment : 0.01;
-    var requested = (netAmount / minRata).ceil();
-    final capped = requested > maxInstallments;
-    var n = requested;
-    if (n > maxInstallments) n = maxInstallments;
-    if (n < 1) n = 1;
+    final n = mode == _RepaymentSplitMode.lastAdjustment
+        ? installmentCountForLastAdjustment(
+            netAmount: netAmount,
+            minInstallment: minInstallment,
+          )
+        : installmentCountForMinAmount(
+            netAmount: netAmount,
+            minInstallment: minInstallment,
+          );
+    if (n == null) return null;
 
-    if (netAmount / n + 1e-9 < minRata) return null;
+    if (n > maxInstallments) return null;
 
-    return (n: n, capped: capped);
+    return (n: n, capped: false);
   }
 
   static _RepaymentInstallmentPlan? build({
@@ -288,6 +368,7 @@ class _RepaymentInstallmentPlan {
         netAmount: netAmount,
         maxInstallments: maxInstallments,
         minInstallment: minInstallment,
+        mode: mode,
       );
     }
     if (resolved == null) return null;
@@ -2140,6 +2221,15 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       case _ManualSizingTarget.byInstallmentAmount:
         final desired = EuroFormat.parse(_desiredInstallmentCtrl.text);
         if (desired == null || desired <= 0) return null;
+        if (_modalitaRate == _RepaymentSplitMode.lastAdjustment) {
+          final creditor = _creditor;
+          if (creditor == null) return null;
+          return _RepaymentInstallmentPlan.installmentCountForDesiredLastAdjustment(
+            netAmount: netto,
+            desiredInstallment: desired,
+            minInstallment: creditor.minInstallmentAmount,
+          );
+        }
         return _RepaymentInstallmentPlan.installmentCountForDesiredAmount(
           netAmount: netto,
           desiredInstallment: desired,
@@ -2236,14 +2326,24 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
           );
         }
 
-        final n = _RepaymentInstallmentPlan.installmentCountForDesiredAmount(
-          netAmount: netto,
-          desiredInstallment: desired,
-        );
+        final n = _modalitaRate == _RepaymentSplitMode.lastAdjustment
+            ? _RepaymentInstallmentPlan.installmentCountForDesiredLastAdjustment(
+                netAmount: netto,
+                desiredInstallment: desired,
+                minInstallment: minRata,
+              )
+            : _RepaymentInstallmentPlan.installmentCountForDesiredAmount(
+                netAmount: netto,
+                desiredInstallment: desired,
+              );
         if (n == null) {
           return _ManualSizingValidation(
             isValid: false,
-            message: 'Impossibile calcolare il numero di dilazioni.',
+            message: _modalitaRate == _RepaymentSplitMode.lastAdjustment
+                ? 'Con rata ${EuroFormat.format(desired)} non è possibile '
+                    'chiudere il debito con un\'ultima rata di conguaglio '
+                    'almeno pari al minimo (${EuroFormat.format(minRata)}).'
+                : 'Impossibile calcolare il numero di dilazioni.',
             showError: showError,
           );
         }
@@ -2564,16 +2664,30 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       chosenInstallmentAmount: chosenRata,
     );
     if (plan == null) {
+      final minRata = _creditor!.minInstallmentAmount;
+      final requiredN = fixedCount ??
+          (_modalitaRate == _RepaymentSplitMode.lastAdjustment
+              ? _RepaymentInstallmentPlan.installmentCountForLastAdjustment(
+                  netAmount: _netto,
+                  minInstallment: minRata,
+                )
+              : _RepaymentInstallmentPlan.installmentCountForMinAmount(
+                  netAmount: _netto,
+                  minInstallment: minRata,
+                ));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             fixedCount != null
                 ? 'Con $fixedCount dilazioni non si rispetta l\'importo '
-                    'minimo rata '
-                    '(${EuroFormat.format(_creditor!.minInstallmentAmount)}).'
-                : 'Con $effectiveMax dilazioni massime non si '
-                    'rispetta l\'importo minimo rata '
-                    '(${EuroFormat.format(_creditor!.minInstallmentAmount)}).',
+                    'minimo rata (${EuroFormat.format(minRata)}).'
+                : requiredN != null && requiredN > effectiveMax
+                    ? 'Per rispettare il minimo rata '
+                        '(${EuroFormat.format(minRata)}) servono almeno '
+                        '$requiredN dilazioni; ne sono consentite al massimo '
+                        '$effectiveMax.'
+                    : 'Non è possibile rispettare il minimo rata '
+                        '(${EuroFormat.format(minRata)}).',
           ),
         ),
       );
@@ -4802,11 +4916,27 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       return const SizedBox.shrink();
     } else {
       tone = Colors.green.shade800;
+      final autoCount = _planSizingMode == _PlanSizingMode.automatic &&
+              !_usesMultiPracticeForm &&
+              !_isModulatedCadenza
+          ? (_modalitaRate == _RepaymentSplitMode.lastAdjustment
+              ? _RepaymentInstallmentPlan.installmentCountForLastAdjustment(
+                  netAmount: netto,
+                  minInstallment: creditor.minInstallmentAmount,
+                )
+              : _RepaymentInstallmentPlan.installmentCountForMinAmount(
+                  netAmount: netto,
+                  minInstallment: creditor.minInstallmentAmount,
+                ))
+          : null;
+      final rateLabel = autoCount != null
+          ? '$autoCount rate previste (minimo rata '
+              '${EuroFormat.format(creditor.minInstallmentAmount)})'
+          : '${band.installments} rate previste';
       message =
           'Importo netto ${EuroFormat.format(netto)} nella fascia PDR '
           '${EuroFormat.format(band.from.toDouble())} – '
-          '${EuroFormat.format(band.to.toDouble())} · '
-          '${band.installments} rate previste.';
+          '${EuroFormat.format(band.to.toDouble())} · $rateLabel.';
     }
 
     final monthsNote = _monthsBelowPdrSheetInstallments &&
@@ -5341,7 +5471,12 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         return 'Verranno generate $n dilazioni con ultima rata di conguaglio.';
       }
       final totalCents = (netto * 100).round();
-      final equalCents = (netto / n).floor() * 100;
+      final desired = _manualTarget == _ManualSizingTarget.byInstallmentAmount
+          ? EuroFormat.parse(_desiredInstallmentCtrl.text)
+          : null;
+      final equalCents = desired != null && desired > 0
+          ? (desired * 100).round()
+          : (netto / n).floor() * 100;
       final lastCents = totalCents - equalCents * (n - 1);
       return '${n - 1} dilazioni da ${EuroFormat.format(equalCents / 100)} + '
           '1 di conguaglio da ${EuroFormat.format(lastCents / 100)} '
