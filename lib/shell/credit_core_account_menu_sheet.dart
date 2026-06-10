@@ -416,6 +416,12 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
             _areaHeader(),
             if (!areaBlocked) ...[
               _item(
+                icon: Icons.route_outlined,
+                title: PersonalAreaMenuItem.visitItinerary.title,
+                iconColor: _areaColor,
+                onTap: () => _closeAndArea(PersonalAreaMenuItem.visitItinerary),
+              ),
+              _item(
                 icon: Icons.person_outline,
                 title: PersonalAreaMenuItem.myData.title,
                 iconColor: _areaColor,

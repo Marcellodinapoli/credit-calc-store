@@ -53,5 +53,11 @@
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>CreditCalc usa Face ID per proteggere l'accesso all'app.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>CreditCalc usa la posizione per ordinare le visite del giorno nel percorso più lineare.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>CreditCalc usa la fotocamera per importare i nominativi da visitare da una foto.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>CreditCalc accede alle foto per importare i nominativi da visitare.</string>
 </dict>
 </plist>

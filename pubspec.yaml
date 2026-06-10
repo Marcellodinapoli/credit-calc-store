@@ -37,6 +37,10 @@ dependencies:
   web_socket_channel: ^3.0.3
   speech_to_text: ^7.0.0
   flutter_tts: ^4.2.2
+  geolocator: ^13.0.4
+  permission_handler: ^11.4.0
+  image_picker: ^1.1.2
+  google_mlkit_text_recognition: ^0.14.0
   credit_calc_core:
     path: packages/credit_calc_core
 

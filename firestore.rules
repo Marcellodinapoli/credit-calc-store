@@ -363,6 +363,16 @@ match /companies/{companyId}/rules_history/{docId} {
         allow read, write: if request.auth != null
           && request.auth.uid == userId;
       }
+
+      match /visit_itineraries/{dateId} {
+        allow read, write: if request.auth != null
+          && request.auth.uid == userId;
+
+        match /stops/{stopId} {
+          allow read, write: if request.auth != null
+            && request.auth.uid == userId;
+        }
+      }
     }
 
 // ------------------------------------------------------------------
