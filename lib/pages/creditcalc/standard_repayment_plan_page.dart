@@ -18,6 +18,7 @@ import '../../offline/repository/credit_calc_repository.dart';
 import '../../offline/services/repayment_plan_draft_controller.dart';
 import '../../offline/services/repayment_plan_draft_service.dart';
 import '../../ui/layout/adaptive_action_bar.dart';
+import '../../widgets/schedule_field_visit_dialog.dart';
 import 'repayment_plan_commission_export.dart';
 import 'repayment_plan_session_storage.dart';
 
@@ -4385,6 +4386,14 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
           ),
         ),
       );
+      await _offerFollowUpVisit(
+        companyName: companyName,
+        creditorId: creditorId,
+        creditorName: creditor.name,
+        calculationId: result.savedDocIds.isNotEmpty
+            ? result.savedDocIds.first
+            : null,
+      );
       _resetForm();
       return;
     }
@@ -4412,6 +4421,49 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         ),
         duration: const Duration(seconds: 8),
       ),
+    );
+  }
+
+  Future<void> _offerFollowUpVisit({
+    required String companyName,
+    required String creditorId,
+    required String creditorName,
+    String? calculationId,
+  }) async {
+    if (!mounted) return;
+
+    final schedule = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Follow-up sul territorio'),
+        content: const Text(
+          'Vuoi programmare una visita in agenda per il follow-up '
+          'dopo il piano di rientro?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Non ora'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Programma visita'),
+          ),
+        ],
+      ),
+    );
+
+    if (schedule != true || !mounted) return;
+
+    await showScheduleFieldVisitDialog(
+      context,
+      calculation: {
+        'companyName': companyName,
+        'creditorId': creditorId,
+        'creditorName': creditorName,
+      },
+      calculationId: calculationId ?? '',
+      initialDay: DateTime.now().add(const Duration(days: 7)),
     );
   }
 

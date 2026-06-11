@@ -21,7 +21,7 @@ enum PersonalAreaMenuItem {
 
 extension PersonalAreaMenuItemX on PersonalAreaMenuItem {
   String get title => switch (this) {
-        PersonalAreaMenuItem.visitItinerary => 'Itinerario visite',
+        PersonalAreaMenuItem.visitItinerary => 'Itinerario',
         PersonalAreaMenuItem.myData => 'I miei dati',
         PersonalAreaMenuItem.directSupport => 'Assistenza diretta',
         PersonalAreaMenuItem.community => 'Community',

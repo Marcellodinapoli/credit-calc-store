@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/dimensions.dart';
+import '../../services/itinerary_notifications_service.dart';
 import '../../services/product_notifications_service.dart';
 import 'personal_area_shell.dart';
 
@@ -18,7 +19,9 @@ class _NotificationPreferencesPageState
     extends State<NotificationPreferencesPage> {
   bool _loading = true;
   bool _enabled = false;
+  bool _itineraryEnabled = false;
   bool _saving = false;
+  bool _savingItinerary = false;
 
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
@@ -36,9 +39,12 @@ class _NotificationPreferencesPageState
     }
 
     final enabled = await ProductNotificationsService.loadEnabled(uid);
+    final itineraryEnabled =
+        await ItineraryNotificationsService.loadEnabled(uid);
     if (!mounted) return;
     setState(() {
       _enabled = enabled;
+      _itineraryEnabled = itineraryEnabled;
       _loading = false;
     });
   }
@@ -68,6 +74,9 @@ class _NotificationPreferencesPageState
     }
 
     if (value) {
+      await ItineraryNotificationsService.setEnabled(uid: uid, enabled: true);
+      if (!mounted) return;
+      setState(() => _itineraryEnabled = true);
       if (result.permissionIssue != null) {
         setState(() => _enabled = false);
         _showSnack(result.permissionIssue!);
@@ -79,8 +88,31 @@ class _NotificationPreferencesPageState
         );
       }
     } else {
+      await ItineraryNotificationsService.setEnabled(uid: uid, enabled: false);
+      if (!mounted) return;
+      setState(() => _itineraryEnabled = false);
       _showSnack('Notifiche disattivate.');
     }
+  }
+
+  Future<void> _onItineraryChanged(bool value) async {
+    final uid = _uid;
+    if (uid == null || _savingItinerary || !_enabled) return;
+
+    setState(() {
+      _savingItinerary = true;
+      _itineraryEnabled = value;
+    });
+
+    await ItineraryNotificationsService.setEnabled(uid: uid, enabled: value);
+
+    if (!mounted) return;
+    setState(() => _savingItinerary = false);
+    _showSnack(
+      value
+          ? 'Promemoria itinerario attivati.'
+          : 'Promemoria itinerario disattivati.',
+    );
   }
 
   void _showSnack(String message) {
@@ -109,16 +141,34 @@ class _NotificationPreferencesPageState
                   ),
                   const SizedBox(height: 24),
                   Card(
-                    child: SwitchListTile(
-                      title: const Text(
-                        'Ricevi notifiche',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: const Text(
-                        'Attiva o disattiva in qualsiasi momento.',
-                      ),
-                      value: _enabled,
-                      onChanged: _uid == null || _saving ? null : _onChanged,
+                    child: Column(
+                      children: [
+                        SwitchListTile(
+                          title: const Text(
+                            'Ricevi notifiche',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: const Text(
+                            'Attiva o disattiva in qualsiasi momento.',
+                          ),
+                          value: _enabled,
+                          onChanged:
+                              _uid == null || _saving ? null : _onChanged,
+                        ),
+                        const Divider(height: 1),
+                        SwitchListTile(
+                          title: const Text('Itinerario sul territorio'),
+                          subtitle: const Text(
+                            'Promemoria programmati e avviso 30 min prima delle visite.',
+                          ),
+                          value: _itineraryEnabled,
+                          onChanged: _uid == null ||
+                                  _savingItinerary ||
+                                  !_enabled
+                              ? null
+                              : _onItineraryChanged,
+                        ),
+                      ],
                     ),
                   ),
                   if (_saving) ...[
@@ -143,7 +193,11 @@ class _NotificationPreferencesPageState
                   ),
                   _bullet(
                     context,
-                    'nuove funzioni o aggiornamenti importanti della piattaforma.',
+                    'nuove funzioni o aggiornamenti importanti della piattaforma;',
+                  ),
+                  _bullet(
+                    context,
+                    'promemoria itinerario e avvisi pre-visita (se attivati).',
                   ),
                   const SizedBox(height: 24),
                   _infoBox(

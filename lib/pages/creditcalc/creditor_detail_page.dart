@@ -80,6 +80,7 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
   final _ccpCtrl = TextEditingController();
   final _indBpCtrl = TextEditingController();
   final _assHeaderCtrl = TextEditingController();
+  final _visitAddressCtrl = TextEditingController();
   final _minInstallmentCtrl = TextEditingController();
   final _maxAgePdrCtrl = TextEditingController();
 
@@ -141,6 +142,7 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
       'bollettiniPostali': _bollettiniPostali,
       'contanti': _contanti,
       'pdrBands': _pdrRows.map((r) => r.toMap()).toList(),
+      'visitAddress': _visitAddressCtrl.text.trim(),
     };
   }
 
@@ -183,6 +185,7 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
     _ccpCtrl.dispose();
     _indBpCtrl.dispose();
     _assHeaderCtrl.dispose();
+    _visitAddressCtrl.dispose();
     _minInstallmentCtrl.dispose();
     _maxAgePdrCtrl.dispose();
     for (final row in _pdrRows) {
@@ -229,6 +232,7 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
       );
       _maxAgePdrCtrl.text =
           (data['maxAgePdr'] ?? data['maxAge'] ?? widget.maxAge).toString();
+      _visitAddressCtrl.text = (data['visitAddress'] ?? '').toString();
 
       _effettiCambiari = methods['effettiCambiari'] == true;
       _bollettiniPostali = methods['bollettiniPostali'] == true;
@@ -422,6 +426,7 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
           'effettiCambiari': _effettiCambiari,
           'bollettiniPostali': _bollettiniPostali,
         },
+        'visitAddress': _visitAddressCtrl.text.trim(),
       };
 
       await CreditCalcRepository.instance.saveCreditor(
@@ -776,6 +781,17 @@ class _CreditorDetailPageState extends State<CreditorDetailPage> {
                     onChanged: (_) => _touchForm(),
                   ),
                 ]),
+                const SizedBox(height: _sectionSpacing),
+                _sectionHeading('Itinerario · sede visita'),
+                _spacedField(
+                  appFormTextField(
+                    label: 'Indirizzo sede (per visite e mappa)',
+                    controller: _visitAddressCtrl,
+                    padding: EdgeInsets.zero,
+                    maxLines: 2,
+                    onChanged: (_) => _touchForm(),
+                  ),
+                ),
                 const SizedBox(height: _sectionSpacing),
                 _sectionHeading('Coordinate dei pagamenti previsti'),
                 _fieldRow([

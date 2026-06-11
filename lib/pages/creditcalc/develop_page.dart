@@ -2,6 +2,7 @@
     hide BalanceWriteOffPage, DevelopPage, StandardRepaymentPlanPage;
 import 'package:flutter/material.dart';
 
+import 'itinerary/itinerary_hub_page.dart';
 import 'balance_write_off_page.dart';
 import 'standard_repayment_plan_page.dart';
 
@@ -13,6 +14,7 @@ class DevelopPage extends StatelessWidget {
     const items = [
       'Piano di rientro',
       'Saldo e stralcio',
+      'Itinerario e mappa',
     ];
 
     return wrapCreditCalcPage(
@@ -29,9 +31,14 @@ class DevelopPage extends StatelessWidget {
               title: Text(items[index]),
               onTap: () {
                 final title = items[index];
-                final page = title == 'Piano di rientro'
-                    ? const StandardRepaymentPlanPage()
-                    : const BalanceWriteOffPage();
+                final Widget page;
+                if (title == 'Piano di rientro') {
+                  page = const StandardRepaymentPlanPage();
+                } else if (title == 'Saldo e stralcio') {
+                  page = const BalanceWriteOffPage();
+                } else {
+                  page = const ItineraryHubPage();
+                }
                 Navigator.of(context, rootNavigator: true).push(
                   MaterialPageRoute(builder: (_) => page),
                 );

@@ -6,6 +6,7 @@ import 'package:credit_calc_core/credit_calc_core.dart'
 import 'package:flutter/material.dart';
 
 import '../../offline/repository/credit_calc_repository.dart';
+import '../../widgets/schedule_field_visit_dialog.dart';
 import 'commission_collections_shared.dart';
 
 class CommissionCollectionsPage extends StatefulWidget {
@@ -434,6 +435,15 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              TextButton.icon(
+                onPressed: () => showScheduleFieldVisitDialog(
+                  context,
+                  calculation: data,
+                  calculationId: docId,
+                ),
+                icon: const Icon(Icons.event_available_outlined, size: 18),
+                label: const Text('Programma visita'),
+              ),
               TextButton.icon(
                 onPressed: () => _editEntry(docId),
                 icon: const Icon(Icons.edit_outlined, size: 18),
