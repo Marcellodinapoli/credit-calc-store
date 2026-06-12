@@ -432,8 +432,10 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 4,
+            runSpacing: 0,
             children: [
               TextButton.icon(
                 onPressed: () => showScheduleFieldVisitDialog(
