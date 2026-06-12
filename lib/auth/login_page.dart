@@ -95,12 +95,6 @@ class _LoginPageState extends State<LoginPage> {
       _showBiometricButton = biometricAvailable;
       _hasSavedCredentials = savedEmail != null && savedPassword != null;
     });
-
-    if (widget.unlockMode && biometricAvailable) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_signInBiometric());
-      });
-    }
   }
 
   Future<void> _saveCredentials(String email, String password) async {
@@ -817,8 +811,8 @@ class _LoginPageState extends State<LoginPage> {
                       const SizedBox(height: 8),
                       Text(
                         widget.unlockMode
-                            ? 'Sblocca l\'app con biometria. Anche offline, se hai '
-                                'già effettuato l\'accesso su questo dispositivo.'
+                            ? 'Scegli come sbloccare l\'app: inserisci la password '
+                                'e premi Accedi, oppure usa il pulsante Biometria.'
                             : _isLogin
                                 ? 'Accedi o registrati con le credenziali CreditCore.'
                                 : 'Crea un account CreditCore.',
@@ -919,7 +913,7 @@ class _LoginPageState extends State<LoginPage> {
                         },
                       ),
 
-                      if (_isLogin) ...[
+                      if (_isLogin && !widget.unlockMode) ...[
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(

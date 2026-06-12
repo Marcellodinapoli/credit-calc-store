@@ -40,6 +40,7 @@ class _MaintenanceSectionGateState extends State<MaintenanceSectionGate> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (ctx) => CreditCoreAccountMenuSheet(
         onAnnouncements: () {
           Navigator.of(context).pop();

@@ -147,6 +147,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (ctx) => CreditCoreAccountMenuSheet(
         onAnnouncements: () {
           Navigator.of(context).push(

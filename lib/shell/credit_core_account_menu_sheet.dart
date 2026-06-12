@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../core/maintenance_service.dart';
 import '../pages/area/personal_area_menu.dart';
+import '../ui/layout/page_shell.dart';
 import '../pages/creditform/personal_form_menu.dart';
 import '../pages/creditjob/personal_job_menu.dart';
 import 'credit_core_site_actions.dart';
@@ -134,9 +135,7 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
   }
 
   Widget _buildExpandableSectionTitle(
-    String prefix,
-    String suffix,
-    Color suffixColor,
+    BrandedPageProject project,
     _MenuSection section,
     Map<String, dynamic>? maintenanceData,
   ) {
@@ -148,24 +147,7 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      title: RichText(
-        text: TextSpan(
-          style: const TextStyle(fontSize: 16, color: Colors.black87),
-          children: [
-            TextSpan(
-              text: prefix,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            TextSpan(
-              text: suffix,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: suffixColor,
-              ),
-            ),
-          ],
-        ),
-      ),
+      title: BrandedProjectName(project: project, fontSize: 16),
       trailing: blocked
           ? const Icon(Icons.warning_amber_rounded, color: Colors.orange)
           : Icon(isOpen ? Icons.remove : Icons.add),
@@ -210,9 +192,15 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
     );
   }
 
+  double _topInset(BuildContext context) {
+    final viewTop = MediaQuery.viewPaddingOf(context).top;
+    if (viewTop > 0) return viewTop;
+    return MediaQuery.paddingOf(context).top;
+  }
+
   Widget _menuHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 4, 0),
+      padding: EdgeInsets.fromLTRB(8, _topInset(context) + 4, 4, 0),
       child: Row(
         children: [
           const Expanded(
@@ -250,17 +238,16 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
   @override
   Widget build(BuildContext context) {
     if (_loading || _userType == null) {
-      return SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _menuHeader(),
-            const SizedBox(
-              height: 120,
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          ],
-        ),
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _menuHeader(),
+          const SizedBox(
+            height: 120,
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          SizedBox(height: MediaQuery.viewPaddingOf(context).bottom),
+        ],
       );
     }
 
@@ -313,9 +300,7 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
           if (showForm) {
             children.add(
               _buildExpandableSectionTitle(
-                'Credit',
-                'Form',
-                _formColor,
+                BrandedPageProject.form,
                 _MenuSection.creditForm,
                 maintenanceData,
               ),
@@ -353,9 +338,7 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
           if (showJob) {
             children.add(
               _buildExpandableSectionTitle(
-                'Credit',
-                'Job',
-                _jobColor,
+                BrandedPageProject.job,
                 _MenuSection.creditJob,
                 maintenanceData,
               ),
@@ -476,16 +459,14 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
               widget.onLogout();
             },
           ),
-          SizedBox(height: MediaQuery.paddingOf(context).bottom),
+          SizedBox(height: MediaQuery.viewPaddingOf(context).bottom + 8),
         ]);
 
-        return SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
-            ),
+        return SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
           ),
         );
       },

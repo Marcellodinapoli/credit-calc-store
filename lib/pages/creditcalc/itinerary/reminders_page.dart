@@ -163,7 +163,7 @@ class _RemindersPageState extends State<RemindersPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                padding: ItineraryPageShell.headerPadding(context),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -208,7 +208,7 @@ class _RemindersPageState extends State<RemindersPage> {
 
                     final now = DateTime.now();
                     return ListView.separated(
-                      padding: const EdgeInsets.all(16),
+                      padding: ItineraryPageShell.listPadding(context),
                       itemCount: items.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {

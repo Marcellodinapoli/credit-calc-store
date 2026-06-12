@@ -365,7 +365,7 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                padding: ItineraryPageShell.headerPadding(context),
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -444,7 +444,7 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
                     }
 
                     return ReorderableListView.builder(
-                      padding: const EdgeInsets.all(16),
+                      padding: ItineraryPageShell.listPadding(context),
                       itemCount: visits.length,
                       onReorder: (oldIndex, newIndex) async {
                         if (newIndex > oldIndex) newIndex--;

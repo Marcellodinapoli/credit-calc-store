@@ -226,7 +226,7 @@ class _TerritoryMapPageState extends State<TerritoryMapPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                padding: ItineraryPageShell.headerPadding(context),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -358,7 +358,7 @@ class _TerritoryMapPageState extends State<TerritoryMapPage> {
               ),
               if (_selected != null)
                 Card(
-                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  margin: ItineraryPageShell.bottomPanelMargin(context),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(

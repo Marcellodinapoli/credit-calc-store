@@ -21,30 +21,31 @@ class DevelopPage extends StatelessWidget {
       pageTitle: 'Sviluppa',
       current: CreditCalcNavItem.develop,
       body: Card(
-        child: ListView.separated(
-          padding: const EdgeInsets.all(8),
-          itemCount: items.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, index) {
-            return ListTile(
-              leading: const Icon(Icons.chevron_right),
-              title: Text(items[index]),
-              onTap: () {
-                final title = items[index];
-                final Widget page;
-                if (title == 'Piano di rientro') {
-                  page = const StandardRepaymentPlanPage();
-                } else if (title == 'Saldo e stralcio') {
-                  page = const BalanceWriteOffPage();
-                } else {
-                  page = const ItineraryHubPage();
-                }
-                Navigator.of(context, rootNavigator: true).push(
-                  MaterialPageRoute(builder: (_) => page),
-                );
-              },
-            );
-          },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var index = 0; index < items.length; index++) ...[
+              if (index > 0) const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.chevron_right),
+                title: Text(items[index]),
+                onTap: () {
+                  final title = items[index];
+                  final Widget page;
+                  if (title == 'Piano di rientro') {
+                    page = const StandardRepaymentPlanPage();
+                  } else if (title == 'Saldo e stralcio') {
+                    page = const BalanceWriteOffPage();
+                  } else {
+                    page = const ItineraryHubPage();
+                  }
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => page),
+                  );
+                },
+              ),
+            ],
+          ],
         ),
       ),
     );

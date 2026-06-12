@@ -339,10 +339,7 @@ class _CreditCalcSettingsPageState extends State<CreditCalcSettingsPage> {
 
       appBar: AppBar(
 
-        title: const BrandedPageTitleRow(
-          project: BrandedPageProject.calc,
-          pageTitle: 'Impostazioni',
-        ),
+        title: const BrandedProjectName(project: BrandedPageProject.calc),
 
         backgroundColor: PageShellTheme.appBarBackground,
 
@@ -362,6 +359,16 @@ class _CreditCalcSettingsPageState extends State<CreditCalcSettingsPage> {
               ),
 
               children: [
+
+                const Text(
+                  'Impostazioni',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(height: 16),
 
                 _InfoTile(
 

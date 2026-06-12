@@ -328,6 +328,13 @@ class _RepaymentInstallmentPlan {
   }) {
     if (maxInstallments <= 0 || netAmount <= 0) return null;
 
+    final minRata = minInstallment > 0 ? minInstallment : 0.01;
+    final provisionalInstallment = (netAmount / maxInstallments).floor();
+
+    if (provisionalInstallment + 1e-9 >= minRata) {
+      return (n: maxInstallments, capped: false);
+    }
+
     final n = mode == _RepaymentSplitMode.lastAdjustment
         ? installmentCountForLastAdjustment(
             netAmount: netAmount,
@@ -341,7 +348,7 @@ class _RepaymentInstallmentPlan {
 
     if (n > maxInstallments) return null;
 
-    return (n: n, capped: false);
+    return (n: n, capped: true);
   }
 
   static _RepaymentInstallmentPlan? build({

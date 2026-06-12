@@ -15,7 +15,7 @@ class ItineraryHubPage extends StatelessWidget {
   final bool personalArea;
 
   void _open(BuildContext context, Widget page) {
-    Navigator.of(context, rootNavigator: true).push(
+    Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => page),
     );
   }
@@ -24,10 +24,10 @@ class ItineraryHubPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final shell = ItineraryPageShell(personalArea: personalArea);
 
-    return shell.primary(
+    return shell.secondary(
       pageTitle: 'Itinerario',
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: ItineraryPageShell.listPadding(context),
         children: [
           const Text(
             'Organizza il lavoro sul territorio: appuntamenti, attività, promemoria '

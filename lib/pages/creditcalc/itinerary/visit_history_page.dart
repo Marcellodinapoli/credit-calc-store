@@ -117,7 +117,7 @@ class _VisitHistoryPageState extends State<VisitHistoryPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                padding: ItineraryPageShell.headerPadding(context),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -193,7 +193,7 @@ class _VisitHistoryPageState extends State<VisitHistoryPage> {
                         ),
                       )
                     : ListView.separated(
-                        padding: const EdgeInsets.all(16),
+                        padding: ItineraryPageShell.listPadding(context),
                         itemCount: visible.length,
                         separatorBuilder: (_, __) =>
                             const SizedBox(height: 10),
