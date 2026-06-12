@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'core/app_localizations_config.dart';
 import 'auth/biometric_lock_gate.dart';
 import 'auth/login_page.dart';
 import 'auth/waiting_page.dart';
@@ -25,6 +26,9 @@ class _CreditCalcAppState extends State<CreditCalcApp> {
     return MaterialApp(
       title: 'CreditCalc',
       debugShowCheckedModeBanner: false,
+      locale: AppLocalizationsConfig.locale,
+      localizationsDelegates: AppLocalizationsConfig.localizationsDelegates,
+      supportedLocales: AppLocalizationsConfig.supportedLocales,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: ProjectColors.calc),
         useMaterial3: true,
