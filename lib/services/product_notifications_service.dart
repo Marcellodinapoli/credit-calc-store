@@ -61,15 +61,7 @@ class ProductNotificationsService {
         enabled &&
         tokenResult.permissionIssue != null &&
         (tokenResult.token == null || tokenResult.token!.isEmpty)) {
-      await ref.set(
-        {
-          fieldEnabled: false,
-          fieldToken: FieldValue.delete(),
-          fieldPushPlatform: FieldValue.delete(),
-          fieldUpdatedAt: FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
+      await ref.set(data, SetOptions(merge: true));
       return ProductNotificationsResult(
         success: true,
         permissionIssue: tokenResult.permissionIssue,
@@ -100,15 +92,7 @@ class ProductNotificationsService {
     if (requestPermission) {
       final granted = await LocalNotificationsService.requestPermission();
       if (!granted) {
-        await ref.set(
-          {
-            fieldEnabled: false,
-            fieldToken: FieldValue.delete(),
-            fieldPushPlatform: FieldValue.delete(),
-            fieldUpdatedAt: FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+        await ref.set(data, SetOptions(merge: true));
         return const ProductNotificationsResult(
           success: true,
           permissionIssue:

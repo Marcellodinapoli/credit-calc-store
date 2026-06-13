@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/itinerary_notifications_service.dart';
+import '../services/location_consent_service.dart';
 import '../services/product_notifications_service.dart';
 
 class ItineraryNotificationsCard extends StatefulWidget {
@@ -55,6 +56,7 @@ class _ItineraryNotificationsCardState extends State<ItineraryNotificationsCard>
     });
 
     await ItineraryNotificationsService.setEnabled(uid: uid, enabled: value);
+    await LocationConsentService.setEnabled(uid: uid, enabled: value);
 
     if (!mounted) return;
     setState(() => _saving = false);

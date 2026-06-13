@@ -26,7 +26,7 @@ extension PersonalAreaMenuItemX on PersonalAreaMenuItem {
         PersonalAreaMenuItem.directSupport => 'Assistenza diretta',
         PersonalAreaMenuItem.community => 'Community',
         PersonalAreaMenuItem.guide => 'Guida all\'utilizzo',
-        PersonalAreaMenuItem.notificationPreferences => 'Aggiornamenti',
+        PersonalAreaMenuItem.notificationPreferences => 'Notifiche',
         PersonalAreaMenuItem.privacyConsents => 'Privacy e consensi',
       };
 

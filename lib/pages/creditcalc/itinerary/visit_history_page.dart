@@ -4,6 +4,7 @@ import '../../../core/theme/app_card_theme.dart';
 import '../../../models/field_visit.dart';
 import '../../../services/field_visit_service.dart';
 import '../../../utils/visit_zone_util.dart';
+import '../../../widgets/field_visit_day_picker.dart';
 import 'itinerary_page_shell.dart';
 
 class VisitHistoryPage extends StatefulWidget {
@@ -39,12 +40,11 @@ class _VisitHistoryPageState extends State<VisitHistoryPage> {
   }
 
   Future<void> _pickMonth() async {
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showFieldVisitDayPicker(
+      context,
       initialDate: _month,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
-      locale: const Locale('it', 'IT'),
     );
     if (picked != null) {
       setState(() {

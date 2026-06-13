@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_card_theme.dart';
+import '../../../widgets/field_visit_day_picker.dart';
 import '../../../widgets/field_visit_link_picker.dart';
 import '../../../models/field_reminder.dart';
 import '../../../services/field_reminder_service.dart';
@@ -62,28 +63,12 @@ class _RemindersPageState extends State<RemindersPage> {
                     trailing: IconButton(
                       icon: const Icon(Icons.schedule),
                       onPressed: () async {
-                        final date = await showDatePicker(
-                          context: ctx,
-                          initialDate: remindAt,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2100),
+                        final picked = await pickFieldVisitDateAndTime(
+                          ctx,
+                          initial: remindAt,
                         );
-                        if (date == null) return;
-                        if (!ctx.mounted) return;
-                        final time = await showTimePicker(
-                          context: ctx,
-                          initialTime: TimeOfDay.fromDateTime(remindAt),
-                        );
-                        if (time == null) return;
-                        setLocal(() {
-                          remindAt = DateTime(
-                            date.year,
-                            date.month,
-                            date.day,
-                            time.hour,
-                            time.minute,
-                          );
-                        });
+                        if (picked == null) return;
+                        setLocal(() => remindAt = picked);
                       },
                     ),
                   ),

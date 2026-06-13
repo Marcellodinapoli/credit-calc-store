@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/creditor_visit_address_service.dart';
 import '../services/field_visit_service.dart';
 import 'address_field_with_scan.dart';
+import 'field_visit_day_picker.dart';
 
 /// Programma una visita da dati incasso/pratica (provvigioni).
 Future<bool> showScheduleFieldVisitDialog(
@@ -61,28 +62,12 @@ Future<bool> showScheduleFieldVisitDialog(
                   trailing: IconButton(
                     icon: const Icon(Icons.schedule),
                     onPressed: () async {
-                      final date = await showDatePicker(
-                        context: ctx,
-                        initialDate: scheduled,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2100),
+                      final picked = await pickFieldVisitDateAndTime(
+                        ctx,
+                        initial: scheduled,
                       );
-                      if (date == null) return;
-                      if (!ctx.mounted) return;
-                      final time = await showTimePicker(
-                        context: ctx,
-                        initialTime: TimeOfDay.fromDateTime(scheduled),
-                      );
-                      if (time == null) return;
-                      setLocal(() {
-                        scheduled = DateTime(
-                          date.year,
-                          date.month,
-                          date.day,
-                          time.hour,
-                          time.minute,
-                        );
-                      });
+                      if (picked == null) return;
+                      setLocal(() => scheduled = picked);
                     },
                   ),
                 ),

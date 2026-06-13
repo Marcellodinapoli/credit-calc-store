@@ -7,9 +7,10 @@ import '../../../core/firestore_user_scope.dart';
 import '../../../core/theme/app_card_theme.dart';
 import '../../../models/field_visit.dart';
 import '../../../services/field_visit_service.dart';
-import '../../../utils/field_visit_maps_util.dart';
+import '../../../utils/field_visit_route_planner.dart';
 import '../../../utils/itinerary_calendar_export.dart';
 import '../../../widgets/address_field_with_scan.dart';
+import '../../../widgets/field_visit_day_picker.dart';
 import '../../../widgets/schedule_field_visit_dialog.dart';
 import '../../../widgets/visit_practice_links.dart';
 import '../../../widgets/voice_note_field.dart';
@@ -39,12 +40,11 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
       ItineraryPageShell(personalArea: widget.personalArea);
 
   Future<void> _pickDay() async {
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showFieldVisitDayPicker(
+      context,
       initialDate: _selectedDay,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
-      locale: const Locale('it', 'IT'),
     );
     if (picked != null) {
       setState(() => _selectedDay = picked);
@@ -97,28 +97,12 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
                     trailing: IconButton(
                       icon: const Icon(Icons.schedule),
                       onPressed: () async {
-                        final date = await showDatePicker(
-                          context: ctx,
-                          initialDate: scheduled,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2100),
+                        final picked = await pickFieldVisitDateAndTime(
+                          ctx,
+                          initial: scheduled,
                         );
-                        if (date == null) return;
-                        if (!ctx.mounted) return;
-                        final time = await showTimePicker(
-                          context: ctx,
-                          initialTime: TimeOfDay.fromDateTime(scheduled),
-                        );
-                        if (time == null) return;
-                        setLocal(() {
-                          scheduled = DateTime(
-                            date.year,
-                            date.month,
-                            date.day,
-                            time.hour,
-                            time.minute,
-                          );
-                        });
+                        if (picked == null) return;
+                        setLocal(() => scheduled = picked);
                       },
                     ),
                   ),
@@ -331,17 +315,7 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
   }
 
   Future<void> _openDayRoute(List<FieldVisit> visits) async {
-    final ok = await FieldVisitMapsUtil.openDayRoute(visits);
-    if (!mounted) return;
-    if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Servono almeno 2 visite con indirizzo per aprire il percorso.',
-          ),
-        ),
-      );
-    }
+    await FieldVisitRoutePlanner.planAndOpen(context, visits);
   }
 
   Color _statusColor(FieldVisitStatus status) {

@@ -15,57 +15,71 @@ abstract final class FieldVisitService {
   static DateTime _dayEnd(DateTime day) =>
       _dayStart(day).add(const Duration(days: 1));
 
-  static Stream<List<FieldVisit>> watchForDay(DateTime day) {
-    final userId = FirestoreUserScope.uid;
-    if (userId == null) return Stream.value(const []);
+  static String visitDayKeyId(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
 
+  static Map<String, int> visitCountsByDayId(
+    List<FieldVisit> visits, {
+    bool excludeCancelled = true,
+  }) {
+    final counts = <String, int>{};
+    for (final visit in visits) {
+      if (excludeCancelled && visit.status == FieldVisitStatus.cancelled) {
+        continue;
+      }
+      final key = visitDayKeyId(visit.scheduledAt);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  static List<FieldVisit> _filterAndSortForDay(
+    List<FieldVisit> visits,
+    DateTime day,
+  ) {
     final start = _dayStart(day);
     final end = _dayEnd(day);
-
-    return _col
-        .where('userId', isEqualTo: userId)
-        .where('scheduledAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-        .where('scheduledAt', isLessThan: Timestamp.fromDate(end))
-        .snapshots()
-        .map((snap) {
-      final visits = snap.docs.map(FieldVisit.fromDoc).toList();
-      visits.sort((a, b) {
-        final orderA = a.routeOrder ?? 9999;
-        final orderB = b.routeOrder ?? 9999;
-        if (orderA != orderB) return orderA.compareTo(orderB);
-        return a.scheduledAt.compareTo(b.scheduledAt);
-      });
-      return visits;
+    final filtered = visits
+        .where(
+          (v) =>
+              !v.scheduledAt.isBefore(start) && v.scheduledAt.isBefore(end),
+        )
+        .toList();
+    filtered.sort((a, b) {
+      final orderA = a.routeOrder ?? 9999;
+      final orderB = b.routeOrder ?? 9999;
+      if (orderA != orderB) return orderA.compareTo(orderB);
+      return a.scheduledAt.compareTo(b.scheduledAt);
     });
+    return filtered;
+  }
+
+  static Stream<List<FieldVisit>> watchForDay(DateTime day) {
+    return watchAllForUser().map((visits) => _filterAndSortForDay(visits, day));
   }
 
   static Stream<List<FieldVisit>> watchWithCoordinates({DateTime? day}) {
-    final userId = FirestoreUserScope.uid;
-    if (userId == null) return Stream.value(const []);
-
-    Query<Map<String, dynamic>> query =
-        _col.where('userId', isEqualTo: userId);
-
-    if (day != null) {
-      final start = _dayStart(day);
-      final end = _dayEnd(day);
-      query = query
-          .where('scheduledAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-          .where('scheduledAt', isLessThan: Timestamp.fromDate(end));
-    }
-
-    return query.snapshots().map((snap) {
-      final visits = snap.docs
-          .map(FieldVisit.fromDoc)
-          .where((v) => v.hasCoordinates && v.status != FieldVisitStatus.cancelled)
-          .toList();
-      visits.sort((a, b) {
-        final orderA = a.routeOrder ?? 9999;
-        final orderB = b.routeOrder ?? 9999;
-        if (orderA != orderB) return orderA.compareTo(orderB);
-        return a.scheduledAt.compareTo(b.scheduledAt);
-      });
-      return visits;
+    return watchAllForUser().map((all) {
+      Iterable<FieldVisit> visits = all.where(
+        (v) => v.hasCoordinates && v.status != FieldVisitStatus.cancelled,
+      );
+      if (day != null) {
+        visits = _filterAndSortForDay(all, day).where(
+          (v) => v.hasCoordinates && v.status != FieldVisitStatus.cancelled,
+        );
+      }
+      final list = visits.toList();
+      if (day == null) {
+        list.sort((a, b) {
+          final orderA = a.routeOrder ?? 9999;
+          final orderB = b.routeOrder ?? 9999;
+          if (orderA != orderB) return orderA.compareTo(orderB);
+          return a.scheduledAt.compareTo(b.scheduledAt);
+        });
+      }
+      return list;
     });
   }
 

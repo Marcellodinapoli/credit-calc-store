@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_card_theme.dart';
+import '../../../widgets/field_visit_day_picker.dart';
 import '../../../widgets/field_visit_link_picker.dart';
 import '../../../widgets/voice_note_field.dart';
 import '../../../models/field_activity.dart';
@@ -111,8 +112,8 @@ class _ActivitiesPageState extends State<ActivitiesPage> {
                         IconButton(
                           icon: const Icon(Icons.event),
                           onPressed: () async {
-                            final picked = await showDatePicker(
-                              context: ctx,
+                            final picked = await showFieldVisitDayPicker(
+                              ctx,
                               initialDate: dueAt ?? DateTime.now(),
                               firstDate: DateTime(2020),
                               lastDate: DateTime(2100),

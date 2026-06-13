@@ -11,6 +11,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/read_state_service.dart';
+import '../../services/roleplay_progress_service.dart';
 import '../../ui/layout/page_shell.dart';
 
 class RoleplayPage extends StatefulWidget {
@@ -36,6 +37,8 @@ class _RoleplayPageState extends State<RoleplayPage> {
   bool _isSpeaking = false;
 
   Map<String, dynamic>? _currentSimulation;
+  String? _currentSimulationId;
+  String? _currentSimulationCategory;
 
   final List<Map<String, String>> _chatHistory = [];
 
@@ -128,8 +131,14 @@ class _RoleplayPageState extends State<RoleplayPage> {
     );
   }
 
-  void _startSimulation(Map<String, dynamic> simulationData) {
+  void _startSimulation(
+    Map<String, dynamic> simulationData, {
+    required String simulationId,
+    required String category,
+  }) {
     _currentSimulation = simulationData;
+    _currentSimulationId = simulationId;
+    _currentSimulationCategory = category;
     _chatHistory.clear();
     _lastUserText = '';
 
@@ -177,8 +186,28 @@ class _RoleplayPageState extends State<RoleplayPage> {
     });
   }
 
-  void _stopSimulation() {
+  Future<void> _stopSimulation() async {
+    if (_simulationActive && _currentSimulation != null) {
+      final userExchanges =
+          _chatHistory.where((m) => m['role'] == 'user').length;
+      if (userExchanges > 0 || _chatHistory.isNotEmpty) {
+        await RoleplayProgressService.saveLastSimulation(
+          simulationId: _currentSimulationId ?? '',
+          title: (_currentSimulation!['title'] ?? 'Simulazione').toString(),
+          category: _currentSimulationCategory ?? '',
+          practiceData:
+              _currentSimulation!['practiceData'] as List<dynamic>? ?? [],
+          userExchanges: userExchanges,
+          totalMessages: _chatHistory.length,
+        );
+      }
+    }
+
     _simulationActive = false;
+    _currentSimulation = null;
+    _currentSimulationId = null;
+    _currentSimulationCategory = null;
+
     _stopSpeech();
     try {
       _channel?.sink.close();
@@ -357,12 +386,16 @@ class _RoleplayPageState extends State<RoleplayPage> {
               isNew: isNew,
               completed: completed,
               simulationActive: _simulationActive,
-              onOpenSimulation: () => _startSimulation({
-                'title': title,
-                'prompt': data['prompt'] ?? '',
-                'practiceData': practiceData,
-              }),
-              onStopSimulation: _stopSimulation,
+              onOpenSimulation: () => _startSimulation(
+                {
+                  'title': title,
+                  'prompt': data['prompt'] ?? '',
+                  'practiceData': practiceData,
+                },
+                simulationId: doc.id,
+                category: type,
+              ),
+              onStopSimulation: () => _stopSimulation(),
               onShowHint: completed
                   ? () {
                       showDialog<void>(

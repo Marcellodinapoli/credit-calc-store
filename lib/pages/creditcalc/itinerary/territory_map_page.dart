@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../models/field_visit.dart';
 import '../../../services/field_visit_service.dart';
 import '../../../utils/field_visit_maps_util.dart';
+import '../../../utils/field_visit_route_planner.dart';
 import '../../../utils/map_marker_cluster_util.dart';
 import '../../../widgets/visit_practice_links.dart';
 import 'itinerary_page_shell.dart';
@@ -245,7 +246,10 @@ class _TerritoryMapPageState extends State<TerritoryMapPage> {
                           alignment: Alignment.centerLeft,
                           child: OutlinedButton.icon(
                             onPressed: () =>
-                                FieldVisitMapsUtil.openDayRoute(visits),
+                                FieldVisitRoutePlanner.planAndOpen(
+                              context,
+                              visits,
+                            ),
                             icon: const Icon(Icons.directions),
                             label: const Text('Apri percorso giornata'),
                           ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/dimensions.dart';
 import '../../services/itinerary_notifications_service.dart';
+import '../../services/location_consent_service.dart';
 import '../../services/product_notifications_service.dart';
 import 'personal_area_shell.dart';
 
@@ -74,21 +75,10 @@ class _NotificationPreferencesPageState
     }
 
     if (value) {
-      await ItineraryNotificationsService.setEnabled(uid: uid, enabled: true);
-      if (!mounted) return;
-      setState(() => _itineraryEnabled = true);
-      if (result.permissionIssue != null) {
-        setState(() => _enabled = false);
-        _showSnack(result.permissionIssue!);
-      } else if (result.tokenRegistered) {
-        _showSnack('Notifiche attivate su questo dispositivo.');
-      } else {
-        _showSnack(
-          'Preferenza salvata. Se richiesto, consenti le notifiche sul dispositivo.',
-        );
-      }
+      _showSnack('Notifiche attivate.');
     } else {
       await ItineraryNotificationsService.setEnabled(uid: uid, enabled: false);
+      await LocationConsentService.setEnabled(uid: uid, enabled: false);
       if (!mounted) return;
       setState(() => _itineraryEnabled = false);
       _showSnack('Notifiche disattivate.');
@@ -105,13 +95,14 @@ class _NotificationPreferencesPageState
     });
 
     await ItineraryNotificationsService.setEnabled(uid: uid, enabled: value);
+    await LocationConsentService.setEnabled(uid: uid, enabled: value);
 
     if (!mounted) return;
     setState(() => _savingItinerary = false);
     _showSnack(
       value
-          ? 'Promemoria itinerario attivati.'
-          : 'Promemoria itinerario disattivati.',
+          ? 'Promemoria itinerario e uso posizione attivati.'
+          : 'Promemoria itinerario e uso posizione disattivati.',
     );
   }
 
@@ -126,7 +117,7 @@ class _NotificationPreferencesPageState
     final theme = Theme.of(context);
 
     return PersonalAreaShell(
-      pageTitle: 'Aggiornamenti',
+      pageTitle: 'Notifiche',
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -159,7 +150,8 @@ class _NotificationPreferencesPageState
                         SwitchListTile(
                           title: const Text('Itinerario sul territorio'),
                           subtitle: const Text(
-                            'Promemoria programmati e avviso 30 min prima delle visite.',
+                            'Promemoria programmati, avviso 30 min prima delle '
+                            'visite e uso della posizione per i percorsi.',
                           ),
                           value: _itineraryEnabled,
                           onChanged: _uid == null ||
@@ -213,12 +205,13 @@ class _NotificationPreferencesPageState
                   const SizedBox(height: 16),
                   _infoBox(
                     context,
-                    icon: Icons.devices_outlined,
-                    title: 'Dispositivo',
+                    icon: Icons.verified_user_outlined,
+                    title: 'Consenso da questa pagina',
                     text:
-                        'Attivando l\'opzione, il sistema può chiederti il '
-                        'consenso alle notifiche push. La scelta si applica al '
-                        'dispositivo che stai usando.',
+                        'Attivando le opzioni confermi di voler ricevere gli '
+                        'avvisi indicati e, per l\'itinerario, di autorizzare '
+                        'l\'uso della posizione per i percorsi. La scelta resta '
+                        'valida su questo dispositivo finché non la modifichi.',
                   ),
                 ],
               ),

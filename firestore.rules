@@ -358,6 +358,25 @@ match /companies/{companyId}/rules_history/{docId} {
     }
 
     // ------------------------------------------------------------------
+    // CREDITFORM — ultima simulazione roleplay (un record per utente)
+    // ------------------------------------------------------------------
+    match /roleplay_progress/{userId} {
+      allow read: if request.auth != null && (
+        request.auth.token.admin == true
+        || request.auth.uid == userId
+      );
+
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.userId == request.auth.uid;
+
+      allow delete: if request.auth != null && (
+        request.auth.uid == userId
+        || request.auth.token.admin == true
+      );
+    }
+
+    // ------------------------------------------------------------------
     // WORK — segnalazioni supervisor → backoffice (blocco utente)
     // ------------------------------------------------------------------
     match /work_user_reports/{docId} {
