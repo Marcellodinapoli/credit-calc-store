@@ -5,7 +5,7 @@ import '../../core/maintenance_service.dart';
 import '../../ui/layout/page_shell.dart';
 import '../../widgets/maintenance_section_gate.dart';
 
-/// Layout secondario per pagine CreditJob (tema verde sul contenuto).
+/// Layout principale per pagine CreditJob (tema verde sul contenuto).
 class PersonalJobShell extends StatelessWidget {
   final String pageTitle;
   final Widget body;
@@ -22,20 +22,21 @@ class PersonalJobShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SecondaryPageScaffold(
-      pageTitle: pageTitle,
+    final themedBody = MaintenanceSectionGate(
+      sectionName: MaintenanceService.creditJob,
+      child: Theme(
+        data: buildJobTheme(),
+        child: body,
+      ),
+    );
+
+    return PrimaryModuleScaffold(
       project: BrandedPageProject.job,
-      padded: padded,
+      pageTitle: pageTitle,
       bottomBar: bottomBar == null
           ? null
           : Theme(data: buildJobTheme(), child: bottomBar!),
-      body: MaintenanceSectionGate(
-        sectionName: MaintenanceService.creditJob,
-        child: Theme(
-          data: buildJobTheme(),
-          child: body,
-        ),
-      ),
+      body: themedBody,
     );
   }
 }

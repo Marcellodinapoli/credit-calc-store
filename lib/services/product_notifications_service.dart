@@ -156,6 +156,11 @@ class ProductNotificationsService {
     );
   }
 
+  static Future<bool> hasSystemPermission() async {
+    if (!supportsNativeFcmPush) return false;
+    return _hasFcmPermission();
+  }
+
   static Future<bool> _hasFcmPermission() async {
     final settings = await _messaging.getNotificationSettings();
     return settings.authorizationStatus == AuthorizationStatus.authorized ||

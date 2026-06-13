@@ -7,7 +7,6 @@ const _pickerHeaderBackground = Color(0xFF1565C0);
 const _pickerHeaderForeground = Colors.white;
 const _pickerActionColor = Color(0xFF1565C0);
 const _dayCellHeight = 62.0;
-const _calendarChromeHeight = 118.0;
 
 int _monthGridRowCount(DateTime month, MaterialLocalizations localizations) {
   const calendar = GregorianCalendarDelegate();
@@ -19,15 +18,6 @@ int _monthGridRowCount(DateTime month, MaterialLocalizations localizations) {
     localizations,
   );
   return ((firstDayOffset + daysInMonth) / 7).ceil();
-}
-
-double _calendarPanelHeight(
-  DateTime month,
-  MaterialLocalizations localizations,
-) {
-  return _calendarChromeHeight +
-      _monthGridRowCount(month, localizations) * _dayCellHeight +
-      12;
 }
 
 Future<DateTime?> showFieldVisitDayPicker(
@@ -125,11 +115,10 @@ class _FieldVisitDayPickerDialogState extends State<FieldVisitDayPickerDialog> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final localizations = MaterialLocalizations.of(context);
     final screenWidth = MediaQuery.sizeOf(context).width;
     final wide = screenWidth >= 520;
     const dialogWidth = 560.0;
-    final panelHeight = _calendarPanelHeight(_displayedMonth, localizations);
+    final maxDialogHeight = MediaQuery.sizeOf(context).height * 0.85;
 
     return Dialog(
       clipBehavior: Clip.antiAlias,
@@ -155,13 +144,15 @@ class _FieldVisitDayPickerDialogState extends State<FieldVisitDayPickerDialog> {
             onDaySelected: _selectDay,
           );
 
-          return SizedBox(
-            width: dialogWidth,
+          return ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: dialogWidth,
+              maxHeight: maxDialogHeight,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
-                  height: panelHeight,
+                IntrinsicHeight(
                   child: wide
                       ? Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,

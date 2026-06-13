@@ -76,7 +76,10 @@ abstract final class FieldVisitMapsUtil {
     );
     if (url == null) return false;
     final uri = Uri.parse(url);
-    if (!await canLaunchUrl(uri)) return false;
-    return launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      return await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      return false;
+    }
   }
 }

@@ -115,7 +115,7 @@ class _RemindersPageState extends State<RemindersPage> {
 
     setState(() => _busy = true);
     try {
-      await FieldReminderService.save(
+      final result = await FieldReminderService.save(
         id: reminder?.id,
         title: titleCtrl.text,
         remindAt: remindAt,
@@ -123,9 +123,33 @@ class _RemindersPageState extends State<RemindersPage> {
         visitId: visitId,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Promemoria salvato.')),
-      );
+
+      final schedule = result.schedule;
+      if (schedule.scheduled && schedule.notifyAt != null) {
+        final at = schedule.notifyAt!;
+        final h = at.hour.toString().padLeft(2, '0');
+        final m = at.minute.toString().padLeft(2, '0');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Promemoria salvato. Avviso programmato alle $h:$m.',
+            ),
+          ),
+        );
+      } else if (schedule.issue != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Promemoria salvato, ma l\'avviso non è programmato: '
+              '${schedule.issue}',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Promemoria salvato.')),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

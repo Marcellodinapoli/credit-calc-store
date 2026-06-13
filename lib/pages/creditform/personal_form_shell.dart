@@ -21,20 +21,21 @@ class PersonalFormShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SecondaryPageScaffold(
-      pageTitle: pageTitle,
+    final themedBody = MaintenanceSectionGate(
+      sectionName: MaintenanceService.creditForm,
+      child: Theme(
+        data: buildFormTheme(),
+        child: body,
+      ),
+    );
+
+    return PrimaryModuleScaffold(
       project: BrandedPageProject.form,
-      padded: padded,
+      pageTitle: pageTitle,
       bottomBar: bottomBar == null
           ? null
           : Theme(data: buildFormTheme(), child: bottomBar!),
-      body: MaintenanceSectionGate(
-        sectionName: MaintenanceService.creditForm,
-        child: Theme(
-          data: buildFormTheme(),
-          child: body,
-        ),
-      ),
+      body: themedBody,
     );
   }
 }

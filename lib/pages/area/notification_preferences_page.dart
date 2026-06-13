@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/dimensions.dart';
+import '../../services/field_reminder_notification_service.dart';
 import '../../services/itinerary_notifications_service.dart';
 import '../../services/location_consent_service.dart';
 import '../../services/product_notifications_service.dart';
@@ -96,6 +97,9 @@ class _NotificationPreferencesPageState
 
     await ItineraryNotificationsService.setEnabled(uid: uid, enabled: value);
     await LocationConsentService.setEnabled(uid: uid, enabled: value);
+    if (value) {
+      await FieldReminderNotificationService.syncAllForCurrentUser();
+    }
 
     if (!mounted) return;
     setState(() => _savingItinerary = false);

@@ -10,6 +10,7 @@ import 'auth/login_page.dart';
 import 'auth/waiting_page.dart';
 import 'core/maintenance_service.dart';
 import 'services/fcm_service.dart';
+import 'services/field_reminder_notification_service.dart';
 import 'offline/credit_calc_bootstrap_gate.dart';
 import 'offline/credit_calc_runtime.dart';
 
@@ -115,6 +116,7 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
   void initState() {
     super.initState();
     FcmService.syncForCurrentUser();
+    FieldReminderNotificationService.syncAllForCurrentUser();
     _checkAccess();
   }
 

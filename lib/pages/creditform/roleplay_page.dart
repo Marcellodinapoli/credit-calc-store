@@ -12,7 +12,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/read_state_service.dart';
 import '../../services/roleplay_progress_service.dart';
-import '../../ui/layout/page_shell.dart';
+import 'personal_form_shell.dart';
 
 class RoleplayPage extends StatefulWidget {
   const RoleplayPage({super.key});
@@ -237,9 +237,8 @@ class _RoleplayPageState extends State<RoleplayPage> {
   Widget build(BuildContext context) {
     final category = _tabIndex == 0 ? 'Sollecito' : 'Recupero';
 
-    return SecondaryPageScaffold(
-      pageTitle: 'Roleplay',
-      project: BrandedPageProject.form,
+    return PersonalFormShell(
+      pageTitle: 'Role Play',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

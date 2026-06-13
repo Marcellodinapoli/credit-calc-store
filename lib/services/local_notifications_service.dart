@@ -1,15 +1,21 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:timezone/data/latest.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 
-/// Notifiche di sistema per foreground FCM e push desktop Windows.
+/// Notifiche di sistema per foreground FCM, promemoria itinerario e push desktop.
 class LocalNotificationsService {
   LocalNotificationsService._();
 
   static const _channelId = 'creditcore_product';
   static const _channelName = 'Aggiornamenti CreditCore';
+  static const _itineraryChannelId = 'creditcore_itinerary';
+  static const _itineraryChannelName = 'Itinerario CreditCalc';
 
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
+  static bool _timeZonesReady = false;
 
   static Future<void> initialize() async {
     if (_initialized || kIsWeb) return;
@@ -34,20 +40,40 @@ class LocalNotificationsService {
     );
 
     await _plugin.initialize(initSettings);
+    await _ensureTimeZones();
 
     if (defaultTargetPlatform == TargetPlatform.android) {
-      await _plugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(
-            const AndroidNotificationChannel(
-              _channelId,
-              _channelName,
-              description: 'Novità su offerte, corsi e funzioni CreditCore',
-              importance: Importance.high,
-            ),
-          );
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      await android?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _channelId,
+          _channelName,
+          description: 'Novità su offerte, corsi e funzioni CreditCore',
+          importance: Importance.high,
+        ),
+      );
+      await android?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _itineraryChannelId,
+          _itineraryChannelName,
+          description: 'Promemoria itinerario e avvisi pre-visita',
+          importance: Importance.high,
+        ),
+      );
     }
+  }
+
+  static Future<void> _ensureTimeZones() async {
+    if (_timeZonesReady) return;
+    tz_data.initializeTimeZones();
+    try {
+      final timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+    } catch (_) {
+      tz.setLocalLocation(tz.getLocation('Europe/Rome'));
+    }
+    _timeZonesReady = true;
   }
 
   static Future<bool> requestPermission() async {
@@ -55,6 +81,18 @@ class LocalNotificationsService {
 
     if (defaultTargetPlatform == TargetPlatform.windows) {
       return true;
+    }
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (android == null) return false;
+
+      final enabled = await android.areNotificationsEnabled();
+      if (enabled == true) return true;
+
+      final granted = await android.requestNotificationsPermission();
+      return granted ?? false;
     }
 
     if (defaultTargetPlatform == TargetPlatform.iOS ||
@@ -83,6 +121,31 @@ class LocalNotificationsService {
     }
 
     return true;
+  }
+
+  /// Verifica se il permesso notifiche è già concesso (senza chiedere nulla).
+  static Future<bool> hasPermission() async {
+    if (!_initialized || kIsWeb) return false;
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      return await android?.areNotificationsEnabled() ?? false;
+    }
+
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      return true;
+    }
+
+    return true;
+  }
+
+  /// Chiede il permesso solo se [allowPrompt] è true e non è già concesso.
+  static Future<bool> ensurePermission({bool allowPrompt = true}) async {
+    if (await hasPermission()) return true;
+    if (!allowPrompt) return false;
+    return requestPermission();
   }
 
   static Future<void> showProductNotification({
@@ -115,5 +178,47 @@ class LocalNotificationsService {
       details,
       payload: payload,
     );
+  }
+
+  static Future<void> scheduleItineraryReminder({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime when,
+    String? payload,
+  }) async {
+    if (!_initialized || kIsWeb) return;
+    await _ensureTimeZones();
+
+    const androidDetails = AndroidNotificationDetails(
+      _itineraryChannelId,
+      _itineraryChannelName,
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _plugin.zonedSchedule(
+      id,
+      title,
+      body,
+      tz.TZDateTime.from(when, tz.local),
+      details,
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: payload,
+    );
+  }
+
+  static Future<void> cancelScheduled(int id) async {
+    if (!_initialized || kIsWeb) return;
+    await _plugin.cancel(id);
   }
 }

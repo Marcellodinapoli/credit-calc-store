@@ -5,6 +5,7 @@ import '../models/field_visit.dart';
 import '../services/field_visit_service.dart';
 import '../services/location_consent_service.dart';
 import '../services/user_location_service.dart';
+import '../widgets/field_visit_route_preview_dialog.dart';
 import 'field_visit_maps_util.dart';
 import 'field_visit_route_optimizer.dart';
 
@@ -84,6 +85,13 @@ abstract final class FieldVisitRoutePlanner {
     if (confirmed != true || !context.mounted) return;
 
     await FieldVisitService.saveRouteOrder(plan.orderedVisits);
+
+    if (!context.mounted) return;
+    final openMaps = await showFieldVisitRoutePreviewDialog(
+      context,
+      plan: plan,
+    );
+    if (!openMaps || !context.mounted) return;
 
     final opened = await FieldVisitMapsUtil.openDayRoute(
       plan.orderedVisits,
@@ -259,7 +267,7 @@ class _RoutePlanDialog extends StatelessWidget {
         FilledButton.icon(
           onPressed: () => Navigator.pop(context, true),
           icon: const Icon(Icons.directions),
-          label: const Text('Applica e apri Maps'),
+          label: const Text('Applica percorso'),
         ),
       ],
     );

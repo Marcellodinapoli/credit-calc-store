@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shell/credit_module_shell_actions.dart';
 import '../../core/dimensions.dart';
 import '../../core/theme/project_colors.dart';
 
@@ -114,6 +115,58 @@ abstract final class PageShellTheme {
   static const Color scaffoldBackground = Colors.white;
   static const Color drawerBackground = Color(0xFFECEFF1);
   static const double sidebarWidth = 260;
+}
+
+/// Impaginazione principale moduli Form/Job/Area (come CreditCalc).
+class PrimaryModuleScaffold extends StatelessWidget {
+  final BrandedPageProject project;
+  final String pageTitle;
+  final Widget body;
+  final Widget? bottomBar;
+
+  const PrimaryModuleScaffold({
+    super.key,
+    required this.project,
+    required this.pageTitle,
+    required this.body,
+    this.bottomBar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: PageShellTheme.scaffoldBackground,
+      resizeToAvoidBottomInset: true,
+      appBar: AppBar(
+        backgroundColor: PageShellTheme.appBarBackground,
+        title: BrandedProjectName(project: project),
+        actions: CreditModuleShellActions.appBarActions(context),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: PageShellBody(
+              pageTitle: pageTitle,
+              child: body,
+            ),
+          ),
+          if (bottomBar != null)
+            Material(
+              color: Colors.white,
+              elevation: 12,
+              shadowColor: Colors.black26,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: Dimensions.resolvedBottomInset(context),
+                ),
+                child: bottomBar!,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Header secondario con freccia e titolo neri (non usa AppBar Material 3).
