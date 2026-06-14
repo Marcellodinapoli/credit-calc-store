@@ -7,7 +7,7 @@ abstract final class FieldVisitMapsUtil {
 
   static List<FieldVisit> routableVisits(List<FieldVisit> visits) {
     return visits
-        .where((v) => v.status != FieldVisitStatus.cancelled)
+        .where((v) => v.isActiveForItinerary)
         .where((v) => v.hasCoordinates || v.address.trim().isNotEmpty)
         .toList();
   }

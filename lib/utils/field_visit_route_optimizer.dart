@@ -95,7 +95,7 @@ abstract final class FieldVisitRouteOptimizer {
           (v) =>
               !orderedIds.contains(v.id) &&
               v.address.trim().isNotEmpty &&
-              v.status != FieldVisitStatus.cancelled,
+              v.isActiveForItinerary,
         )
         .toList()
       ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
@@ -104,7 +104,7 @@ abstract final class FieldVisitRouteOptimizer {
 
   static List<FieldVisit> orderBySchedule(List<FieldVisit> visits) {
     final routable = visits
-        .where((v) => v.status != FieldVisitStatus.cancelled)
+        .where((v) => v.isActiveForItinerary)
         .where((v) => v.hasCoordinates || v.address.trim().isNotEmpty)
         .toList()
       ..sort((a, b) {
@@ -124,7 +124,7 @@ abstract final class FieldVisitRouteOptimizer {
     double? originLongitude,
   }) {
     final routable = visits
-        .where((v) => v.status != FieldVisitStatus.cancelled)
+        .where((v) => v.isActiveForItinerary)
         .where((v) => v.hasCoordinates || v.address.trim().isNotEmpty)
         .toList();
 

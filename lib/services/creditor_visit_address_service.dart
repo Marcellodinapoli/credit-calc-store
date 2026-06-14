@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../offline/repository/credit_calc_repository.dart';
 
 /// Indirizzo sede visita salvato in anagrafica creditore.
@@ -6,10 +8,9 @@ abstract final class CreditorVisitAddressService {
     final id = creditorId?.trim();
     if (id == null || id.isEmpty) return null;
 
-    final doc = await CreditCalcRepository.instance.getCreditor(id);
-    if (doc == null) return null;
+    final data = await _loadCreditorData(id);
+    if (data == null) return null;
 
-    final data = doc.data;
     final visitAddress = (data['visitAddress'] ?? '').toString().trim();
     if (visitAddress.isNotEmpty) return visitAddress;
 
@@ -21,5 +22,19 @@ abstract final class CreditorVisitAddressService {
       }
     }
     return null;
+  }
+
+  static Future<Map<String, dynamic>?> _loadCreditorData(String id) async {
+    try {
+      final doc = await CreditCalcRepository.instance.getCreditor(id);
+      return doc?.data;
+    } catch (_) {
+      final snap = await FirebaseFirestore.instance
+          .collection('creditors')
+          .doc(id)
+          .get();
+      if (!snap.exists) return null;
+      return snap.data();
+    }
   }
 }

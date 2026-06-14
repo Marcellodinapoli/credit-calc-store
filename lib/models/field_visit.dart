@@ -63,6 +63,9 @@ class FieldVisit {
 
   bool get needsGeocoding => address.trim().isNotEmpty && !hasCoordinates;
 
+  /// Visita ancora da fare su mappa e percorso (non completata/annullata).
+  bool get isActiveForItinerary => status == FieldVisitStatus.planned;
+
   factory FieldVisit.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
     final scheduled = data['scheduledAt'];

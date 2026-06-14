@@ -3,11 +3,15 @@
 // CONFIG / IMPORT
 // ============================================================
 
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:speech_to_text/speech_recognition_error.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/read_state_service.dart';
@@ -27,11 +31,21 @@ class _RoleplayPageState extends State<RoleplayPage> {
   bool _readStateReady = false;
 
   WebSocketChannel? _channel;
-  final SpeechToText _speech = SpeechToText();
+  SpeechToText _speech = SpeechToText();
   final FlutterTts _tts = FlutterTts();
   bool _speechReady = false;
+  String? _speechLocaleId;
 
-  String _lastUserText = "";
+  String _lastUserText = '';
+  String? _sessionId;
+  bool _awaitingReply = false;
+  bool _needsMicTap = false;
+  bool _micActive = false;
+  String? _responderRole;
+  int _micRestartToken = 0;
+  bool _startingListen = false;
+
+  static const String _metaPrefix = '__META__:';
 
   bool _simulationActive = false;
   bool _isSpeaking = false;
@@ -49,14 +63,211 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _initSpeech();
   }
 
+  bool get _shouldKeepListening =>
+      _simulationActive && !_isSpeaking && !_awaitingReply;
+
+  bool _isBenignSpeechError(String msg) =>
+      msg == 'error_no_match' ||
+      msg == 'error_speech_timeout' ||
+      msg == 'error_client';
+
+  Future<String?> _resolveItalianLocale() async {
+    final locales = await _speech.locales();
+    for (final locale in locales) {
+      final id = locale.localeId.toLowerCase();
+      if (id == 'it_it' || id == 'it-it' || id.startsWith('it')) {
+        return locale.localeId;
+      }
+    }
+    return null;
+  }
+
+  void _runAfterSpeechEvent(VoidCallback action) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        action();
+      } catch (e, st) {
+        debugPrint('Speech handler error: $e\n$st');
+      }
+    });
+  }
+
   Future<void> _initSpeech() async {
     _speechReady = await _speech.initialize(
-      onStatus: (status) => debugPrint('Speech status: $status'),
-      onError: (error) => debugPrint('Speech error: $error'),
+      onStatus: (status) {
+        if (kDebugMode && status == 'listening') {
+          debugPrint('Speech status: $status');
+        }
+        _runAfterSpeechEvent(() => _handleSpeechStatus(status));
+      },
+      onError: (error) {
+        if (!_isBenignSpeechError(error.errorMsg)) {
+          debugPrint('Speech error: $error');
+        }
+        _runAfterSpeechEvent(() => _handleSpeechError(error));
+      },
     );
-    await _tts.setLanguage('it-IT');
-    await _tts.setSpeechRate(0.45);
+    if (_speechReady) {
+      _speechLocaleId = await _resolveItalianLocale();
+    }
+    await _configureTtsVoice(preferMale: true);
   }
+
+  void _handleSpeechStatus(String status) {
+    if (!mounted) return;
+
+    if (status == 'listening') {
+      if (!_micActive || _needsMicTap) {
+        setState(() {
+          _micActive = true;
+          _needsMicTap = false;
+        });
+      }
+      return;
+    }
+
+    if (status == 'done' || status == 'notListening') {
+      if (_shouldKeepListening) {
+        if (!_micActive || _needsMicTap) {
+          setState(() {
+            _micActive = true;
+            _needsMicTap = false;
+          });
+        }
+        _scheduleContinuousListening();
+      } else if (_micActive) {
+        setState(() => _micActive = false);
+      }
+    }
+  }
+
+  void _handleSpeechError(SpeechRecognitionError error) {
+    if (!mounted) return;
+
+    final benign = _isBenignSpeechError(error.errorMsg);
+
+    if (benign && _shouldKeepListening) {
+      if (!_micActive) {
+        setState(() => _micActive = true);
+      }
+      _scheduleContinuousListening();
+      return;
+    }
+
+    if (_micActive) setState(() => _micActive = false);
+
+    if (_shouldKeepListening) {
+      _scheduleContinuousListening(delay: const Duration(milliseconds: 1200));
+    } else {
+      setState(() => _needsMicTap = true);
+    }
+  }
+
+  Future<void> _configureTtsVoice({required bool preferMale}) async {
+    await _tts.setLanguage('it-IT');
+    await _tts.setSpeechRate(0.48);
+    await _tts.setPitch(preferMale ? 0.78 : 1.0);
+
+    final voices = await _tts.getVoices;
+    if (voices is! List) return;
+
+    Map<String, String>? italian;
+    Map<String, String>? maleItalian;
+
+    for (final raw in voices) {
+      if (raw is! Map) continue;
+      final voice = Map<String, String>.from(
+        raw.map((k, v) => MapEntry(k.toString(), v.toString())),
+      );
+      final locale = (voice['locale'] ?? '').toLowerCase();
+      final name = (voice['name'] ?? '').toLowerCase();
+      if (!locale.contains('it')) continue;
+
+      italian ??= voice;
+      if (name.contains('male') ||
+          name.contains('luca') ||
+          name.contains('diego') ||
+          name.contains('cosimo') ||
+          name.contains('matteo') ||
+          name.contains('it-it-x-itd')) {
+        maleItalian = voice;
+        break;
+      }
+    }
+
+    final chosen = preferMale ? (maleItalian ?? italian) : italian;
+    if (chosen != null) {
+      await _tts.setVoice(chosen);
+    }
+  }
+
+  String _extractSpeakableReply(String raw) {
+    var trimmed = raw.trim();
+    if (trimmed.isEmpty) return trimmed;
+
+    final metaIdx = trimmed.indexOf(_metaPrefix);
+    if (metaIdx >= 0) {
+      trimmed = trimmed.substring(0, metaIdx).trim();
+    }
+
+    if (!trimmed.startsWith('{')) return trimmed;
+
+    try {
+      final parsed = jsonDecode(trimmed);
+      if (parsed is Map && parsed['reply'] != null) {
+        if (parsed['role'] != null) {
+          _responderRole = parsed['role'].toString();
+        }
+        return parsed['reply'].toString().trim();
+      }
+    } catch (_) {}
+
+    return trimmed;
+  }
+
+  Map<String, dynamic> _wsPayload({required String userText}) {
+    return {
+      'userText': userText,
+      'history': _chatHistory,
+      'practiceData': _currentSimulation?['practiceData'] ?? [],
+      'sessionId': _sessionId ?? 'default',
+      'prompt': (_currentSimulation?['prompt'] ?? '').toString(),
+      'supportsMeta': true,
+      if (_currentSimulation?['scenarioWeights'] != null)
+        'scenarioWeights': _currentSimulation!['scenarioWeights'],
+    };
+  }
+
+  void _cancelMicRestart() {
+    _micRestartToken++;
+  }
+
+  void _requestMicrophone() {
+    if (!_simulationActive || _isSpeaking || _awaitingReply) return;
+    _cancelMicRestart();
+    setState(() => _needsMicTap = false);
+    _safeStartListening();
+  }
+
+  void _scheduleContinuousListening({
+    Duration delay = const Duration(milliseconds: 450),
+  }) {
+    if (!_shouldKeepListening) return;
+    final token = ++_micRestartToken;
+    Future.delayed(delay, () async {
+      if (token != _micRestartToken || !_shouldKeepListening) return;
+      await _startListeningOnce();
+      if (!mounted || !_shouldKeepListening) return;
+      if (!_speech.isListening) {
+        _scheduleContinuousListening(delay: const Duration(milliseconds: 900));
+      }
+    });
+  }
+
+  void _scheduleMicRestart() => _scheduleContinuousListening(
+        delay: const Duration(milliseconds: 1200),
+      );
 
   Future<void> _initReadState() async {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -91,44 +302,97 @@ class _RoleplayPageState extends State<RoleplayPage> {
   }
 
   void _stopSpeech() {
+    _cancelMicRestart();
     try {
       _speech.stop();
     } catch (_) {}
   }
 
+  Future<void> _refreshSpeechEngine() async {
+    _cancelMicRestart();
+    try {
+      await _speech.stop();
+    } catch (_) {}
+    _speech = SpeechToText();
+    _speechReady = false;
+    _speechLocaleId = null;
+    await _initSpeech();
+  }
+
   void _safeStartListening() {
-    if (!_speechReady || !_simulationActive || _isSpeaking) return;
-    _startListeningOnce();
+    unawaited(_startListeningOnce());
   }
 
   Future<void> _startListeningOnce() async {
-    if (!_speechReady || !_simulationActive || _isSpeaking) return;
-    await _speech.listen(
-      localeId: 'it_IT',
-      listenMode: ListenMode.confirmation,
-      onResult: (result) async {
-        if (!result.finalResult || !_simulationActive) return;
-        final transcript = result.recognizedWords.trim();
-        if (transcript.isEmpty || transcript == _lastUserText) return;
+    if (!_speechReady || !_shouldKeepListening || _startingListen) return;
+    if (_speech.isListening) return;
 
-        _lastUserText = transcript;
+    _startingListen = true;
+    try {
+      try {
         await _speech.stop();
-        _isSpeaking = false;
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 150));
 
-        _chatHistory.add({
-          'role': 'user',
-          'content': transcript,
+      if (!_shouldKeepListening || !mounted) return;
+
+      await _speech.listen(
+        listenOptions: SpeechListenOptions(
+          localeId: _speechLocaleId,
+          listenMode: ListenMode.dictation,
+          listenFor: const Duration(seconds: 120),
+          pauseFor: const Duration(seconds: 4),
+          cancelOnError: true,
+          partialResults: true,
+        ),
+        onResult: (result) {
+          unawaited(_handleUserTranscript(result));
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _needsMicTap = false;
+          _micActive = true;
         });
+      }
+    } catch (e) {
+      debugPrint('Speech listen error: $e');
+      if (_shouldKeepListening) {
+        _scheduleContinuousListening(delay: const Duration(milliseconds: 900));
+      } else if (mounted) {
+        setState(() => _needsMicTap = true);
+      }
+    } finally {
+      _startingListen = false;
+    }
+  }
 
-        if (!mounted || !_simulationActive) return;
+  Future<void> _handleUserTranscript(SpeechRecognitionResult result) async {
+    if (!result.finalResult || !_simulationActive) return;
+    final transcript = result.recognizedWords.trim();
+    if (transcript.isEmpty || transcript == _lastUserText) return;
 
-        _channel?.sink.add(jsonEncode({
-          'userText': transcript,
-          'history': _chatHistory,
-          'practiceData': _currentSimulation?['practiceData'] ?? [],
-        }));
-      },
-    );
+    _lastUserText = transcript;
+    _cancelMicRestart();
+
+    if (mounted) {
+      setState(() {
+        _awaitingReply = true;
+        _micActive = false;
+      });
+    }
+
+    try {
+      await _speech.stop();
+    } catch (_) {}
+
+    _chatHistory.add({
+      'role': 'user',
+      'content': transcript,
+    });
+
+    if (!mounted || !_simulationActive) return;
+    _channel?.sink.add(jsonEncode(_wsPayload(userText: transcript)));
   }
 
   void _startSimulation(
@@ -141,11 +405,17 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _currentSimulationCategory = category;
     _chatHistory.clear();
     _lastUserText = '';
+    _sessionId = '${simulationId}_${DateTime.now().millisecondsSinceEpoch}';
+    _awaitingReply = false;
+    _needsMicTap = false;
+    _micActive = false;
+    _responderRole = null;
 
     _simulationActive = true;
     setState(() {});
 
     _stopSpeech();
+    unawaited(_refreshSpeechEngine());
 
     try {
       _channel?.sink.close();
@@ -155,34 +425,51 @@ class _RoleplayPageState extends State<RoleplayPage> {
       Uri.parse('ws://162.55.210.130:3001'),
     );
 
-    var aiBuffer = '';
+    final aiBuffer = StringBuffer();
 
     _channel!.stream.listen((event) {
       final msg = event.toString();
 
       if (msg == '[END]') {
-        if (aiBuffer.trim().isNotEmpty) {
+        final reply = _extractSpeakableReply(aiBuffer.toString());
+        aiBuffer.clear();
+        if (mounted) {
+          setState(() => _awaitingReply = false);
+        } else {
+          _awaitingReply = false;
+        }
+        _cancelMicRestart();
+
+        if (reply.isNotEmpty) {
           _chatHistory.add({
             'role': 'assistant',
-            'content': aiBuffer,
+            'content': reply,
           });
-          _speak(aiBuffer);
+          if (mounted) setState(() {});
+          _speak(reply);
+        } else {
+          _scheduleMicRestart();
         }
-        aiBuffer = '';
         return;
       }
 
-      aiBuffer += msg;
+      if (msg.startsWith(_metaPrefix)) {
+        try {
+          final meta = jsonDecode(msg.substring(_metaPrefix.length));
+          if (meta is Map && meta['role'] != null) {
+            _responderRole = meta['role'].toString();
+          }
+        } catch (_) {}
+        return;
+      }
+
+      aiBuffer.write(msg);
     });
 
     Future.delayed(const Duration(milliseconds: 300), () {
       if (!_simulationActive) return;
-      _channel?.sink.add(jsonEncode({
-        'userText': '',
-        'history': _chatHistory,
-        'practiceData': simulationData['practiceData'] ?? [],
-      }));
-      _safeStartListening();
+      _awaitingReply = true;
+      _channel?.sink.add(jsonEncode(_wsPayload(userText: '')));
     });
   }
 
@@ -214,16 +501,27 @@ class _RoleplayPageState extends State<RoleplayPage> {
     } catch (_) {}
     _tts.stop();
     _isSpeaking = false;
+    _micActive = false;
     setState(() {});
   }
 
   Future<void> _speak(String text) async {
+    _cancelMicRestart();
     _isSpeaking = true;
+    if (mounted) setState(() => _micActive = false);
+    try {
+      await _speech.stop();
+    } catch (_) {}
     await _tts.stop();
+
+    final role = (_responderRole ?? '').toUpperCase();
+    final preferMale = role != 'TERZO';
+    await _configureTtsVoice(preferMale: preferMale);
+
     _tts.setCompletionHandler(() {
       _isSpeaking = false;
       if (_simulationActive) {
-        Future.delayed(const Duration(milliseconds: 500), _safeStartListening);
+        _scheduleMicRestart();
       }
     });
     await _tts.speak(text);
@@ -242,6 +540,56 @@ class _RoleplayPageState extends State<RoleplayPage> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_simulationActive) ...[
+            Material(
+              color: const Color(0xFF1B5E20),
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      _awaitingReply
+                          ? 'Il debitore sta pensando...'
+                          : _isSpeaking
+                              ? 'Il debitore parla...'
+                              : _micActive
+                                  ? 'Microfono attivo — parla liberamente'
+                                  : _needsMicTap
+                                      ? 'Microfono in pausa — tocca per riattivare'
+                                      : 'Avvio microfono...',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _micActive
+                            ? const Color(0xFFC62828)
+                            : Colors.lightBlueAccent.shade700,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: (_awaitingReply || _isSpeaking)
+                          ? null
+                          : _requestMicrophone,
+                      icon: Icon(_micActive ? Icons.mic : Icons.mic_none_outlined),
+                      label: Text(
+                        _micActive
+                            ? 'In ascolto'
+                            : _needsMicTap
+                                ? 'Riattiva microfono'
+                                : 'Microfono',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Row(
             children: [
               Expanded(child: _tabButton('Sollecito', 0)),
@@ -390,6 +738,8 @@ class _RoleplayPageState extends State<RoleplayPage> {
                   'title': title,
                   'prompt': data['prompt'] ?? '',
                   'practiceData': practiceData,
+                  'scenarioWeights':
+                      data['scenarioWeights'] as Map<String, dynamic>?,
                 },
                 simulationId: doc.id,
                 category: type,

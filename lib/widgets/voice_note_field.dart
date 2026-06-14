@@ -29,7 +29,22 @@ class _VoiceNoteFieldState extends State<VoiceNoteField> {
   }
 
   Future<void> _initSpeech() async {
-    final ok = await _speech.initialize();
+    final ok = await _speech.initialize(
+      onError: (error) {
+        if (!mounted) return;
+        setState(() => _listening = false);
+        final msg = error.errorMsg;
+        if (msg == 'error_no_match' || msg == 'error_speech_timeout') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Nessun audio riconosciuto. Parla più vicino al microfono e riprova.',
+              ),
+            ),
+          );
+        }
+      },
+    );
     if (mounted) setState(() => _ready = ok);
   }
 
@@ -57,13 +72,19 @@ class _VoiceNoteFieldState extends State<VoiceNoteField> {
     }
 
     await _speech.listen(
-      localeId: 'it_IT',
-      listenMode: ListenMode.confirmation,
+      listenOptions: SpeechListenOptions(
+        localeId: 'it_IT',
+        listenMode: ListenMode.confirmation,
+        cancelOnError: true,
+      ),
       onResult: (result) {
         widget.controller.text = result.recognizedWords;
         widget.controller.selection = TextSelection.fromPosition(
           TextPosition(offset: widget.controller.text.length),
         );
+        if (result.finalResult && mounted) {
+          setState(() => _listening = false);
+        }
       },
     );
     if (mounted) setState(() => _listening = true);

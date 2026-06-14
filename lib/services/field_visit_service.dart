@@ -63,11 +63,11 @@ abstract final class FieldVisitService {
   static Stream<List<FieldVisit>> watchWithCoordinates({DateTime? day}) {
     return watchAllForUser().map((all) {
       Iterable<FieldVisit> visits = all.where(
-        (v) => v.hasCoordinates && v.status != FieldVisitStatus.cancelled,
+        (v) => v.hasCoordinates && v.isActiveForItinerary,
       );
       if (day != null) {
         visits = _filterAndSortForDay(all, day).where(
-          (v) => v.hasCoordinates && v.status != FieldVisitStatus.cancelled,
+          (v) => v.hasCoordinates && v.isActiveForItinerary,
         );
       }
       final list = visits.toList();
@@ -206,10 +206,14 @@ abstract final class FieldVisitService {
     final creditorId = calculation['creditorId']?.toString();
     var resolvedAddress = address.trim();
     if (resolvedAddress.isEmpty) {
-      resolvedAddress = (await CreditorVisitAddressService.lookupAddress(
-            creditorId: creditorId,
-          )) ??
-          '';
+      try {
+        resolvedAddress = (await CreditorVisitAddressService.lookupAddress(
+              creditorId: creditorId,
+            )) ??
+            '';
+      } catch (_) {
+        resolvedAddress = '';
+      }
     }
 
     await save(

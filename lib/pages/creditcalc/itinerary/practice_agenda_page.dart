@@ -235,12 +235,21 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
 
     if (selected == null || !mounted) return;
 
-    await showScheduleFieldVisitDialog(
-      context,
-      calculation: selected.data(),
-      calculationId: selected.id,
-      initialDay: _selectedDay,
-    );
+    try {
+      await showScheduleFieldVisitDialog(
+        context,
+        calculation: selected.data(),
+        calculationId: selected.id,
+        initialDay: _selectedDay,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Importazione non riuscita: $e'),
+        ),
+      );
+    }
   }
 
   Future<void> _setVisitStatus(FieldVisit visit, FieldVisitStatus status) async {
@@ -315,7 +324,8 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
   }
 
   Future<void> _openDayRoute(List<FieldVisit> visits) async {
-    await FieldVisitRoutePlanner.planAndOpen(context, visits);
+    final active = visits.where((v) => v.isActiveForItinerary).toList();
+    await FieldVisitRoutePlanner.planAndOpen(context, active);
   }
 
   Color _statusColor(FieldVisitStatus status) {

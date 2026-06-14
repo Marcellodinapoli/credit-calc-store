@@ -34,7 +34,7 @@ class _TerritoryMapPageState extends State<TerritoryMapPage> {
   FieldVisit? _selected;
   double _zoom = 11;
   _MapPeriodFilter _period = _MapPeriodFilter.today;
-  bool _plannedOnly = false;
+  bool _plannedOnly = true;
   String? _creditorFilter;
 
   ItineraryPageShell get _shell =>
@@ -77,7 +77,12 @@ class _TerritoryMapPageState extends State<TerritoryMapPage> {
   List<FieldVisit> _filterVisits(List<FieldVisit> raw) {
     var visits = raw
         .where(
-          (v) => v.hasCoordinates && v.status != FieldVisitStatus.cancelled,
+          (v) {
+            if (!v.hasCoordinates) return false;
+            if (v.status == FieldVisitStatus.cancelled) return false;
+            if (_plannedOnly) return v.isActiveForItinerary;
+            return true;
+          },
         )
         .toList();
 
@@ -89,11 +94,6 @@ class _TerritoryMapPageState extends State<TerritoryMapPage> {
           _MapPeriodFilter.all => true,
         };
       }).toList();
-    }
-
-    if (_plannedOnly) {
-      visits =
-          visits.where((v) => v.status == FieldVisitStatus.planned).toList();
     }
 
     final creditor = _creditorFilter?.trim();

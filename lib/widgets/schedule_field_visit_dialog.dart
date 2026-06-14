@@ -5,6 +5,16 @@ import '../services/field_visit_service.dart';
 import 'address_field_with_scan.dart';
 import 'field_visit_day_picker.dart';
 
+class ScheduleFieldVisitResult {
+  const ScheduleFieldVisitResult({
+    required this.address,
+    required this.scheduledAt,
+  });
+
+  final String address;
+  final DateTime scheduledAt;
+}
+
 /// Programma una visita da dati incasso/pratica (provvigioni).
 Future<bool> showScheduleFieldVisitDialog(
   BuildContext context, {
@@ -12,93 +22,22 @@ Future<bool> showScheduleFieldVisitDialog(
   required String calculationId,
   DateTime? initialDay,
 }) async {
-  final day = initialDay ?? DateTime.now();
-  final addressCtrl = TextEditingController();
-  final creditorId = calculation['creditorId']?.toString();
-
-  final suggested =
-      await CreditorVisitAddressService.lookupAddress(creditorId: creditorId);
-  if (suggested != null && suggested.isNotEmpty) {
-    addressCtrl.text = suggested;
-  }
-
-  var scheduled = DateTime(day.year, day.month, day.day, 10, 0);
-
-  final ok = await showDialog<bool>(
+  final result = await showDialog<ScheduleFieldVisitResult>(
     context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setLocal) => AlertDialog(
-        title: const Text('Programma visita'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  (calculation['companyName'] ?? 'Pratica').toString(),
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                if ((calculation['creditorName'] ?? '').toString().isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Creditore: ${calculation['creditorName']}',
-                      style: const TextStyle(color: Colors.black54),
-                    ),
-                  ),
-                const SizedBox(height: 12),
-                AddressFieldWithScan(
-                  controller: addressCtrl,
-                  labelText: 'Indirizzo visita',
-                  onScanned: () => setLocal(() {}),
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Data e ora'),
-                  subtitle: Text(_formatDateTime(scheduled)),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.schedule),
-                    onPressed: () async {
-                      final picked = await pickFieldVisitDateAndTime(
-                        ctx,
-                        initial: scheduled,
-                      );
-                      if (picked == null) return;
-                      setLocal(() => scheduled = picked);
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annulla'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Aggiungi in agenda'),
-          ),
-        ],
-      ),
+    builder: (ctx) => _ScheduleFieldVisitDialog(
+      calculation: calculation,
+      initialDay: initialDay ?? DateTime.now(),
     ),
   );
 
-  final addressText = addressCtrl.text;
-  addressCtrl.dispose();
-  if (ok != true || !context.mounted) return false;
+  if (result == null || !context.mounted) return false;
 
   try {
     await FieldVisitService.importFromCalculation(
       calculation: calculation,
       calculationId: calculationId,
-      scheduledAt: scheduled,
-      address: addressText,
+      scheduledAt: result.scheduledAt,
+      address: result.address,
     );
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -113,6 +52,129 @@ Future<bool> showScheduleFieldVisitDialog(
       );
     }
     return false;
+  }
+}
+
+class _ScheduleFieldVisitDialog extends StatefulWidget {
+  const _ScheduleFieldVisitDialog({
+    required this.calculation,
+    required this.initialDay,
+  });
+
+  final Map<String, dynamic> calculation;
+  final DateTime initialDay;
+
+  @override
+  State<_ScheduleFieldVisitDialog> createState() =>
+      _ScheduleFieldVisitDialogState();
+}
+
+class _ScheduleFieldVisitDialogState extends State<_ScheduleFieldVisitDialog> {
+  late final TextEditingController _addressCtrl;
+  late DateTime _scheduled;
+
+  @override
+  void initState() {
+    super.initState();
+    _addressCtrl = TextEditingController();
+    final day = widget.initialDay;
+    _scheduled = DateTime(day.year, day.month, day.day, 10, 0);
+    _loadSuggestedAddress();
+  }
+
+  Future<void> _loadSuggestedAddress() async {
+    final creditorId = widget.calculation['creditorId']?.toString();
+    try {
+      final suggested = await CreditorVisitAddressService.lookupAddress(
+        creditorId: creditorId,
+      );
+      if (!mounted || suggested == null || suggested.isEmpty) return;
+      _addressCtrl.text = suggested;
+    } catch (_) {
+      // Prosegue senza indirizzo suggerito.
+    }
+  }
+
+  @override
+  void dispose() {
+    _addressCtrl.dispose();
+    super.dispose();
+  }
+
+  void _confirm() {
+    Navigator.pop(
+      context,
+      ScheduleFieldVisitResult(
+        address: _addressCtrl.text,
+        scheduledAt: _scheduled,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final calculation = widget.calculation;
+    final creditorName = (calculation['creditorName'] ?? '').toString();
+
+    return AlertDialog(
+      title: const Text('Programma visita'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                (calculation['companyName'] ?? 'Pratica').toString(),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              if (creditorName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Creditore: $creditorName',
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              AddressFieldWithScan(
+                controller: _addressCtrl,
+                labelText: 'Indirizzo visita',
+                onScanned: () => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Data e ora'),
+                subtitle: Text(_formatDateTime(_scheduled)),
+                trailing: IconButton(
+                  icon: const Icon(Icons.schedule),
+                  onPressed: () async {
+                    final picked = await pickFieldVisitDateAndTime(
+                      context,
+                      initial: _scheduled,
+                    );
+                    if (picked == null || !mounted) return;
+                    setState(() => _scheduled = picked);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annulla'),
+        ),
+        FilledButton(
+          onPressed: _confirm,
+          child: const Text('Aggiungi in agenda'),
+        ),
+      ],
+    );
   }
 }
 
