@@ -11,13 +11,13 @@ Future<bool> showSessionTakeoverDialog(
     barrierDismissible: false,
     useRootNavigator: true,
     builder: (ctx) => AlertDialog(
-      title: const Text('Sessione già attiva'),
+      title: const Text('CreditCore già attivo'),
       content: Text(
-        'CreditCalc è già in uso su:\n\n'
-        '${existing.deviceLabel} (${existing.deviceType})\n\n'
-        'Vuoi continuare su questo dispositivo? '
-        'L\'altro dispositivo verrà disconnesso e i dati verranno '
-        'sincronizzati prima di iniziare.',
+        'Hai già una sessione aperta su:\n\n'
+        '${existing.conflictSummary}\n\n'
+        'Vuoi continuare su questo dispositivo?\n\n'
+        'L\'altra sessione verrà chiusa automaticamente per evitare '
+        'conflitti su progressi, candidature, role play e dati CreditCalc.',
       ),
       actions: [
         TextButton(

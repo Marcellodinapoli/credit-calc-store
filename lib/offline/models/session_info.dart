@@ -6,6 +6,7 @@ class SessionInfo {
   final String deviceId;
   final String deviceType;
   final String deviceLabel;
+  final String platform;
   final DateTime? lastActivity;
   final bool active;
 
@@ -15,6 +16,7 @@ class SessionInfo {
     required this.deviceId,
     required this.deviceType,
     required this.deviceLabel,
+    required this.platform,
     required this.lastActivity,
     required this.active,
   });
@@ -27,10 +29,25 @@ class SessionInfo {
       deviceId: (data['deviceId'] ?? '').toString(),
       deviceType: (data['deviceType'] ?? '').toString(),
       deviceLabel: (data['deviceLabel'] ?? '').toString(),
+      platform: (data['platform'] ?? '').toString(),
       lastActivity: last is Timestamp ? last.toDate() : null,
       active: data['active'] == true,
     );
   }
+
+  String get platformLabel {
+    switch (platform) {
+      case 'calc_store':
+        return 'App CreditCalc Store';
+      case 'planet_web':
+        return 'CreditPlanet Web';
+      default:
+        return platform.isNotEmpty ? platform : 'CreditCore';
+    }
+  }
+
+  String get conflictSummary =>
+      '$deviceLabel\n$platformLabel ($deviceType)';
 
   Map<String, dynamic> toFirestore() {
     return {
@@ -39,6 +56,7 @@ class SessionInfo {
       'deviceId': deviceId,
       'deviceType': deviceType,
       'deviceLabel': deviceLabel,
+      'platform': platform,
       'lastActivity': FieldValue.serverTimestamp(),
       'active': active,
     };

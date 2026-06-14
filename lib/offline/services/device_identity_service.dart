@@ -5,9 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-/// Identità persistente del dispositivo per la sessione unica.
+/// Identità persistente del dispositivo per la sessione unica piattaforma.
 abstract final class DeviceIdentityService {
   static const _deviceIdKey = 'credit_calc_device_id';
+
+  static const String platformChannel = 'calc_store';
 
   static Future<String> deviceId() async {
     final prefs = await SharedPreferences.getInstance();

@@ -41,6 +41,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
   bool _awaitingReply = false;
   bool _needsMicTap = false;
   bool _micActive = false;
+  bool _pttHeld = false;
   String? _responderRole;
   int _micRestartToken = 0;
   bool _startingListen = false;
@@ -64,7 +65,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
   }
 
   bool get _shouldKeepListening =>
-      _simulationActive && !_isSpeaking && !_awaitingReply;
+      _simulationActive && _pttHeld && !_isSpeaking && !_awaitingReply;
 
   bool _isBenignSpeechError(String msg) =>
       msg == 'error_no_match' ||
@@ -128,15 +129,9 @@ class _RoleplayPageState extends State<RoleplayPage> {
     }
 
     if (status == 'done' || status == 'notListening') {
-      if (_shouldKeepListening) {
-        if (!_micActive || _needsMicTap) {
-          setState(() {
-            _micActive = true;
-            _needsMicTap = false;
-          });
-        }
+      if (_pttHeld && _shouldKeepListening) {
         _scheduleContinuousListening();
-      } else if (_micActive) {
+      } else if (_micActive && !_pttHeld) {
         setState(() => _micActive = false);
       }
     }
@@ -147,20 +142,15 @@ class _RoleplayPageState extends State<RoleplayPage> {
 
     final benign = _isBenignSpeechError(error.errorMsg);
 
-    if (benign && _shouldKeepListening) {
-      if (!_micActive) {
-        setState(() => _micActive = true);
-      }
+    if (benign && _pttHeld && _shouldKeepListening) {
       _scheduleContinuousListening();
       return;
     }
 
     if (_micActive) setState(() => _micActive = false);
 
-    if (_shouldKeepListening) {
+    if (_pttHeld) {
       _scheduleContinuousListening(delay: const Duration(milliseconds: 1200));
-    } else {
-      setState(() => _needsMicTap = true);
     }
   }
 
@@ -243,11 +233,25 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _micRestartToken++;
   }
 
-  void _requestMicrophone() {
-    if (!_simulationActive || _isSpeaking || _awaitingReply) return;
+  Future<void> _onPttStart() async {
+    if (!_simulationActive || _isSpeaking || _awaitingReply || _pttHeld) return;
     _cancelMicRestart();
-    setState(() => _needsMicTap = false);
-    _safeStartListening();
+    setState(() {
+      _pttHeld = true;
+      _needsMicTap = false;
+      _micActive = true;
+    });
+    await _startListeningOnce();
+  }
+
+  Future<void> _onPttEnd() async {
+    if (!_pttHeld) return;
+    setState(() => _pttHeld = false);
+    _cancelMicRestart();
+    try {
+      await _speech.stop();
+    } catch (_) {}
+    if (mounted) setState(() => _micActive = false);
   }
 
   void _scheduleContinuousListening({
@@ -264,10 +268,6 @@ class _RoleplayPageState extends State<RoleplayPage> {
       }
     });
   }
-
-  void _scheduleMicRestart() => _scheduleContinuousListening(
-        delay: const Duration(milliseconds: 1200),
-      );
 
   Future<void> _initReadState() async {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -317,10 +317,6 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _speechReady = false;
     _speechLocaleId = null;
     await _initSpeech();
-  }
-
-  void _safeStartListening() {
-    unawaited(_startListeningOnce());
   }
 
   Future<void> _startListeningOnce() async {
@@ -379,6 +375,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
       setState(() {
         _awaitingReply = true;
         _micActive = false;
+        _pttHeld = false;
       });
     }
 
@@ -409,6 +406,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _awaitingReply = false;
     _needsMicTap = false;
     _micActive = false;
+    _pttHeld = false;
     _responderRole = null;
 
     _simulationActive = true;
@@ -448,7 +446,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
           if (mounted) setState(() {});
           _speak(reply);
         } else {
-          _scheduleMicRestart();
+          setState(() => _needsMicTap = true);
         }
         return;
       }
@@ -502,6 +500,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _tts.stop();
     _isSpeaking = false;
     _micActive = false;
+    _pttHeld = false;
     setState(() {});
   }
 
@@ -520,8 +519,8 @@ class _RoleplayPageState extends State<RoleplayPage> {
 
     _tts.setCompletionHandler(() {
       _isSpeaking = false;
-      if (_simulationActive) {
-        _scheduleMicRestart();
+      if (_simulationActive && mounted) {
+        setState(() => _needsMicTap = true);
       }
     });
     await _tts.speak(text);
@@ -554,34 +553,53 @@ class _RoleplayPageState extends State<RoleplayPage> {
                           ? 'Il debitore sta pensando...'
                           : _isSpeaking
                               ? 'Il debitore parla...'
-                              : _micActive
-                                  ? 'Microfono attivo — parla liberamente'
-                                  : _needsMicTap
-                                      ? 'Microfono in pausa — tocca per riattivare'
-                                      : 'Avvio microfono...',
+                              : _pttHeld
+                                  ? 'Parla ora — rilascia per inviare'
+                                  : 'Tieni premuto il microfono per parlare',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 10),
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _micActive
-                            ? const Color(0xFFC62828)
-                            : Colors.lightBlueAccent.shade700,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: (_awaitingReply || _isSpeaking)
-                          ? null
-                          : _requestMicrophone,
-                      icon: Icon(_micActive ? Icons.mic : Icons.mic_none_outlined),
-                      label: Text(
-                        _micActive
-                            ? 'In ascolto'
-                            : _needsMicTap
-                                ? 'Riattiva microfono'
-                                : 'Microfono',
+                    AbsorbPointer(
+                      absorbing: _awaitingReply || _isSpeaking,
+                      child: Listener(
+                        onPointerDown: (_) => _onPttStart(),
+                        onPointerUp: (_) => _onPttEnd(),
+                        onPointerCancel: (_) => _onPttEnd(),
+                        child: Container(
+                          height: 72,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: _pttHeld
+                                ? const Color(0xFFC62828)
+                                : (_awaitingReply || _isSpeaking)
+                                    ? Colors.grey.shade600
+                                    : Colors.lightBlueAccent.shade700,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                _pttHeld ? Icons.mic : Icons.mic_none_outlined,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _pttHeld
+                                    ? 'Rilascia per inviare'
+                                    : 'Tieni premuto per parlare',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ],

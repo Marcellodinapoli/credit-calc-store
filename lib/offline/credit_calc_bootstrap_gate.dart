@@ -204,7 +204,8 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     _realtimeSync?.stop();
     setState(() {
       _sessionRevokedMessage =
-          'La sessione è stata aperta su un altro dispositivo.';
+          'CreditCore è stato aperto su un altro dispositivo '
+          '(web o app). Per evitare conflitti sei stato disconnesso.';
     });
     unawaited(FirebaseAuth.instance.signOut());
   }

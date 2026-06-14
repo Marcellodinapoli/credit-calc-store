@@ -9,7 +9,7 @@ import '../models/session_info.dart';
 import 'connectivity_service.dart';
 import 'device_identity_service.dart';
 
-/// Sessione unica CreditCalc (un dispositivo attivo per utente).
+/// Sessione unica CreditCore (un dispositivo attivo per utente su web/store).
 class SessionService {
   SessionService({required this.userId});
 
@@ -58,6 +58,7 @@ class SessionService {
           deviceId: deviceId,
           deviceType: profile.type,
           deviceLabel: profile.label,
+          platform: DeviceIdentityService.platformChannel,
           lastActivity: DateTime.now(),
           active: true,
         ).toFirestore(),
