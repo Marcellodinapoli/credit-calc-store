@@ -68,6 +68,10 @@ class _CreditCoreSessionCoordinatorState
       return;
     }
 
+    if (_user?.uid != user.uid) {
+      CreditCoreSessionRuntime.clear();
+    }
+
     _user = user;
     unawaited(_bootstrapForUser(user));
   }
@@ -105,12 +109,20 @@ class _CreditCoreSessionCoordinatorState
       CreditCoreSessionRuntime.clear();
     }
 
+    if (!CreditCoreSessionRuntime.bootstrapComplete) {
+      CreditCoreSessionRuntime.bootstrapFuture = null;
+    }
+
     CreditCoreSessionRuntime.bootstrapFuture ??= _runBootstrap(user);
     try {
       await CreditCoreSessionRuntime.bootstrapFuture;
     } catch (_) {
       CreditCoreSessionRuntime.bootstrapFuture = null;
       CreditCoreSessionRuntime.bootstrapComplete = false;
+    }
+
+    if (!CreditCoreSessionRuntime.bootstrapComplete) {
+      CreditCoreSessionRuntime.bootstrapFuture = null;
     }
 
     if (!mounted || _user?.uid != user.uid) return;

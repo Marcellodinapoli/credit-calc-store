@@ -15,10 +15,10 @@ Future<bool> showSessionTakeoverDialog(
       content: Text(
         'Hai già una sessione aperta su:\n\n'
         '${existing.conflictSummary}\n\n'
-        'Vuoi continuare su questo dispositivo?\n\n'
-        'L\'altra sessione verrà chiusa automaticamente. CreditCore '
-        '(Form, Calc, Job e web) può restare aperto su un solo dispositivo '
-        'o browser per volta.',
+        'Vuoi usare CreditCore su questo dispositivo?\n\n'
+        'L\'altra sessione verrà chiusa automaticamente. Puoi restare '
+        'connesso su un solo browser o dispositivo per volta '
+        '(web CreditPlanet, app mobile o app desktop).',
       ),
       actions: [
         TextButton(
@@ -28,7 +28,7 @@ Future<bool> showSessionTakeoverDialog(
         ),
         FilledButton(
           onPressed: () => Navigator.of(ctx, rootNavigator: true).pop(true),
-          child: const Text('Continua qui'),
+          child: const Text('Usa qui'),
         ),
       ],
     ),

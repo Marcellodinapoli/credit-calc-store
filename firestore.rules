@@ -523,6 +523,26 @@ match /settings/{docId} {
     }
 
     // ------------------------------------------------------------------
+    // COUPONS — registrazione (accesso gratuito per sempre)
+    // Documento: coupons/{CODICE_NORMALIZZATO}
+    // ------------------------------------------------------------------
+    match /coupons/{couponId} {
+      allow get: if resource.data.enabled == true;
+      allow list: if false;
+      allow create, delete: if request.auth != null
+        && request.auth.token.admin == true;
+      allow update: if request.auth != null && (
+        request.auth.token.admin == true
+        || (
+          request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['usedCount', 'lastUsedAt', 'lastUsedBy'])
+          && request.resource.data.usedCount
+              == resource.data.get('usedCount', 0) + 1
+        )
+      );
+    }
+
+    // ------------------------------------------------------------------
     // DEBUG / CLEANUP COLLECTIONS
     // ------------------------------------------------------------------
     match /{col}/{docId} {
