@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'credit_calc_repository_setup.dart';
 import 'repository/credit_calc_repository.dart';
+import '../session/credit_core_session_runtime.dart';
 import 'services/connectivity_service.dart';
 import 'services/mode_preferences_service.dart';
 import 'services/realtime_sync_service.dart';
@@ -62,7 +63,11 @@ abstract final class CreditCalcRuntime {
 
   static Future<void> reclaimSessionAfterUnlock() async {
     try {
-      await sessionService?.ensureLocalSession();
+      final platform = CreditCoreSessionRuntime.sessionService;
+      if (platform != null) {
+        await platform.syncOwnershipFromRemote();
+        await platform.touchActivity();
+      }
       if (await ConnectivityService.isOnline()) {
         final result = await syncEngine?.runSync();
         if (result?.success == true) {

@@ -28,7 +28,8 @@ Future<({Map<String, dynamic> source, bool fromCompany})?> findAccountBlockSourc
     final companyDoc = await FirebaseFirestore.instance
         .collection('companies')
         .doc(companyId)
-        .get();
+        .get()
+        .timeout(const Duration(seconds: 6));
     if (!companyDoc.exists) continue;
 
     final companyData = companyDoc.data()!;
@@ -52,7 +53,7 @@ Future<String?> resolveWaitingAccess(User user) async {
   }
 
   try {
-    await user.reload();
+    await user.reload().timeout(const Duration(seconds: 8));
   } catch (_) {
     final current = FirebaseAuth.instance.currentUser ?? user;
     if (!current.emailVerified) return 'pending';
@@ -67,11 +68,15 @@ Future<String?> resolveWaitingAccess(User user) async {
   }
 
   try {
-    final userDoc =
-        await FirebaseFirestore.instance.collection('users').doc(current.uid).get();
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(current.uid)
+        .get()
+        .timeout(const Duration(seconds: 8));
     if (!userDoc.exists) return null;
 
-    final block = await findAccountBlockSource(userDoc.data()!, current.uid);
+    final block = await findAccountBlockSource(userDoc.data()!, current.uid)
+        .timeout(const Duration(seconds: 8));
     if (block == null) return null;
 
     return (block.source['status'] ?? 'blocked').toString();

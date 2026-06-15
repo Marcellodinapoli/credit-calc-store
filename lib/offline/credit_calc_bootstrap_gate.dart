@@ -4,14 +4,14 @@ import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../core/maintenance_service.dart';
 import '../pages/creditcalc/credit_calc_initial_sync_page.dart';
+import '../session/credit_core_session_runtime.dart';
 import '../shell/credit_calc_shell.dart';
 import '../widgets/maintenance_section_gate.dart';
-import '../widgets/session_takeover_dialog.dart';
-import '../core/maintenance_service.dart';
-import 'models/credit_calc_mode.dart';
-import 'credit_calc_runtime.dart';
 import 'credit_calc_repository_setup.dart';
+import 'credit_calc_runtime.dart';
+import 'models/credit_calc_mode.dart';
 import 'repository/credit_calc_repository.dart';
 import 'services/connectivity_service.dart';
 import 'services/mode_preferences_service.dart';
@@ -23,10 +23,12 @@ enum _BootstrapStep {
   loading,
   initialSync,
   offlineSyncRequired,
+  startupSlow,
   ready,
 }
 
-/// Gestisce prima sync, sessione unica e sync automatica (sempre offline + sync).
+/// Prima sync e sync automatica. La sessione piattaforma è già risolta dal
+/// [CreditCoreSessionCoordinator] prima di arrivare qui.
 class CreditCalcBootstrapGate extends StatefulWidget {
   const CreditCalcBootstrapGate({super.key});
 
@@ -42,27 +44,26 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
   SyncEngine? _syncEngine;
   RealtimeSyncService? _realtimeSync;
   StreamSubscription<bool>? _connectivitySub;
-  Timer? _heartbeat;
-  String? _sessionRevokedMessage;
-  bool _remoteSessionHandshakeComplete = false;
-  Future<void>? _claimRemoteSessionTask;
+  Timer? _startupWatchdog;
 
   @override
   void initState() {
     super.initState();
+    _startupWatchdog = Timer(const Duration(seconds: 18), () {
+      if (!mounted || _step != _BootstrapStep.loading) return;
+      setState(() => _step = _BootstrapStep.startupSlow);
+    });
     _bootstrap();
   }
 
   @override
   void dispose() {
+    _startupWatchdog?.cancel();
     _connectivitySub?.cancel();
-    _heartbeat?.cancel();
     _realtimeSync?.dispose();
-    _sessionService?.dispose();
     CommissionEntryDataAccess.instance = FirestoreCommissionEntryDataAccess();
     CommissionCreditorDataAccess.instance =
         FirestoreCommissionCreditorDataAccess();
-    unawaited(_sessionService?.releaseSession());
     CreditCalcRepository.clear();
     CreditCalcRuntime.clear();
     super.dispose();
@@ -72,19 +73,29 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
+    final platformSession = CreditCoreSessionRuntime.sessionService;
+    if (platformSession == null || platformSession.userId != user.uid) {
+      return;
+    }
+
     try {
+      _sessionService = platformSession;
       _modePrefs = ModePreferencesService(userId: user.uid);
-      _sessionService = SessionService(userId: user.uid);
       _syncEngine = SyncEngine(
         userId: user.uid,
         modePrefs: _modePrefs!,
         sessionService: _sessionService!,
       );
 
-      await _setupSession(online: await ConnectivityService.isOnline());
+      _connectivitySub = ConnectivityService.watchOnline().listen((hasLink) {
+        if (!hasLink) {
+          _realtimeSync?.stop();
+          return;
+        }
+        unawaited(_whenInternetAvailable());
+      });
 
       await _modePrefs!.ensureOfflineSyncMode();
-
       await _continueAfterMode();
     } catch (_) {
       if (!mounted) return;
@@ -93,92 +104,21 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
       if (done || localCount > 0) {
         await _continueAfterMode();
       } else {
+        _cancelStartupWatchdog();
         setState(() => _step = _BootstrapStep.offlineSyncRequired);
       }
     }
   }
 
-  Future<void> _setupSession({required bool online}) async {
-    _connectivitySub = ConnectivityService.watchOnline().listen((hasLink) {
-      if (!hasLink) {
-        _realtimeSync?.stop();
-        return;
-      }
-      unawaited(_whenInternetAvailable());
-    });
-
-    if (!online) {
-      await _sessionService!.claimSession();
-      return;
-    }
-
-    await _claimRemoteSessionWhenOnline();
+  void _cancelStartupWatchdog() {
+    _startupWatchdog?.cancel();
+    _startupWatchdog = null;
   }
 
   Future<void> _whenInternetAvailable() async {
     if (!await ConnectivityService.isOnline()) return;
-    await _claimRemoteSessionWhenOnline();
     await _syncIfNeeded();
     await _startRealtimeIfNeeded();
-  }
-
-  Future<void> _claimRemoteSessionWhenOnline() async {
-    if (_remoteSessionHandshakeComplete) return;
-
-    final inFlight = _claimRemoteSessionTask;
-    if (inFlight != null) {
-      await inFlight;
-      return;
-    }
-
-    final task = _claimRemoteSessionWhenOnlineImpl();
-    _claimRemoteSessionTask = task;
-    try {
-      await task;
-    } finally {
-      if (identical(_claimRemoteSessionTask, task)) {
-        _claimRemoteSessionTask = null;
-      }
-    }
-  }
-
-  Future<void> _claimRemoteSessionWhenOnlineImpl() async {
-    if (_remoteSessionHandshakeComplete) return;
-
-    final session = _sessionService;
-    if (session == null || !await ConnectivityService.isOnline()) return;
-
-    var tookOver = false;
-    try {
-      final conflict = await session.findConflictingSession();
-      if (!mounted) return;
-      if (conflict != null) {
-        final proceed = await showSessionTakeoverDialog(context, conflict);
-        if (!proceed || !mounted) {
-          await FirebaseAuth.instance.signOut();
-          return;
-        }
-        tookOver = true;
-      }
-      await session.claimSession(refreshSessionId: true);
-      session.startWatching(onSessionRevoked: _onSessionRevoked);
-      _heartbeat ??= Timer.periodic(
-        const Duration(seconds: 60),
-        (_) => _sessionService?.touchActivity(),
-      );
-      _remoteSessionHandshakeComplete = true;
-      if (tookOver) {
-        await _syncAfterHandoff();
-      }
-    } catch (_) {
-      await session.ensureLocalSession();
-    }
-  }
-
-  Future<void> _syncAfterHandoff() async {
-    await _runCatchUpOrRepairSync(
-      loadingMessage: 'Sincronizzazione dati in corso…',
-    );
   }
 
   void _ensureRealtimeSync() {
@@ -197,17 +137,6 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     if (_step != _BootstrapStep.ready) return;
     _ensureRealtimeSync();
     await _realtimeSync?.refresh();
-  }
-
-  void _onSessionRevoked() {
-    if (!mounted) return;
-    _realtimeSync?.stop();
-    setState(() {
-      _sessionRevokedMessage =
-          'CreditCore è stato aperto su un altro dispositivo '
-          '(web o app). Per evitare conflitti sei stato disconnesso.';
-    });
-    unawaited(FirebaseAuth.instance.signOut());
   }
 
   Future<void> _continueAfterMode() async {
@@ -243,13 +172,16 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     if (!hasLocalCache) {
       if (!mounted) return;
       if (!await ConnectivityService.isOnline()) {
+        _cancelStartupWatchdog();
         setState(() => _step = _BootstrapStep.offlineSyncRequired);
         return;
       }
+      _cancelStartupWatchdog();
       setState(() => _step = _BootstrapStep.initialSync);
       return;
     }
     if (!mounted) return;
+    _cancelStartupWatchdog();
     if (await ConnectivityService.isOnline()) {
       await _syncCatchUpIfNeeded();
     }
@@ -311,7 +243,6 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
       return;
     }
     try {
-      await _sessionService?.ensureLocalSession();
       final result = await _syncEngine?.runSync();
       if (result?.success == true) {
         _notifyRepositoryDataChanged();
@@ -319,24 +250,11 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     } catch (_) {}
   }
 
-  void _notifyRepositoryDataChanged() => CreditCalcRepositorySetup.notifyDataChanged();
+  void _notifyRepositoryDataChanged() =>
+      CreditCalcRepositorySetup.notifyDataChanged();
 
   @override
   Widget build(BuildContext context) {
-    if (_sessionRevokedMessage != null) {
-      return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              _sessionRevokedMessage!,
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-      );
-    }
-
     switch (_step) {
       case _BootstrapStep.loading:
         return const Scaffold(
@@ -346,6 +264,7 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
         return CreditCalcInitialSyncPage(
           syncEngine: _syncEngine!,
           onComplete: () {
+            _cancelStartupWatchdog();
             _notifyRepositoryDataChanged();
             setState(() => _step = _BootstrapStep.ready);
             unawaited(_syncIfNeeded());
@@ -390,6 +309,59 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
                           setState(() => _step = _BootstrapStep.initialSync);
                         },
                         child: const Text('Riprova'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      case _BootstrapStep.startupSlow:
+        return Scaffold(
+          backgroundColor: const Color(0xFFE8E8E8),
+          body: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Avvio lento',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'La connessione a CreditCore sta impiegando più tempo '
+                        'del previsto. Puoi riprovare o attendere ancora qualche '
+                        'secondo.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton(
+                        onPressed: () {
+                          setState(() => _step = _BootstrapStep.loading);
+                          _startupWatchdog?.cancel();
+                          _startupWatchdog = Timer(const Duration(seconds: 18), () {
+                            if (!mounted || _step != _BootstrapStep.loading) {
+                              return;
+                            }
+                            setState(() => _step = _BootstrapStep.startupSlow);
+                          });
+                          unawaited(_bootstrap());
+                        },
+                        child: const Text('Riprova avvio'),
                       ),
                     ],
                   ),

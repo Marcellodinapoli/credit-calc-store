@@ -4,17 +4,18 @@ import 'package:credit_calc_core/credit_calc_core.dart'
     hide CommissionsPage, CreditorsPage, DevelopPage;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 import '../auth/biometric_lock_gate.dart';
 import '../core/dimensions.dart';
 import '../offline/credit_calc_runtime.dart';
+import '../session/credit_core_session_runtime.dart';
 import '../offline/services/connectivity_service.dart';
 import '../pages/creditcalc/commissions_page.dart';
 import '../pages/creditcalc/credit_calc_settings_page.dart';
 import '../pages/creditcalc/creditors_page.dart';
 import '../pages/creditcalc/develop_page.dart';
 import '../ui/layout/page_shell.dart';
+import '../widgets/desktop_app_update_button.dart';
 import 'credit_core_account_menu_sheet.dart';
 import 'credit_core_site_actions.dart';
 
@@ -106,7 +107,8 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
 
     CreditCalcRuntime.realtimeSync?.stop();
     try {
-      await CreditCalcRuntime.sessionService
+      await (CreditCoreSessionRuntime.sessionService ??
+              CreditCalcRuntime.sessionService)
           ?.releaseSession()
           .timeout(const Duration(seconds: 5));
     } catch (_) {}
@@ -220,6 +222,7 @@ class _MobileShell extends StatelessWidget {
         title: const _BrandTitle(),
         actions: [
           const AnnouncementsBellButton(iconColor: Colors.black87),
+          const DesktopAppUpdateButton(compact: true),
           _SettingsIconButton(onPressed: onSettings),
           IconButton(
             tooltip: 'Menu',
@@ -298,6 +301,7 @@ class _DesktopShell extends StatelessWidget {
                             const _BrandTitle(),
                             const Spacer(),
                             const AnnouncementsBellButton(iconColor: Colors.black87),
+                            const DesktopAppUpdateButton(compact: true),
                             const CreditCoreSiteIconButton(),
                             _SettingsIconButton(onPressed: onSettings),
                             IconButton(
@@ -312,7 +316,7 @@ class _DesktopShell extends StatelessWidget {
                   ),
                 ),
                 Expanded(child: child),
-                const _VersionFooter(),
+                const DesktopAppVersionFooter(),
               ],
             ),
           ),
@@ -499,30 +503,6 @@ class _BrandTitle extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _VersionFooter extends StatelessWidget {
-  const _VersionFooter();
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<PackageInfo>(
-      future: PackageInfo.fromPlatform(),
-      builder: (context, snap) {
-        final version = snap.data?.version ?? '…';
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              'v$version',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-            ),
-          ),
-        );
-      },
     );
   }
 }

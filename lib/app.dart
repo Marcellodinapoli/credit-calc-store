@@ -13,6 +13,8 @@ import 'services/fcm_service.dart';
 import 'services/field_reminder_notification_service.dart';
 import 'offline/credit_calc_bootstrap_gate.dart';
 import 'offline/credit_calc_runtime.dart';
+import 'session/credit_core_session_coordinator.dart';
+import 'session/credit_core_session_runtime.dart';
 
 class CreditCalcApp extends StatefulWidget {
   const CreditCalcApp({super.key});
@@ -50,6 +52,11 @@ class _AuthGateState extends State<_AuthGate> {
   StreamSubscription<User?>? _authSub;
   final bool _sessionAtLaunch = FirebaseAuth.instance.currentUser != null;
 
+  static Future<void> _onBiometricUnlocked() async {
+    await CreditCoreSessionRuntime.waitUntilReady();
+    await CreditCalcRuntime.reclaimSessionAfterUnlock();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -86,7 +93,7 @@ class _AuthGateState extends State<_AuthGate> {
         if (snapshot.hasData) {
           return BiometricLockGate(
             lockOnStart: _sessionAtLaunch,
-            onUnlocked: CreditCalcRuntime.reclaimSessionAfterUnlock,
+            onUnlocked: _onBiometricUnlocked,
             child: _AuthenticatedShell(
               key: ValueKey(snapshot.data!.uid),
               user: snapshot.data!,
@@ -122,7 +129,10 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
 
   Future<void> _checkAccess() async {
     try {
-      final status = await resolveWaitingAccess(widget.user);
+      final status = await resolveWaitingAccess(widget.user).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => null,
+      );
       if (!mounted) return;
       setState(() {
         _waitingStatus = status;
@@ -157,6 +167,8 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
       );
     }
 
-    return const CreditCalcBootstrapGate();
+    return const CreditCoreSessionCoordinator(
+      child: CreditCalcBootstrapGate(),
+    );
   }
 }

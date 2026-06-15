@@ -76,8 +76,8 @@ class CreditCalcRepository {
     if (session == null) return;
     if (!await session.holdsActiveSession()) {
       const message =
-          'La sessione CreditCalc è attiva su un altro dispositivo. '
-          'Chiudi e riapri CreditCalc qui, poi scegli «Continua qui».';
+          'La sessione CreditCore è attiva su un altro dispositivo. '
+          'Chiudi e riapri l\'app qui, poi scegli «Continua qui» al login.';
       CreditCalcRuntime.notifyWriteBlocked(message);
       throw SessionWriteBlockedException(message);
     }

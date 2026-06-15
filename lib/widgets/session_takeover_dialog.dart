@@ -16,8 +16,9 @@ Future<bool> showSessionTakeoverDialog(
         'Hai già una sessione aperta su:\n\n'
         '${existing.conflictSummary}\n\n'
         'Vuoi continuare su questo dispositivo?\n\n'
-        'L\'altra sessione verrà chiusa automaticamente per evitare '
-        'conflitti su progressi, candidature, role play e dati CreditCalc.',
+        'L\'altra sessione verrà chiusa automaticamente. CreditCore '
+        '(Form, Calc, Job e web) può restare aperto su un solo dispositivo '
+        'o browser per volta.',
       ),
       actions: [
         TextButton(
