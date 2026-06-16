@@ -10,9 +10,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../offline/services/connectivity_service.dart';
 import '../services/biometric_service.dart';
 import 'auth_form_validation.dart';
+import '../widgets/public_page_shell.dart';
+import '../widgets/public_top_menu.dart';
 import 'login_pricing_page.dart';
+import 'registration_coupon_field.dart';
 import 'registration_coupon_service.dart';
-import 'registration_plan_selection_page.dart';
+import 'registration_plan_field.dart';
 import 'registration_plan_selection_result.dart';
 import 'registration_privacy_consents_page.dart';
 
@@ -45,8 +48,10 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLogin = true;
   String? _registerType;
   String? _registerPlan;
-  String? _registerCoupon;
-  bool _registerCouponApplied = false;
+  final _couponController = TextEditingController();
+  RegistrationCouponValidation? _appliedCoupon;
+  bool _couponChecking = false;
+  String? _couponError;
   bool _showBiometricButton = false;
   bool _hasSavedCredentials = false;
 
@@ -230,6 +235,7 @@ class _LoginPageState extends State<LoginPage> {
     _refPerson.dispose();
     _refRole.dispose();
     _website.dispose();
+    _couponController.dispose();
     super.dispose();
   }
 
@@ -310,6 +316,10 @@ class _LoginPageState extends State<LoginPage> {
           'Devi leggere e accettare l\'informativa su privacy e consensi.';
     }
 
+    if (_registerPlan == null || _registerPlan!.trim().isEmpty) {
+      errors['plan'] = 'Seleziona un piano (Gratis, Plus o Enterprise).';
+    }
+
     if (errors.isNotEmpty) {
       setState(() {
         _clearRegisterFeedback();
@@ -319,6 +329,71 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     return true;
+  }
+
+  bool get _couponActive => _appliedCoupon?.isValid == true;
+
+  Future<void> _applyCoupon() async {
+    final raw = _couponController.text;
+    if (raw.trim().isEmpty) {
+      setState(() {
+        _couponError = 'Inserisci un codice coupon.';
+        _appliedCoupon = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _couponChecking = true;
+      _couponError = null;
+    });
+
+    final result = await RegistrationCouponService.validate(raw);
+    if (!mounted) return;
+
+    setState(() {
+      _couponChecking = false;
+      if (!result.isValid) {
+        _appliedCoupon = null;
+        _couponError = 'Coupon non valido, scaduto o esaurito.';
+        return;
+      }
+      if (result.restrictedPlan != null &&
+          _registerPlan != null &&
+          result.restrictedPlan != _registerPlan) {
+        _appliedCoupon = null;
+        _couponError =
+            'Questo coupon è valido solo per il piano '
+            '${registrationPlanLabel(result.restrictedPlan)}.';
+        return;
+      }
+      _appliedCoupon = result;
+      _couponError = null;
+    });
+  }
+
+  void _clearCoupon() {
+    setState(() {
+      _appliedCoupon = null;
+      _couponError = null;
+      _couponController.clear();
+    });
+  }
+
+  void _clearRegistrationCoupon() {
+    _appliedCoupon = null;
+    _couponError = null;
+    _couponChecking = false;
+    _couponController.clear();
+  }
+
+  Future<RegistrationCouponValidation?> _resolveRegistrationCoupon() async {
+    if (_appliedCoupon?.isValid == true) {
+      return _appliedCoupon;
+    }
+    final raw = _couponController.text.trim();
+    if (raw.isEmpty) return null;
+    return RegistrationCouponService.validate(raw);
   }
 
   String _generateCpCode() {
@@ -552,37 +627,43 @@ class _LoginPageState extends State<LoginPage> {
       final user = cred.user;
       if (user == null) return;
 
-      RegistrationCouponValidation? coupon;
-      if (_registerCoupon != null && _registerCoupon!.isNotEmpty) {
-        coupon = await RegistrationCouponService.validate(_registerCoupon!);
-        if (!coupon.isValid) {
-          try {
-            await user.delete();
-          } catch (_) {}
-          await FirebaseAuth.instance.signOut();
-          if (!mounted) return;
-          setState(() {
-            _busy = false;
-            _registerNotice =
-                'Il coupon inserito non è valido, scaduto o esaurito.';
-          });
-          return;
-        }
-        if (coupon.restrictedPlan != null &&
-            coupon.restrictedPlan != _registerPlan) {
-          try {
-            await user.delete();
-          } catch (_) {}
-          await FirebaseAuth.instance.signOut();
-          if (!mounted) return;
-          setState(() {
-            _busy = false;
-            _registerNotice =
-                'Il coupon è valido solo per il piano '
-                '${registrationPlanLabel(coupon.restrictedPlan)}.';
-          });
-          return;
-        }
+      RegistrationCouponValidation? coupon =
+          await _resolveRegistrationCoupon();
+      if (coupon != null && !coupon.isValid) {
+        try {
+          await user.delete();
+        } catch (_) {}
+        await FirebaseAuth.instance.signOut();
+        if (!mounted) return;
+        setState(() {
+          _busy = false;
+          _appliedCoupon = null;
+          _couponError = 'Coupon non valido, scaduto o esaurito.';
+          _registerNotice =
+              'Il coupon inserito non è valido, scaduto o esaurito.';
+        });
+        return;
+      }
+      if (coupon != null &&
+          coupon.isValid &&
+          coupon.restrictedPlan != null &&
+          coupon.restrictedPlan != _registerPlan) {
+        try {
+          await user.delete();
+        } catch (_) {}
+        await FirebaseAuth.instance.signOut();
+        if (!mounted) return;
+        setState(() {
+          _busy = false;
+          _couponError =
+              'Il coupon è valido solo per il piano '
+              '${registrationPlanLabel(coupon.restrictedPlan)}.';
+          _registerNotice = _couponError;
+        });
+        return;
+      }
+      if (coupon?.isValid == true) {
+        _appliedCoupon = coupon;
       }
 
       await user.sendEmailVerification();
@@ -823,30 +904,65 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.body,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
+    final loginCard = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420),
+      child: Card(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFE0E0E0)),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: const Border(
+              left: BorderSide(color: AppTheme.accent, width: 4),
+            ),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: _buildLoginForm(),
+        ),
+      ),
+    );
+
+    if (widget.unlockMode) {
+      return Scaffold(
+        backgroundColor: AppTheme.body,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: loginCard,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return PublicPageShell(
+      current: PublicPage.login,
+      scrollable: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: Color(0xFFE0E0E0)),
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: const Border(
-                      left: BorderSide(color: AppTheme.accent, width: 4),
-                    ),
-                  ),
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight,
+                minWidth: constraints.maxWidth,
+              ),
+              child: Center(child: loginCard),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLoginForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
                       Text.rich(
                         TextSpan(
                           style: const TextStyle(
@@ -874,9 +990,7 @@ class _LoginPageState extends State<LoginPage> {
                                 'e premi Accedi, oppure usa il pulsante Biometria.'
                             : _isLogin
                                 ? 'Accedi o registrati con le credenziali CreditCore.'
-                                : 'Crea un account CreditCore'
-                                    '${_registerPlan != null ? ' — Piano ${registrationPlanLabel(_registerPlan)}' : ''}'
-                                    '${_registerCouponApplied ? ' (coupon attivo)' : ''}.',
+                                : 'Crea un account CreditCore.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.grey.shade700),
                       ),
@@ -951,6 +1065,25 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(height: 12),
                       ],
 
+                      if (!_isLogin && _registerType != null) ...[
+                        RegistrationPlanField(
+                          registerType: _registerType!,
+                          selectedPlanId: _registerPlan,
+                          errorText: _regError('plan'),
+                          onPlanSelected: (planId) {
+                            setState(() {
+                              _registerPlan = planId;
+                              _registerFieldErrors.remove('plan');
+                              if (_appliedCoupon?.restrictedPlan != null &&
+                                  _appliedCoupon!.restrictedPlan != planId) {
+                                _clearRegistrationCoupon();
+                              }
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
                       _field(
                         controller: _email,
                         label: 'Email',
@@ -994,6 +1127,16 @@ class _LoginPageState extends State<LoginPage> {
                           label: 'Conferma password',
                           obscure: true,
                           errorText: _regError('confirmPassword'),
+                        ),
+                        const SizedBox(height: 16),
+                        RegistrationCouponSection(
+                          controller: _couponController,
+                          checking: _couponChecking,
+                          error: _couponError,
+                          applied: _couponActive,
+                          appliedCode: _appliedCoupon?.code,
+                          onApply: _applyCoupon,
+                          onClear: _clearCoupon,
                         ),
                         const SizedBox(height: 16),
                         _buildPrivacyConsentRow(),
@@ -1103,24 +1246,10 @@ class _LoginPageState extends State<LoginPage> {
                                   if (_isLogin) {
                                     final type = await _showRegisterTypePopup();
                                     if (type == null || !mounted) return;
-                                    final planResult =
-                                        await Navigator.push<
-                                            RegistrationPlanSelectionResult>(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            RegistrationPlanSelectionPage(
-                                          registerType: type,
-                                        ),
-                                      ),
-                                    );
-                                    if (planResult == null || !mounted) return;
                                     setState(() {
                                       _registerType = type;
-                                      _registerPlan = planResult.planId;
-                                      _registerCoupon = planResult.couponCode;
-                                      _registerCouponApplied =
-                                          planResult.couponApplied;
+                                      _registerPlan = 'free';
+                                      _clearRegistrationCoupon();
                                       _isLogin = false;
                                       _resetPrivacyAcceptance();
                                       _clearLoginFeedback();
@@ -1131,8 +1260,7 @@ class _LoginPageState extends State<LoginPage> {
                                       _isLogin = true;
                                       _registerType = null;
                                       _registerPlan = null;
-                                      _registerCoupon = null;
-                                      _registerCouponApplied = false;
+                                      _clearRegistrationCoupon();
                                       _resetPrivacyAcceptance();
                                       _clearRegisterFeedback();
                                     });
@@ -1148,13 +1276,6 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       ],
                     ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

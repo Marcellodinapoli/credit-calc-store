@@ -12,6 +12,7 @@ import 'package:credit_calc_core/credit_calc_core.dart'
         showPlanCancelWithCommissionsDialog;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/adaptive_button_styles.dart';
 import '../../offline/repository/credit_calc_repository.dart';
@@ -674,6 +675,7 @@ List<_PracticeDilazionePhase> _buildDilazionePhasesFromSegments({
   required List<double> biAmounts,
   required List<DateTime> soloDates,
   required List<double> soloAmounts,
+  bool monthlyParallel = false,
 }) {
   final phases = <_PracticeDilazionePhase>[];
 
@@ -690,7 +692,7 @@ List<_PracticeDilazionePhase> _buildDilazionePhasesFromSegments({
         installmentAmount: displayAmount,
         startDate: dates.first,
         endDate: dates.last,
-        rateFrequencyLabel: frequency,
+        rateFrequencyLabel: monthlyParallel ? 'mensili' : frequency,
       ),
     );
   }
@@ -1184,6 +1186,7 @@ class _MultiPracticePlanResult {
             biAmounts: biAmounts[i],
             soloDates: soloDates[i],
             soloAmounts: soloAmounts[i],
+            monthlyParallel: true,
           ),
         ),
       );
@@ -4226,6 +4229,36 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     return const [];
   }
 
+  String _sharePlanText() {
+    final creditor = _creditor;
+    final schedule = _commissionPaymentSchedule();
+    final lines = <String>[
+      'Sviluppo piano di rientro',
+      if (creditor != null) 'Creditore: ${creditor.name}',
+      'Data inizio: ${_formatDate(_dataInizio)}',
+      if (_dataFine != null) 'Data fine: ${_formatDate(_dataFine!)}',
+      if (_totaleRateizzato > 0)
+        'Totale rateizzato: ${EuroFormat.format(_totaleRateizzato)}',
+      if (_acconto > 0) 'Acconto: ${EuroFormat.format(_acconto)}',
+      '',
+      'Scadenze:',
+      if (schedule.isEmpty) 'Nessuna scadenza disponibile',
+      for (var i = 0; i < schedule.length; i++)
+        'Rata ${i + 1}: ${_formatDate(schedule[i].date)} - ${EuroFormat.format(schedule[i].amount)}',
+    ];
+    return lines.join('\n');
+  }
+
+  Future<void> _condividiPiano() async {
+    if (!_calcolato) return;
+    await SharePlus.instance.share(
+      ShareParams(
+        text: _sharePlanText(),
+        subject: 'Piano di rientro',
+      ),
+    );
+  }
+
   List<RepaymentPlanCommissionSlice> _commissionExportSlices() {
     final multi = _multiPracticePlan;
     if (multi != null) {
@@ -4592,6 +4625,16 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
                 ),
               ),
             ),
+            if (_calcolato)
+              AdaptiveActionBarAction(
+                flex: 1,
+                child: OutlinedButton.icon(
+                  onPressed: _condividiPiano,
+                  style: AdaptiveButtonStyles.calcOutlined(),
+                  icon: const Icon(Icons.share_outlined),
+                  label: const Text('Condividi'),
+                ),
+              ),
           ],
         );
       },

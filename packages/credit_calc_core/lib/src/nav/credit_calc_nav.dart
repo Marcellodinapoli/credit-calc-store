@@ -3,4 +3,5 @@ enum CreditCalcNavItem {
   creditors,
   develop,
   commissions,
+  subscription,
 }

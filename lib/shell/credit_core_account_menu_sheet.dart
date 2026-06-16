@@ -4,7 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../core/maintenance_service.dart';
+import '../core/admin/bk_admin_service.dart';
 import '../pages/area/personal_area_menu.dart';
+import '../pages/bk/bk_coupons_page.dart';
 import '../ui/layout/page_shell.dart';
 import '../pages/creditform/personal_form_menu.dart';
 import '../pages/creditjob/personal_job_menu.dart';
@@ -40,6 +42,7 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
   String? _userType;
   String? _workRole;
   bool _blockedContext = false;
+  bool _isBkAdmin = false;
   bool _loading = true;
 
   @override
@@ -95,11 +98,14 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
       }
 
       if (!mounted) return;
+      final isBkAdmin = await BkAdminService.isAdmin();
+      if (!mounted) return;
       setState(() {
         _userType = type;
         _workRole = (data['workRole'] ?? '').toString().trim();
         _blockedContext =
             UserAccountStatus.isBlocked(userStatus) || companyBlocked;
+        _isBkAdmin = isBkAdmin;
         _loading = false;
       });
     } catch (_) {
@@ -434,6 +440,27 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                 title: PersonalAreaMenuItem.privacyConsents.title,
                 iconColor: _areaColor,
                 onTap: () => _closeAndArea(PersonalAreaMenuItem.privacyConsents),
+              ),
+            ],
+            if (_isBkAdmin) ...[
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: Text(
+                  'Backoffice',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              _item(
+                icon: Icons.confirmation_number_outlined,
+                title: 'Coupon registrazione',
+                iconColor: _areaColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BkCouponsPage(),
+                    ),
+                  );
+                }),
               ),
             ],
             _item(

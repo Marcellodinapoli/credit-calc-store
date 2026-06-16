@@ -17,7 +17,7 @@ class VisitHistoryPage extends StatefulWidget {
 }
 
 class _VisitHistoryPageState extends State<VisitHistoryPage> {
-  DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+  DateTime _month = DateTime.now();
   String? _zoneFilter;
 
   ItineraryPageShell get _shell =>
@@ -48,7 +48,7 @@ class _VisitHistoryPageState extends State<VisitHistoryPage> {
     );
     if (picked != null) {
       setState(() {
-        _month = DateTime(picked.year, picked.month);
+        _month = picked;
         _zoneFilter = null;
       });
     }

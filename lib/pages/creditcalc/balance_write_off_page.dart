@@ -10,6 +10,7 @@ import 'package:credit_calc_core/credit_calc_core.dart'
         RepaymentPlanCommissionExporter,
         showPlanCancelWithCommissionsDialog;
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/adaptive_button_styles.dart';
 import '../../offline/repository/credit_calc_repository.dart';
@@ -644,6 +645,32 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
 
   String _formatDate(DateTime date) => formatCommissionExportDate(date);
 
+  String _sharePlanText() {
+    final lines = <String>[
+      'Sviluppo saldo e stralcio',
+      if (_creditorName != null) 'Creditore: $_creditorName',
+      'Debito totale: ${_labelEuro(_debito)}',
+      'Percentuale stralcio: ${_labelPercent()}',
+      'Importo da stralciare: ${_labelEuro(EuroFormat.parse(_stralciatoCtrl.text))}',
+      'Residuo da pagare: ${_labelEuro(EuroFormat.parse(_residuoCtrl.text))}',
+      '',
+      'Scadenze:',
+      for (var i = 0; i < _installments.length; i++)
+        'Rata ${i + 1}: ${_formatDate(_installments[i].date)} - ${EuroFormat.format(_installments[i].amount)}',
+    ];
+    return lines.join('\n');
+  }
+
+  Future<void> _condividiSaldo() async {
+    if (!_calcolato || _installments.isEmpty) return;
+    await SharePlus.instance.share(
+      ShareParams(
+        text: _sharePlanText(),
+        subject: 'Saldo e stralcio',
+      ),
+    );
+  }
+
   String _labelEuro(double? value) =>
       value == null ? '—' : EuroFormat.format(value);
 
@@ -1057,6 +1084,16 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
             ),
           ),
         ),
+        if (_calcolato)
+          AdaptiveActionBarAction(
+            flex: 1,
+            child: OutlinedButton.icon(
+              onPressed: _condividiSaldo,
+              style: AdaptiveButtonStyles.calcOutlined(),
+              icon: const Icon(Icons.share_outlined),
+              label: const Text('Condividi'),
+            ),
+          ),
       ],
     );
   }

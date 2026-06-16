@@ -527,8 +527,9 @@ match /settings/{docId} {
     // Documento: coupons/{CODICE_NORMALIZZATO}
     // ------------------------------------------------------------------
     match /coupons/{couponId} {
-      allow get: if resource.data.enabled == true;
-      allow list: if false;
+      allow get: if resource.data.enabled == true
+        || (request.auth != null && request.auth.token.admin == true);
+      allow list: if request.auth != null && request.auth.token.admin == true;
       allow create, delete: if request.auth != null
         && request.auth.token.admin == true;
       allow update: if request.auth != null && (

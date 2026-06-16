@@ -164,46 +164,50 @@ class _WaitingPageState extends State<WaitingPage> {
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+    try {
+      await user.reload();
+      await user.getIdToken(true);
 
-    await user.reload();
-    await user.getIdToken(true);
+      final refreshedUser = FirebaseAuth.instance.currentUser;
+      if (refreshedUser == null || !mounted) return;
 
-    final refreshedUser = FirebaseAuth.instance.currentUser;
-    if (refreshedUser == null || !mounted) return;
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(refreshedUser.uid)
+          .get()
+          .timeout(const Duration(seconds: 6));
 
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(refreshedUser.uid)
-        .get();
+      if (!userDoc.exists || !mounted) return;
 
-    if (!userDoc.exists || !mounted) return;
+      final block =
+          await findAccountBlockSource(userDoc.data()!, refreshedUser.uid);
 
-    final block =
-        await findAccountBlockSource(userDoc.data()!, refreshedUser.uid);
-
-    if (block != null) {
-      if (!_blocked) {
-        setState(() => _blocked = true);
+      if (block != null) {
+        if (!_blocked) {
+          setState(() => _blocked = true);
+        }
+        _applyBlockDetails(block.source, fromCompany: block.fromCompany);
+        return;
       }
-      _applyBlockDetails(block.source, fromCompany: block.fromCompany);
-      return;
-    }
 
-    if (!refreshedUser.emailVerified) {
-      if (!_pendingEmail || _blocked) {
-        setState(() {
-          _blocked = false;
-          _pendingEmail = true;
-          _blockReason = null;
-          _blockDateLabel = '—';
-          _blockFromCompany = false;
-          _accountStatus = 'pending';
-        });
+      if (!refreshedUser.emailVerified) {
+        if (!_pendingEmail || _blocked) {
+          setState(() {
+            _blocked = false;
+            _pendingEmail = true;
+            _blockReason = null;
+            _blockDateLabel = '—';
+            _blockFromCompany = false;
+            _accountStatus = 'pending';
+          });
+        }
+        return;
       }
-      return;
-    }
 
-    await _grantAccess();
+      await _grantAccess();
+    } catch (_) {
+      // Mantiene la schermata di attesa anche in caso di rete lenta.
+    }
   }
 
   @override
@@ -217,7 +221,7 @@ class _WaitingPageState extends State<WaitingPage> {
     Color activeColor = Colors.yellow;
     String title = 'Conferma la tua email';
     String message =
-        'Ti abbiamo inviato un’email.\n'
+        '📩 Ti abbiamo inviato un’email.\n'
         'Apri il link di conferma e torna su questa pagina.';
 
     if (_accessGranted) {
@@ -225,32 +229,28 @@ class _WaitingPageState extends State<WaitingPage> {
       title = 'Verifica completata!';
       message = 'Accesso in corso…';
     } else if (_blocked) {
+      activeColor = Colors.red;
       if (_accountStatus == 'standby') {
-        activeColor = Colors.orange;
         title = 'Account in stand-by';
         message =
             'Il supervisor ha sospeso temporaneamente il tuo accesso.\n'
             'Contatta il supporto se necessario.';
       } else {
-        activeColor = Colors.red;
         title = 'Account non attivo';
         message =
             'Il tuo account è stato bloccato o disattivato.\n'
-            'Contatta il supporto per maggiori informazioni.';
+            'Contatta il supporto.';
       }
     } else if (_pendingEmail) {
       activeColor = Colors.yellow;
       title = 'Conferma la tua email';
       message =
-          'Ti abbiamo inviato un’email.\n'
+          '📩 Ti abbiamo inviato un’email.\n'
           'Apri il link di conferma e torna su questa pagina.';
-      if (widget.email != null && widget.email!.isNotEmpty) {
-        message += '\n\n${widget.email}';
-      }
     }
 
     return Scaffold(
-      backgroundColor: AppTheme.body,
+      backgroundColor: const Color(0xFFE3F2FD),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -264,13 +264,7 @@ class _WaitingPageState extends State<WaitingPage> {
                   borderRadius: BorderRadius.circular(16),
                   side: const BorderSide(color: Color(0xFFE0E0E0)),
                 ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: const Border(
-                      left: BorderSide(color: AppTheme.accent, width: 4),
-                    ),
-                  ),
+                child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 28,
                     vertical: 36,
@@ -283,7 +277,7 @@ class _WaitingPageState extends State<WaitingPage> {
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
-                          color: AppTheme.accent,
+                          color: Color(0xFF1565C0),
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -344,7 +338,7 @@ class _WaitingPageState extends State<WaitingPage> {
                       if (_blocked && !_accessGranted)
                         SizedBox(
                           width: double.infinity,
-                          child: FilledButton.icon(
+                          child: ElevatedButton.icon(
                             onPressed: () {
                               Navigator.push(
                                 context,
@@ -353,10 +347,13 @@ class _WaitingPageState extends State<WaitingPage> {
                                 ),
                               );
                             },
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppTheme.accent,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1565C0),
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                             icon: const Icon(Icons.support_agent),
                             label: const Text('Contatta supporto'),
@@ -383,7 +380,7 @@ class _WaitingPageState extends State<WaitingPage> {
             fontSize: 12,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.3,
-            color: AppTheme.accent,
+            color: Color(0xFF1565C0),
           ),
         ),
         const SizedBox(height: 4),
@@ -400,15 +397,10 @@ class _WaitingPageState extends State<WaitingPage> {
   }
 
   Widget _buildTrafficLight(Color activeColor) {
-    const lights = [
-      Colors.red,
-      Colors.orange,
-      Colors.yellow,
-      Colors.green,
-    ];
+    const lights = [Colors.red, Colors.yellow, Colors.green];
     return Container(
       width: 72,
-      height: 220,
+      height: 180,
       decoration: BoxDecoration(
         color: Colors.black,
         borderRadius: BorderRadius.circular(16),
@@ -420,8 +412,8 @@ class _WaitingPageState extends State<WaitingPage> {
           final isActive = color == activeColor;
           return AnimatedContainer(
             duration: const Duration(milliseconds: 500),
-            width: 36,
-            height: 36,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               color: isActive ? color : color.withValues(alpha: 0.2),
               shape: BoxShape.circle,

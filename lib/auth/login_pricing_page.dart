@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/public_page_shell.dart';
+import '../widgets/public_top_menu.dart';
+
 abstract final class _PricingPageTheme {
   static const accent = Color(0xFF0A66C2);
   static const body = Color(0xFFE8E8E8);
@@ -11,23 +14,15 @@ class LoginPricingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _PricingPageTheme.body,
-      appBar: AppBar(
-        backgroundColor: _PricingPageTheme.body,
-        elevation: 0,
-        foregroundColor: Colors.black87,
-        title: const Text('Piani e prezzi'),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+    return PublicPageShell(
+      current: PublicPage.pricing,
+      pageTitle: 'Piani e prezzi',
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
                   const Text(
                     'Scegli il piano più adatto alle tue esigenze. Puoi iniziare '
                     'gratuitamente e passare a un piano superiore quando ti serve '
@@ -103,9 +98,7 @@ class LoginPricingPage extends StatelessWidget {
                         'assegnazione attività e monitoraggio performance tramite '
                         'dashboard dedicate ai supervisor.',
                   ),
-                ],
-              ),
-            ),
+            ],
           ),
         ),
       ),

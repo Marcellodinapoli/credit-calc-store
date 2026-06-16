@@ -49,6 +49,7 @@ dependencies:
   latlong2: ^0.9.1
   credit_calc_core:
     path: packages/credit_calc_core
+  share_plus: ^12.0.2
 
 dev_dependencies:
   flutter_test:
