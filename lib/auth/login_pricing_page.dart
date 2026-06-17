@@ -13,93 +13,117 @@ class LoginPricingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = PublicPageShell.isMobile(context);
+    final horizontal = compact ? 16.0 : 24.0;
+
     return PublicPageShell(
       current: PublicPage.pricing,
-      pageTitle: 'Piani e prezzi',
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-                  const Text(
-                    'Scegli il piano più adatto alle tue esigenze. Puoi iniziare '
-                    'gratuitamente e passare a un piano superiore quando ti serve '
-                    'più potenza e controllo.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 15, height: 1.45),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'I piani PLUS ed ENTERPRISE saranno attivabili con abbonamento. '
-                    'Per le aziende è disponibile una soluzione dedicata su misura.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.grey.shade700,
-                      fontSize: 15,
-                      height: 1.45,
+      scrollable: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              horizontal,
+              compact ? 16.0 : 24.0,
+              horizontal,
+              MediaQuery.paddingOf(context).bottom + 24,
+            ),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Piani e prezzi',
+                      style: PublicPageShell.pageTitleStyle(),
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                  const SizedBox(height: 28),
-                  const _SectionLabel(
-                    title: 'Piani individuali',
-                    subtitle: 'Per professionisti e utenti singoli',
-                  ),
-                  const SizedBox(height: 16),
-                  const _PlanCard(
-                    name: 'FREE',
-                    price: '€0',
-                    description:
-                        'Accesso base alla piattaforma per uso personale. '
-                        'Funzioni limitate per test e utilizzo occasionale, '
-                        'senza strumenti avanzati né storico completo.',
-                  ),
-                  const SizedBox(height: 16),
-                  const _PlanCard(
-                    name: 'PLUS',
-                    price: '€4,99 / mese',
-                    description:
-                        'Accesso completo alle funzionalità principali per uso '
-                        'individuale. Include utilizzo illimitato dei servizi '
-                        'core, storico delle attività e salvataggio dei dati. '
-                        'Pensato per uso quotidiano con piena autonomia sulle '
-                        'funzioni base.',
-                    highlighted: true,
-                    badge: 'Consigliato',
-                  ),
-                  const SizedBox(height: 16),
-                  const _PlanCard(
-                    name: 'ENTERPRISE',
-                    price: '€9,99 / mese',
-                    description:
-                        'Piano avanzato per utenti professionali. Include tutte '
-                        'le funzioni del PLUS con strumenti di analisi, '
-                        'personalizzazione dei flussi, maggiore controllo sui dati '
-                        'e priorità nelle prestazioni. Adatto a utilizzo intensivo '
-                        'e scenari complessi.',
-                  ),
-                  const SizedBox(height: 32),
-                  Divider(color: Colors.grey.shade300),
-                  const SizedBox(height: 32),
-                  const _SectionLabel(
-                    title: 'Per aziende e team',
-                    subtitle:
-                        'Workspace dedicato con ruoli, recruiting e monitoraggio performance',
-                  ),
-                  const SizedBox(height: 16),
-                  const _EnterprisePlanCard(
-                    name: 'AZIENDA',
-                    price: 'Prezzo su richiesta',
-                    description:
-                        'Soluzione completa per team e organizzazioni. Workspace '
-                        'aziendale con gestione ruoli (admin, supervisor, dipendenti), '
-                        'pubblicazione offerte di lavoro, gestione candidati, '
-                        'assegnazione attività e monitoraggio performance tramite '
-                        'dashboard dedicate ai supervisor.',
-                  ),
-            ],
-          ),
-        ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Scegli il piano più adatto alle tue esigenze. Puoi iniziare '
+                      'gratuitamente e passare a un piano superiore quando ti serve '
+                      'più potenza e controllo.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 15, height: 1.45),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'I piani PLUS ed ENTERPRISE saranno attivabili con abbonamento. '
+                      'Per le aziende è disponibile una soluzione dedicata su misura.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontSize: 15,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    const _SectionLabel(
+                      title: 'Piani individuali',
+                      subtitle: 'Per professionisti e utenti singoli',
+                    ),
+                    const SizedBox(height: 16),
+                    const _PlanCard(
+                      name: 'FREE',
+                      price: '€0',
+                      description:
+                          'Accesso base alla piattaforma per uso personale. '
+                          'Funzioni limitate per test e utilizzo occasionale, '
+                          'senza strumenti avanzati né storico completo.',
+                    ),
+                    const SizedBox(height: 16),
+                    const _PlanCard(
+                      name: 'PLUS',
+                      price: '€4,99 / mese',
+                      description:
+                          'Accesso completo alle funzionalità principali per uso '
+                          'individuale. Include utilizzo illimitato dei servizi '
+                          'core, storico delle attività e salvataggio dei dati. '
+                          'Pensato per uso quotidiano con piena autonomia sulle '
+                          'funzioni base.',
+                      highlighted: true,
+                      badge: 'Consigliato',
+                    ),
+                    const SizedBox(height: 16),
+                    const _PlanCard(
+                      name: 'ENTERPRISE',
+                      price: '€9,99 / mese',
+                      description:
+                          'Piano avanzato per utenti professionali. Include tutte '
+                          'le funzioni del PLUS con strumenti di analisi, '
+                          'personalizzazione dei flussi, maggiore controllo sui dati '
+                          'e priorità nelle prestazioni. Adatto a utilizzo intensivo '
+                          'e scenari complessi.',
+                    ),
+                    const SizedBox(height: 32),
+                    Divider(color: Colors.grey.shade300),
+                    const SizedBox(height: 32),
+                    const _SectionLabel(
+                      title: 'Per aziende e team',
+                      subtitle:
+                          'Workspace dedicato con ruoli, recruiting e monitoraggio performance',
+                    ),
+                    const SizedBox(height: 16),
+                    const _EnterprisePlanCard(
+                      name: 'AZIENDA',
+                      price: 'Prezzo su richiesta',
+                      description:
+                          'Soluzione completa per team e organizzazioni. Workspace '
+                          'aziendale con gestione ruoli (admin, supervisor, dipendenti), '
+                          'pubblicazione offerte di lavoro, gestione candidati, '
+                          'assegnazione attività e monitoraggio performance tramite '
+                          'dashboard dedicate ai supervisor.',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

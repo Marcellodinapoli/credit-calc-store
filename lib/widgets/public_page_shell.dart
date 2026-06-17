@@ -15,6 +15,7 @@ class PublicPageShell extends StatelessWidget {
   final String? pageTitle;
   final Widget child;
   final bool scrollable;
+  final bool includeBottomSafeArea;
 
   const PublicPageShell({
     super.key,
@@ -22,6 +23,7 @@ class PublicPageShell extends StatelessWidget {
     this.pageTitle,
     required this.child,
     this.scrollable = true,
+    this.includeBottomSafeArea = false,
   });
 
   static bool isMobile(BuildContext context) =>
@@ -92,8 +94,9 @@ class PublicPageShell extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: PublicPageTheme.background,
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
-        bottom: false,
+        bottom: includeBottomSafeArea,
         child: Column(
           children: [
             PublicTopBar(current: current),

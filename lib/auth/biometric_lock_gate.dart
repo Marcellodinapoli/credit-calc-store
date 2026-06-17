@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../services/biometric_service.dart';
+import '../session/credit_core_session_runtime.dart';
 import 'login_page.dart';
 
 /// Chiede login/biometria solo alla riapertura dell'app (processo nuovo).
@@ -46,6 +47,7 @@ class _BiometricLockGateState extends State<BiometricLockGate> {
 
   static void lockAgain() {
     _unlockedThisSession = false;
+    CreditCoreSessionRuntime.resetPendingBootstrap();
     _lockGeneration.value++;
   }
 
@@ -79,10 +81,14 @@ class _BiometricLockGateState extends State<BiometricLockGate> {
   }
 
   Future<void> _unlock() async {
-    await widget.onUnlocked?.call();
-    if (!mounted) return;
     _unlockedThisSession = true;
-    setState(() => _locked = false);
+    if (mounted) setState(() => _locked = false);
+
+    try {
+      await widget.onUnlocked
+          ?.call()
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
   }
 
   Future<void> _prepare() async {

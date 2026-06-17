@@ -902,8 +902,12 @@ class _LoginPageState extends State<LoginPage> {
       keyboardType: keyboardType,
       autofillHints: autofillHints,
       onSubmitted: onSubmitted,
+      style: const TextStyle(fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         border: const OutlineInputBorder(),
         errorText: errorText,
         suffixIcon: toggleObscure == null
@@ -911,6 +915,7 @@ class _LoginPageState extends State<LoginPage> {
             : IconButton(
                 icon: Icon(
                   obscure ? Icons.visibility : Icons.visibility_off,
+                  size: 20,
                 ),
                 onPressed: toggleObscure,
               ),
@@ -920,21 +925,32 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isRegistration = !_isLogin;
+    final maxCardWidth = min(
+      isRegistration ? 460.0 : 380.0,
+      screenWidth - (isRegistration ? 24 : 32),
+    );
+
     final loginCard = ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 420),
+      constraints: BoxConstraints(maxWidth: maxCardWidth),
       child: Card(
+        margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           side: const BorderSide(color: Color(0xFFE0E0E0)),
         ),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             border: const Border(
               left: BorderSide(color: AppTheme.accent, width: 4),
             ),
           ),
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.symmetric(
+            horizontal: screenWidth < 400 ? 16 : 20,
+            vertical: screenWidth < 400 ? 14 : 18,
+          ),
           child: _buildLoginForm(),
         ),
       ),
@@ -944,12 +960,7 @@ class _LoginPageState extends State<LoginPage> {
       return Scaffold(
         backgroundColor: AppTheme.body,
         body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: loginCard,
-            ),
-          ),
+          child: _buildResponsiveLoginBody(loginCard),
         ),
       );
     }
@@ -957,32 +968,79 @@ class _LoginPageState extends State<LoginPage> {
     return PublicPageShell(
       current: PublicPage.login,
       scrollable: false,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
+      includeBottomSafeArea: isRegistration,
+      child: _buildResponsiveLoginBody(loginCard),
+    );
+  }
+
+  Widget _buildResponsiveLoginBody(Widget loginCard) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final media = MediaQuery.of(context);
+        final compact = PublicPageShell.isMobile(context);
+        final isRegistration = !_isLogin;
+        final horizontal = compact ? 16.0 : 24.0;
+        final topPadding = compact ? 8.0 : 20.0;
+        final bottomPadding = media.padding.bottom +
+            media.viewInsets.bottom +
+            (isRegistration ? 32.0 : 16.0);
+
+        if (isRegistration) {
           return SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: constraints.maxHeight,
-                minWidth: constraints.maxWidth,
-              ),
-              child: Center(child: loginCard),
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: ClampingScrollPhysics(),
+            ),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(
+              horizontal,
+              topPadding,
+              horizontal,
+              bottomPadding,
+            ),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: loginCard,
             ),
           );
-        },
-      ),
+        }
+
+        final centeredCard = Padding(
+          padding: EdgeInsets.fromLTRB(
+            horizontal,
+            topPadding,
+            horizontal,
+            bottomPadding,
+          ),
+          child: Align(
+            alignment: Alignment.center,
+            child: loginCard,
+          ),
+        );
+
+        if (!compact) {
+          return centeredCard;
+        }
+
+        return SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: centeredCard,
+          ),
+        );
+      },
     );
   }
 
   Widget _buildLoginForm() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
                       Text.rich(
                         TextSpan(
                           style: const TextStyle(
-                            fontSize: 24,
+                            fontSize: 22,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF111111),
                           ),
@@ -999,7 +1057,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       Text(
                         widget.unlockMode
                             ? 'Scegli come sbloccare l\'app: inserisci la password '
@@ -1008,9 +1066,13 @@ class _LoginPageState extends State<LoginPage> {
                                 ? 'Accedi o registrati con le credenziali CreditCore.'
                                 : 'Crea un account CreditCore.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey.shade700),
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 13,
+                          height: 1.3,
+                        ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 16),
 
                       if (_isLogin && _loginNotice != null) ...[
                         _buildNotice(_loginNotice!),
@@ -1107,7 +1169,7 @@ class _LoginPageState extends State<LoginPage> {
                         autofillHints: const [AutofillHints.email],
                         errorText: _isLogin ? _emailError : _regError('email'),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       _field(
                         controller: _password,
                         label: 'Password',
@@ -1158,7 +1220,7 @@ class _LoginPageState extends State<LoginPage> {
                         _buildPrivacyConsentRow(),
                       ],
 
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 14),
                       if (_isLogin && _showBiometricButton)
                         Row(
                           children: [
@@ -1168,7 +1230,7 @@ class _LoginPageState extends State<LoginPage> {
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppTheme.accent,
                                   padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
+                                      const EdgeInsets.symmetric(vertical: 10),
                                 ),
                                 child: _busy
                                     ? const SizedBox(
@@ -1189,7 +1251,7 @@ class _LoginPageState extends State<LoginPage> {
                                 style: FilledButton.styleFrom(
                                   backgroundColor: AppTheme.accent,
                                   padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
+                                      const EdgeInsets.symmetric(vertical: 10),
                                 ),
                                 child: const Text('Biometria'),
                               ),
@@ -1203,7 +1265,7 @@ class _LoginPageState extends State<LoginPage> {
                               : (_isLogin ? _signIn : _register),
                           style: FilledButton.styleFrom(
                             backgroundColor: AppTheme.accent,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                           ),
                           child: _busy
                               ? const SizedBox(
@@ -1232,7 +1294,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ],
                       if (!widget.unlockMode && _isLogin) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 4),
                         Center(
                           child: TextButton(
                             onPressed: _busy
@@ -1290,6 +1352,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                       ),
+                      if (!_isLogin) const SizedBox(height: 8),
                       ],
                     ],
     );

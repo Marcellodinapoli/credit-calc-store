@@ -57,6 +57,11 @@ class DesktopPushService {
         if (kDebugMode) {
           debugPrint('Desktop push announcements: $error');
         }
+        final message = error.toString();
+        if (message.contains('permission-denied') ||
+            message.contains('unauthenticated')) {
+          unawaited(stop());
+        }
       },
     );
   }

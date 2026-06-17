@@ -43,6 +43,7 @@ class _CreditCoreSessionCoordinatorState
   void dispose() {
     CreditCoreSessionRuntime.sessionRevoked.removeListener(_onSessionRevoked);
     _authSub?.cancel();
+    CreditCoreSessionRuntime.resetPendingBootstrap();
     super.dispose();
   }
 
@@ -208,7 +209,7 @@ class _CreditCoreSessionCoordinatorState
                     Text(
                       'CreditCore può restare aperto su un solo browser o '
                       'dispositivo per volta (web, app desktop o telefono).\n\n'
-                      'Chiudi l\'altra sessione oppure esci da qui e accedi di nuovo.',
+                      'Chiudi l\'altra sessione oppure prendi il controllo da qui.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 15,
@@ -218,6 +219,18 @@ class _CreditCoreSessionCoordinatorState
                     ),
                     const SizedBox(height: 20),
                     FilledButton(
+                      onPressed: () {
+                        CreditCoreSessionRuntime.bootstrapFuture = null;
+                        CreditCoreSessionRuntime.bootstrapComplete = false;
+                        final user = _user;
+                        if (user != null) {
+                          unawaited(_bootstrapForUser(user));
+                        }
+                      },
+                      child: const Text('Prendi il controllo'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
                       onPressed: _returnToLogin,
                       child: const Text('Esci e riprova'),
                     ),

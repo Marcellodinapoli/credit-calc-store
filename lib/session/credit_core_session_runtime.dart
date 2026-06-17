@@ -18,7 +18,18 @@ abstract final class CreditCoreSessionRuntime {
 
   static Future<void> waitUntilReady() async {
     final pending = bootstrapFuture;
-    if (pending != null) await pending;
+    if (pending == null) return;
+    try {
+      await pending.timeout(const Duration(seconds: 12));
+    } on TimeoutException {
+      resetPendingBootstrap();
+    }
+  }
+
+  /// Evita attese infinite se il bootstrap viene interrotto (es. blocco app).
+  static void resetPendingBootstrap() {
+    if (bootstrapComplete) return;
+    bootstrapFuture = null;
   }
 
   static void startHeartbeat(SessionService service) {

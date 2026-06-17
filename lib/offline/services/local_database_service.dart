@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/sync_record_status.dart';
+import '../sqflite_desktop_init.dart';
 import '../utils/firestore_json_codec.dart';
 import 'local_data_cipher.dart';
 
@@ -15,6 +16,7 @@ class LocalDatabaseService {
   Database? _db;
 
   Future<Database> get database async {
+    await ensureSqfliteDesktopInitialized();
     final existing = _db;
     if (existing != null) return existing;
     final path = await _dbPath();

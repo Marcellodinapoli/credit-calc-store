@@ -11,6 +11,7 @@ import 'auth/login_page.dart';
 import 'auth/registration_consents_service.dart';
 import 'auth/waiting_page.dart';
 import 'core/maintenance_service.dart';
+import 'services/desktop_push_service.dart';
 import 'services/fcm_service.dart';
 import 'services/field_reminder_notification_service.dart';
 import 'offline/credit_calc_bootstrap_gate.dart';
@@ -69,6 +70,7 @@ class _AuthGateState extends State<_AuthGate> {
   void _syncMaintenance(User? user) {
     if (user == null) {
       MaintenanceService.stop();
+      unawaited(DesktopPushService.stop());
     } else {
       MaintenanceService.start();
     }
@@ -156,7 +158,11 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
         isCompany: companyDoc.exists,
       );
       if (!mounted) return;
-      if (!consentsOk) return;
+      if (!consentsOk) {
+        if (!mounted) return;
+        setState(() => _checkingAccess = false);
+        return;
+      }
 
       setState(() {
         _waitingStatus = null;

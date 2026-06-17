@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'app.dart';
 import 'core/credit_calc_host.dart';
 import 'firebase_options.dart';
+import 'offline/sqflite_desktop_init.dart';
 import 'pages/creditcalc/repayment_plan_session_storage.dart';
 import 'services/fcm_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await ensureSqfliteDesktopInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );

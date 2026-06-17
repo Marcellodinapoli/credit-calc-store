@@ -1,7 +1,7 @@
 name: credit_calc
 description: CreditCalc — app ufficiale CreditCore per mobile e desktop (store).
 publish_to: "none"
-version: 1.0.8+8
+version: 1.0.9+9
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -33,6 +33,7 @@ dependencies:
   path_provider: ^2.1.5
   path: ^1.9.1
   sqflite: ^2.4.2
+  sqflite_common_ffi: ^2.3.5
   connectivity_plus: ^6.1.4
   uuid: ^4.5.1
   device_info_plus: ^11.3.3

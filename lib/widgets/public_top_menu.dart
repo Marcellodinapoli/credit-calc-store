@@ -198,15 +198,19 @@ class PublicTopBar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
               children: [
-                GestureDetector(
-                  onTap: () => _goLogin(context),
-                  child: const Text(
-                    'CreditCore',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: primaryBlue,
-                      letterSpacing: -0.3,
+                Flexible(
+                  child: GestureDetector(
+                    onTap: () => _goLogin(context),
+                    child: Text(
+                      'CreditCore',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: primaryBlue,
+                        letterSpacing: -0.3,
+                      ),
                     ),
                   ),
                 ),
@@ -216,18 +220,7 @@ class PublicTopBar extends StatelessWidget {
                 ],
                 const Spacer(),
                 if (isMobile)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _MenuItem(
-                        label: 'Accedi',
-                        active: current == PublicPage.login,
-                        onTap: current == PublicPage.login
-                            ? null
-                            : () => _goLogin(context),
-                      ),
-                      const SizedBox(width: 16),
-                      PopupMenuButton<_PublicMobileMenuAction>(
+                  PopupMenuButton<_PublicMobileMenuAction>(
                         tooltip: 'Menu',
                         position: PopupMenuPosition.under,
                         initialValue: switch (current) {
@@ -257,9 +250,7 @@ class PublicTopBar extends StatelessWidget {
                         onSelected: (value) =>
                             _onMobileMenuSelected(context, value),
                         itemBuilder: (context) => _mobileMenuItems(),
-                      ),
-                    ],
-                  )
+                      )
                 else
                   const SizedBox.shrink(),
               ],
