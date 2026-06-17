@@ -1,5 +1,5 @@
 ﻿import 'package:credit_calc_core/credit_calc_core.dart'
-    hide BalanceWriteOffPage, DevelopPage, StandardRepaymentPlanPage;
+    hide BalanceWriteOffPage, DevelopPage;
 import 'package:flutter/material.dart';
 
 import 'itinerary/itinerary_hub_page.dart';

@@ -8,7 +8,6 @@ import 'package:credit_calc_core/credit_calc_core.dart'
         RepaymentPlanCommissionExportResult,
         RepaymentPlanCommissionExporter,
         RepaymentPlanCommissionSlice,
-        StandardRepaymentPlanPage,
         showPlanCancelWithCommissionsDialog;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -4232,14 +4231,17 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   String _sharePlanText() {
     final creditor = _creditor;
     final schedule = _commissionPaymentSchedule();
+    final totaleRateizzato =
+        schedule.fold<double>(0, (sum, payment) => sum + payment.amount);
+    final acconto = EuroFormat.parse(_accontoCtrl.text) ?? 0;
     final lines = <String>[
       'Sviluppo piano di rientro',
       if (creditor != null) 'Creditore: ${creditor.name}',
       'Data inizio: ${_formatDate(_dataInizio)}',
       if (_dataFine != null) 'Data fine: ${_formatDate(_dataFine!)}',
-      if (_totaleRateizzato > 0)
-        'Totale rateizzato: ${EuroFormat.format(_totaleRateizzato)}',
-      if (_acconto > 0) 'Acconto: ${EuroFormat.format(_acconto)}',
+      if (totaleRateizzato > 0)
+        'Totale rateizzato: ${EuroFormat.format(totaleRateizzato)}',
+      if (acconto > 0) 'Acconto: ${EuroFormat.format(acconto)}',
       '',
       'Scadenze:',
       if (schedule.isEmpty) 'Nessuna scadenza disponibile',

@@ -5,7 +5,6 @@ import '../widgets/public_top_menu.dart';
 
 abstract final class _PricingPageTheme {
   static const accent = Color(0xFF0A66C2);
-  static const body = Color(0xFFE8E8E8);
 }
 
 /// Piani e prezzi CreditCore (allineato a CreditPlanet web /prezzi).
@@ -167,7 +166,7 @@ class _PlanCard extends StatelessWidget {
         boxShadow: highlighted
             ? [
                 BoxShadow(
-                  color: _PricingPageTheme.accent.withOpacity(0.12),
+                  color: _PricingPageTheme.accent.withValues(alpha: 0.12),
                   blurRadius: 16,
                   offset: const Offset(0, 6),
                 ),
@@ -182,7 +181,7 @@ class _PlanCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               margin: const EdgeInsets.only(bottom: 10),
               decoration: BoxDecoration(
-                color: _PricingPageTheme.accent.withOpacity(0.1),
+                color: _PricingPageTheme.accent.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -254,7 +253,7 @@ class _EnterprisePlanCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: _PricingPageTheme.accent.withOpacity(0.12),
+              color: _PricingPageTheme.accent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Text(

@@ -30,6 +30,17 @@ abstract final class AdaptiveButtonStyles {
     );
   }
 
+  static ButtonStyle calcOutlined() {
+    return OutlinedButton.styleFrom(
+      foregroundColor: ProjectColors.calc,
+      backgroundColor: Colors.white,
+      side: BorderSide(color: ProjectColors.calc, width: 1.5),
+      minimumSize: const Size(0, 52),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+    );
+  }
+
   static ButtonStyle formElevated() {
     return ElevatedButton.styleFrom(
       backgroundColor: ProjectColors.form,

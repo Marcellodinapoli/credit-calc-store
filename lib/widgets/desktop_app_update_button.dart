@@ -148,7 +148,7 @@ class _DesktopAppUpdateButtonState extends State<DesktopAppUpdateButton> {
                       height: 16,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                       ),
                     )
                   : Icon(
@@ -172,7 +172,7 @@ class _DesktopAppUpdateButtonState extends State<DesktopAppUpdateButton> {
 
 /// Versione installata + pulsante aggiornamento in fondo alla shell desktop.
 class DesktopAppVersionFooter extends StatelessWidget {
-  const DesktopAppVersionFooter();
+  const DesktopAppVersionFooter({super.key});
 
   @override
   Widget build(BuildContext context) {

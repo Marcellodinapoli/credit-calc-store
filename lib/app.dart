@@ -149,6 +149,7 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
           .collection('companies')
           .doc(widget.user.uid)
           .get();
+      if (!mounted) return;
       final consentsOk = await RegistrationConsentsService.ensureAcceptedOnLogin(
         context,
         uid: widget.user.uid,

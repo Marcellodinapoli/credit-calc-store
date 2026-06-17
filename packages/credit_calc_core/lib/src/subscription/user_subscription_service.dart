@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'subscription_plan_options.dart';
 import 'user_subscription_snapshot.dart';
 
 /// Lettura e aggiornamento campi abbonamento su `users` / `companies`.

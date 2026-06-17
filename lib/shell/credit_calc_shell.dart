@@ -171,6 +171,8 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
         return const DevelopPage();
       case CreditCalcNavItem.commissions:
         return const CommissionsPage();
+      case CreditCalcNavItem.subscription:
+        return const SubscriptionAccountPage();
     }
   }
 
