@@ -1,12 +1,14 @@
 import 'package:credit_calc_core/credit_calc_core.dart';
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'core/app_localizations_config.dart';
 import 'auth/biometric_lock_gate.dart';
 import 'auth/login_page.dart';
+import 'auth/registration_consents_service.dart';
 import 'auth/waiting_page.dart';
 import 'core/maintenance_service.dart';
 import 'services/fcm_service.dart';
@@ -134,8 +136,29 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
         onTimeout: () => null,
       );
       if (!mounted) return;
+
+      if (status != null) {
+        setState(() {
+          _waitingStatus = status;
+          _checkingAccess = false;
+        });
+        return;
+      }
+
+      final companyDoc = await FirebaseFirestore.instance
+          .collection('companies')
+          .doc(widget.user.uid)
+          .get();
+      final consentsOk = await RegistrationConsentsService.ensureAcceptedOnLogin(
+        context,
+        uid: widget.user.uid,
+        isCompany: companyDoc.exists,
+      );
+      if (!mounted) return;
+      if (!consentsOk) return;
+
       setState(() {
-        _waitingStatus = status;
+        _waitingStatus = null;
         _checkingAccess = false;
       });
     } catch (_) {

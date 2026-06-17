@@ -18,6 +18,7 @@ import 'registration_coupon_service.dart';
 import 'registration_plan_field.dart';
 import 'registration_plan_selection_result.dart';
 import 'registration_privacy_consents_page.dart';
+import 'registration_consents_service.dart';
 
 abstract final class AppTheme {
   static const accent = Color(0xFF0A66C2);
@@ -76,6 +77,7 @@ class _LoginPageState extends State<LoginPage> {
   String? _registerNotice;
   final Map<String, String> _registerFieldErrors = {};
   bool _privacyAccepted = false;
+  String? _acceptedConsentVersion;
 
   @override
   void initState() {
@@ -252,6 +254,7 @@ class _LoginPageState extends State<LoginPage> {
 
   void _resetPrivacyAcceptance() {
     _privacyAccepted = false;
+    _acceptedConsentVersion = null;
   }
 
   String? _regError(String key) => _registerFieldErrors[key];
@@ -542,15 +545,16 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _openPrivacyConsents() async {
-    final accepted = await Navigator.push<bool>(
+    final version = await Navigator.push<String>(
       context,
       MaterialPageRoute(
         builder: (_) => const RegistrationPrivacyConsentsPage(),
       ),
     );
-    if (accepted == true && mounted) {
+    if (version != null && mounted) {
       setState(() {
         _privacyAccepted = true;
+        _acceptedConsentVersion = version;
         _registerFieldErrors.remove('privacy');
       });
     }
@@ -703,7 +707,10 @@ class _LoginPageState extends State<LoginPage> {
         await userRef.collection('consents_history').doc('_init').set({
           'createdAt': FieldValue.serverTimestamp(),
         });
-        await _saveRegistrationPrivacyConsent(userRef);
+        await _saveRegistrationPrivacyConsent(
+          uid: user.uid,
+          isCompany: false,
+        );
         if (coupon?.isValid == true) {
           await RegistrationCouponService.markCouponUsed(
             code: coupon!.code,
@@ -763,7 +770,10 @@ class _LoginPageState extends State<LoginPage> {
         await companyRef.collection('rules_history').doc('_init').set({
           'createdAt': FieldValue.serverTimestamp(),
         });
-        await _saveRegistrationPrivacyConsent(userRef);
+        await _saveRegistrationPrivacyConsent(
+          uid: user.uid,
+          isCompany: true,
+        );
         if (coupon?.isValid == true) {
           await RegistrationCouponService.markCouponUsed(
             code: coupon!.code,
@@ -845,13 +855,19 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Future<void> _saveRegistrationPrivacyConsent(DocumentReference userRef) async {
-    await userRef.collection('consents_history').doc('privacy_registration').set({
-      'type': 'privacy_and_consents',
-      'version': registrationPrivacyConsentsVersion,
-      'acceptedAt': FieldValue.serverTimestamp(),
-      'source': 'registration',
-    });
+  Future<void> _saveRegistrationPrivacyConsent({
+    required String uid,
+    required bool isCompany,
+  }) async {
+    final version = _acceptedConsentVersion;
+    if (version == null) return;
+
+    await RegistrationConsentsService.saveAcceptance(
+      uid: uid,
+      version: version,
+      source: isCompany ? 'company_registration' : 'registration',
+      isCompany: isCompany,
+    );
   }
 
   Widget _buildNotice(String text) {
