@@ -187,12 +187,15 @@ Add-AtlIncludePath
 Write-Host "==> pub get (core + app)"
 Push-Location $core
 flutter pub get
+if ($LASTEXITCODE -ne 0) { throw "flutter pub get (core) fallito con codice $LASTEXITCODE" }
 Pop-Location
 
 Push-Location $root
 flutter pub get
+if ($LASTEXITCODE -ne 0) { throw "flutter pub get (app) fallito con codice $LASTEXITCODE" }
 Patch-NotificationsAtlCmake
 flutter build windows --release
+if ($LASTEXITCODE -ne 0) { throw "flutter build windows --release fallito con codice $LASTEXITCODE" }
 Pop-Location
 
 $releaseDir = Join-Path $root "build\windows\x64\runner\Release"

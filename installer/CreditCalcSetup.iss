@@ -34,7 +34,7 @@ PrivilegesRequired=admin
 MinVersion=10.0
 
 [Languages]
-Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
+Name: "italian"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Crea un'icona sul desktop"; GroupDescription: "Collegamenti aggiuntivi:"; Flags: unchecked

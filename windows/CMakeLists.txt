@@ -62,7 +62,10 @@ if(TARGET flutter_local_notifications_windows)
   file(GLOB _creditcalc_atl_include_dirs
     "$ENV{VCToolsInstallDir}atlmfc/include"
     "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/*/atlmfc/include"
+    "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/*/atlmfc/include"
+    "C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/*/atlmfc/include"
     "C:/Program Files/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/*/atlmfc/include"
+    "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/*/atlmfc/include"
   )
   foreach(_atl_dir ${_creditcalc_atl_include_dirs})
     if(EXISTS "${_atl_dir}/atlbase.h")
@@ -73,6 +76,7 @@ if(TARGET flutter_local_notifications_windows)
       if(EXISTS "${_atl_lib}/atls.lib")
         target_link_libraries(flutter_local_notifications_windows PRIVATE "${_atl_lib}/atls.lib")
         target_link_options(flutter_local_notifications_windows PRIVATE "/LIBPATH:${_atl_lib}")
+        set_target_properties(flutter_local_notifications_windows PROPERTIES VS_GLOBAL_UseOfAtl "Static")
       endif()
       break()
     endif()
