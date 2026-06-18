@@ -81,6 +81,13 @@ function Add-AtlIncludePath {
 }
 
 function Resolve-FlutterBin {
+    if ($env:FLUTTER_ROOT) {
+        $fromEnv = Join-Path $env:FLUTTER_ROOT "bin"
+        if (Test-Path (Join-Path $fromEnv "flutter.bat")) {
+            return $fromEnv
+        }
+    }
+
     $candidates = @(
         (Join-Path $root "..\Planet\.tools\flutter\bin"),
         (Join-Path $root "..\..\Planet\.tools\flutter\bin"),
@@ -97,8 +104,14 @@ function Resolve-FlutterBin {
             return $full
         }
     }
+
     $cmd = Get-Command flutter -ErrorAction SilentlyContinue
-    if ($cmd) { return $cmd.DirectoryName }
+    if ($cmd) {
+        $flutterBat = if ($cmd.Source) { $cmd.Source } else { $cmd.Path }
+        if ($flutterBat) {
+            return (Split-Path $flutterBat -Parent)
+        }
+    }
     return $null
 }
 
