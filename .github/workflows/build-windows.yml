@@ -1,0 +1,44 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build release and installer
+        shell: pwsh
+        run: .\scripts\build_windows_release.ps1
+
+      - name: Upload installer and app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: CreditCalc-Windows
+          path: |
+            dist/*-Setup.exe
+            dist/*-win64/
+          retention-days: 30

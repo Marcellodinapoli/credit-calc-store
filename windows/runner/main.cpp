@@ -25,9 +25,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
-  // Larghezza come la Calcolatrice Windows (~322 px), un po' più alta.
+  // Larghezza tipo Calcolatrice Windows, ~20% più ampia della base 322×660.
   Win32Window::Point origin(10, 10);
-  Win32Window::Size size(322, 660);
+  Win32Window::Size size(386, 792);
   if (!window.Create(L"CreditCalc", origin, size)) {
     return EXIT_FAILURE;
   }

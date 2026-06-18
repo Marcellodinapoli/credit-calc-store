@@ -34,6 +34,50 @@ function Get-InnoSetupCompiler {
 $version = Get-AppVersion
 Write-Host "==> CreditCalc $version - build Windows release"
 
+function Resolve-FlutterBin {
+    $candidates = @(
+        (Join-Path $root "..\Planet\.tools\flutter\bin"),
+        (Join-Path $root "..\..\Planet\.tools\flutter\bin"),
+        "$env:LOCALAPPDATA\flutter\bin",
+        "C:\src\flutter\bin"
+    )
+    foreach ($dir in $candidates) {
+        try {
+            $full = [System.IO.Path]::GetFullPath($dir)
+        } catch {
+            continue
+        }
+        if (Test-Path (Join-Path $full "flutter.bat")) {
+            return $full
+        }
+    }
+    $cmd = Get-Command flutter -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.DirectoryName }
+    return $null
+}
+
+$flutterBin = Resolve-FlutterBin
+if (-not $flutterBin) {
+    throw @"
+Flutter non trovato.
+- Installa Flutter da https://docs.flutter.dev/get-started/install/windows
+  oppure
+- Tieni Planet\.tools\flutter accanto a questo progetto (già presente su molti PC CreditCore).
+"@
+}
+$env:PATH = "$flutterBin;$env:PATH"
+Write-Host "==> Flutter: $flutterBin"
+
+if (-not (Get-Vs2022Root)) {
+    Write-Warning @"
+
+Visual Studio 2022 (C++) non trovato: serve per compilare l'exe Windows.
+Installa Visual Studio Community (gratuito) e seleziona:
+  «Sviluppo di applicazioni desktop con C++»
+https://visualstudio.microsoft.com/downloads/
+"@
+}
+
 if (-not (Test-Path (Join-Path $tools "nuget.exe"))) {
     New-Item -ItemType Directory -Force -Path $tools | Out-Null
     Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" `
@@ -41,11 +85,22 @@ if (-not (Test-Path (Join-Path $tools "nuget.exe"))) {
 }
 $env:PATH = "$tools;$env:PATH"
 
-function Add-AtlIncludePath {
-    $vsRoot = "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community"
-    if (-not (Test-Path $vsRoot)) {
-        $vsRoot = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Community"
+function Get-Vs2022Root {
+    $editions = @('Community', 'Enterprise', 'Professional', 'BuildTools')
+    $bases = @("${env:ProgramFiles}", "${env:ProgramFiles(x86)}")
+    foreach ($base in $bases) {
+        foreach ($edition in $editions) {
+            $candidate = Join-Path $base "Microsoft Visual Studio\2022\$edition"
+            if (Test-Path $candidate) { return $candidate }
+        }
     }
+    return $null
+}
+
+function Add-AtlIncludePath {
+    $vsRoot = Get-Vs2022Root
+    if (-not $vsRoot) { return }
+
     $msvcRoot = Join-Path $vsRoot "VC\Tools\MSVC"
     if (-not (Test-Path $msvcRoot)) { return }
 
@@ -94,7 +149,10 @@ function Patch-NotificationsAtlCmake {
 # CreditCalc: MSVC ATL for flutter_local_notifications_windows
 file(GLOB _creditcalc_atl_inc
   "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/*/atlmfc/include"
+  "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/*/atlmfc/include"
+  "C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/*/atlmfc/include"
   "C:/Program Files/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/*/atlmfc/include"
+  "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/*/atlmfc/include"
 )
 foreach(_dir ${_creditcalc_atl_inc})
   if(EXISTS "${_dir}/atlbase.h")

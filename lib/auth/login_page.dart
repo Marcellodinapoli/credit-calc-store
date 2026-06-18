@@ -136,6 +136,13 @@ class _LoginPageState extends State<LoginPage> {
         e.code == 'too-many-requests';
   }
 
+  Future<bool> _networkReadyForLogin() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      return true;
+    }
+    return ConnectivityService.isOnline();
+  }
+
   Future<void> _signInBiometric() async {
     if (!widget.unlockMode && !_hasSavedCredentials) {
       if (!mounted) return;
@@ -433,7 +440,7 @@ class _LoginPageState extends State<LoginPage> {
         setState(() => _busy = false);
         return;
       }
-      if (!await ConnectivityService.isOnline()) {
+      if (!await _networkReadyForLogin()) {
         final current = FirebaseAuth.instance.currentUser;
         if (current != null &&
             (email.isEmpty || current.email == email)) {
@@ -450,7 +457,7 @@ class _LoginPageState extends State<LoginPage> {
         });
         return;
       }
-    } else if (!await ConnectivityService.isOnline()) {
+    } else if (!await _networkReadyForLogin()) {
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -463,10 +470,12 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          )
+          .timeout(const Duration(seconds: 15));
       if (widget.unlockMode) {
         await widget.onUnlocked?.call();
         return;
@@ -481,6 +490,12 @@ class _LoginPageState extends State<LoginPage> {
               'Accesso riuscito, ma la biometria non è stata attivata su questo dispositivo.';
         });
       }
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _loginNotice =
+            'Connessione lenta o non disponibile. Verifica la rete e riprova.';
+      });
     } on FirebaseAuthException catch (e) {
       final feedback = await AuthFormValidation.resolveLoginAuthFailure(e, email);
       if (!mounted) return;
