@@ -6,6 +6,10 @@
 #   dist\CreditCalc-<version>-win64\CreditCalc.exe
 #   dist\CreditCalc-<version>-Setup.exe
 
+param(
+    [switch]$PackageOnly
+)
+
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $core = Join-Path $root "packages\credit_calc_core"
@@ -115,88 +119,56 @@ function Resolve-FlutterBin {
     return $null
 }
 
-function Patch-NotificationsAtlCmake {
-    $cmake = Join-Path $root "windows\flutter\ephemeral\.plugin_symlinks\flutter_local_notifications_windows\src\CMakeLists.txt"
-    if (-not (Test-Path $cmake)) { return }
-
-    $marker = "CreditCalc: MSVC ATL"
-    $content = Get-Content $cmake -Raw
-    if ($content -match [regex]::Escape($marker)) { return }
-
-    $patch = @'
-
-# CreditCalc: MSVC ATL for flutter_local_notifications_windows
-file(GLOB _creditcalc_atl_inc
-  "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/*/atlmfc/include"
-  "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/*/atlmfc/include"
-  "C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/*/atlmfc/include"
-  "C:/Program Files/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/*/atlmfc/include"
-  "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/*/atlmfc/include"
-)
-foreach(_dir ${_creditcalc_atl_inc})
-  if(EXISTS "${_dir}/atlbase.h")
-    get_filename_component(_msvc "${_dir}" DIRECTORY)
-    get_filename_component(_msvc "${_msvc}" DIRECTORY)
-    set(_lib "${_msvc}/atlmfc/lib/x64")
-    target_include_directories(flutter_local_notifications_windows PRIVATE "${_dir}")
-    target_link_libraries(flutter_local_notifications_windows PRIVATE "${_lib}/atls.lib")
-    set_target_properties(flutter_local_notifications_windows PROPERTIES VS_GLOBAL_UseOfAtl "Static")
-    break()
-  endif()
-endforeach()
-'@
-
-    Add-Content -Path $cmake -Value $patch -Encoding UTF8
-    Write-Host "==> Patch ATL su flutter_local_notifications_windows"
-}
-
 $version = Get-AppVersion
 Write-Host "==> CreditCalc $version - build Windows release"
 
-$flutterBin = Resolve-FlutterBin
-if (-not $flutterBin) {
-    throw @"
+if (-not $PackageOnly) {
+    $flutterBin = Resolve-FlutterBin
+    if (-not $flutterBin) {
+        throw @"
 Flutter non trovato.
 - Installa Flutter da https://docs.flutter.dev/get-started/install/windows
   oppure
 - Tieni Planet\.tools\flutter accanto a questo progetto (già presente su molti PC CreditCore).
 "@
-}
-$env:PATH = "$flutterBin;$env:PATH"
-Write-Host "==> Flutter: $flutterBin"
+    }
+    $env:PATH = "$flutterBin;$env:PATH"
+    Write-Host "==> Flutter: $flutterBin"
 
-if (-not (Get-Vs2022Root)) {
-    Write-Warning @"
+    if (-not (Get-Vs2022Root)) {
+        Write-Warning @"
 
 Visual Studio 2022 (C++) non trovato: serve per compilare l'exe Windows.
 Installa Visual Studio Community (gratuito) e seleziona:
   «Sviluppo di applicazioni desktop con C++»
 https://visualstudio.microsoft.com/downloads/
 "@
+    }
+
+    if (-not (Test-Path (Join-Path $tools "nuget.exe"))) {
+        New-Item -ItemType Directory -Force -Path $tools | Out-Null
+        Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" `
+            -OutFile (Join-Path $tools "nuget.exe")
+    }
+    $env:PATH = "$tools;$env:PATH"
+
+    Add-AtlIncludePath
+
+    Write-Host "==> pub get (core + app)"
+    Push-Location $core
+    flutter pub get
+    if ($LASTEXITCODE -ne 0) { throw "flutter pub get (core) fallito con codice $LASTEXITCODE" }
+    Pop-Location
+
+    Push-Location $root
+    flutter pub get
+    if ($LASTEXITCODE -ne 0) { throw "flutter pub get (app) fallito con codice $LASTEXITCODE" }
+    flutter build windows --release
+    if ($LASTEXITCODE -ne 0) { throw "flutter build windows --release fallito con codice $LASTEXITCODE" }
+    Pop-Location
+} else {
+    Write-Host "==> Modalità PackageOnly (build Flutter già eseguita)"
 }
-
-if (-not (Test-Path (Join-Path $tools "nuget.exe"))) {
-    New-Item -ItemType Directory -Force -Path $tools | Out-Null
-    Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" `
-        -OutFile (Join-Path $tools "nuget.exe")
-}
-$env:PATH = "$tools;$env:PATH"
-
-Add-AtlIncludePath
-
-Write-Host "==> pub get (core + app)"
-Push-Location $core
-flutter pub get
-if ($LASTEXITCODE -ne 0) { throw "flutter pub get (core) fallito con codice $LASTEXITCODE" }
-Pop-Location
-
-Push-Location $root
-flutter pub get
-if ($LASTEXITCODE -ne 0) { throw "flutter pub get (app) fallito con codice $LASTEXITCODE" }
-Patch-NotificationsAtlCmake
-flutter build windows --release
-if ($LASTEXITCODE -ne 0) { throw "flutter build windows --release fallito con codice $LASTEXITCODE" }
-Pop-Location
 
 $releaseDir = Join-Path $root "build\windows\x64\runner\Release"
 $exePath = Join-Path $releaseDir "CreditCalc.exe"

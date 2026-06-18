@@ -24,6 +24,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
@@ -37,10 +40,30 @@ jobs:
           $installPath = & $vswhere -latest -property installationPath
           $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
           Write-Host "VS install path: $installPath"
-          & $installer modify --installPath $installPath --add Microsoft.Visual Studio.Component.VC.ATLMFC --quiet --norestart --wait
+          $proc = Start-Process -FilePath $installer -ArgumentList @(
+            'modify',
+            '--installPath', $installPath,
+            '--add', 'Microsoft.VisualStudio.Component.VC.ATLMFC',
+            '--quiet', '--norestart', '--wait'
+          ) -PassThru -Wait
+          if ($proc.ExitCode -notin 0, 3010) {
+            throw "vs_installer modify failed with exit code $($proc.ExitCode)"
+          }
+          $atl = Get-ChildItem "$installPath\VC\Tools\MSVC\*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $atl) { throw "ATL headers not found after install" }
+          Write-Host "ATL header: $($atl.FullName)"
 
-      - name: Build release and installer
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_release.ps1
+      - name: Flutter pub get
+        run: |
+          flutter pub get
+          cd packages\credit_calc_core
+          flutter pub get
+
+      - name: Build Windows app
+        run: flutter build windows --release
+
+      - name: Create installer
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_release.ps1 -PackageOnly
 
       - name: Upload installer and app bundle
         uses: actions/upload-artifact@v4
