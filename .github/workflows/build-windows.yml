@@ -33,24 +33,38 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
 
-      - name: Install MSVC ATL/MFC
+      - name: Ensure MSVC ATL/MFC
         shell: pwsh
         run: |
+          $atl = @(
+            "${env:ProgramFiles}\Microsoft Visual Studio\2022",
+            "${env:ProgramFiles}\Microsoft Visual Studio\18",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022"
+          ) | ForEach-Object {
+            Get-ChildItem "$_\*\VC\Tools\MSVC\*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue
+          } | Select-Object -First 1
+
+          if ($atl) {
+            Write-Host "ATL già presente: $($atl.FullName)"
+            exit 0
+          }
+
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $installPath = & $vswhere -latest -property installationPath
           $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
-          Write-Host "VS install path: $installPath"
-          $proc = Start-Process -FilePath $installer -ArgumentList @(
-            'modify',
-            '--installPath', $installPath,
-            '--add', 'Microsoft.VisualStudio.Component.VC.ATLMFC',
-            '--quiet', '--norestart', '--wait'
-          ) -PassThru -Wait
-          if ($proc.ExitCode -notin 0, 3010) {
-            throw "vs_installer modify failed with exit code $($proc.ExitCode)"
+          Write-Host "Installo ATL/MFC in: $installPath"
+          & $installer modify `
+            --installPath "$installPath" `
+            --add Microsoft.VisualStudio.Component.VC.ATLMFC `
+            --quiet --norestart --wait
+          if ($LASTEXITCODE -notin 0, 3010) {
+            Write-Warning "vs_installer exit code $LASTEXITCODE"
           }
+
           $atl = Get-ChildItem "$installPath\VC\Tools\MSVC\*\atlmfc\include\atlbase.h" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $atl) { throw "ATL headers not found after install" }
+          if (-not $atl) {
+            throw "ATL headers non trovati in $installPath"
+          }
           Write-Host "ATL header: $($atl.FullName)"
 
       - name: Flutter pub get

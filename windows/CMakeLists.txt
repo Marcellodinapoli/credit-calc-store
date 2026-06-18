@@ -66,6 +66,10 @@ if(TARGET flutter_local_notifications_windows)
     "C:/Program Files/Microsoft Visual Studio/2022/Professional/VC/Tools/MSVC/*/atlmfc/include"
     "C:/Program Files/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/*/atlmfc/include"
     "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/*/atlmfc/include"
+    "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/*/atlmfc/include"
+    "C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/MSVC/*/atlmfc/include"
+    "C:/Program Files/Microsoft Visual Studio/18/Professional/VC/Tools/MSVC/*/atlmfc/include"
+    "C:/Program Files/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/*/atlmfc/include"
   )
   foreach(_atl_dir ${_creditcalc_atl_include_dirs})
     if(EXISTS "${_atl_dir}/atlbase.h")

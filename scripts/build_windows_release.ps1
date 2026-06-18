@@ -37,11 +37,14 @@ function Get-InnoSetupCompiler {
 
 function Get-Vs2022Root {
     $editions = @('Community', 'Enterprise', 'Professional', 'BuildTools')
+    $versionRoots = @('2022', '18')
     $bases = @("${env:ProgramFiles}", "${env:ProgramFiles(x86)}")
     foreach ($base in $bases) {
-        foreach ($edition in $editions) {
-            $candidate = Join-Path $base "Microsoft Visual Studio\2022\$edition"
-            if (Test-Path $candidate) { return $candidate }
+        foreach ($version in $versionRoots) {
+            foreach ($edition in $editions) {
+                $candidate = Join-Path $base "Microsoft Visual Studio\$version\$edition"
+                if (Test-Path $candidate) { return $candidate }
+            }
         }
     }
     return $null
