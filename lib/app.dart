@@ -122,6 +122,7 @@ class _AuthenticatedShell extends StatefulWidget {
 class _AuthenticatedShellState extends State<_AuthenticatedShell> {
   bool _checkingAccess = true;
   String? _waitingStatus;
+  bool _showOnboarding = false;
 
   @override
   void initState() {
@@ -143,6 +144,7 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
         setState(() {
           _waitingStatus = status;
           _checkingAccess = false;
+          _showOnboarding = false;
         });
         return;
       }
@@ -160,25 +162,38 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
       if (!mounted) return;
       if (!consentsOk) {
         if (!mounted) return;
-        setState(() => _checkingAccess = false);
+        setState(() {
+          _checkingAccess = false;
+          _showOnboarding = false;
+        });
         return;
       }
 
+      final needsOnboarding =
+          await OnboardingNavigation.needsOnboardingForCurrentUser();
+      if (!mounted) return;
+
       setState(() {
         _waitingStatus = null;
+        _showOnboarding = needsOnboarding;
         _checkingAccess = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _waitingStatus = null;
+        _showOnboarding = false;
         _checkingAccess = false;
       });
     }
   }
 
   void _onAccessGranted() {
-    setState(() => _waitingStatus = null);
+    setState(() {
+      _waitingStatus = null;
+      _checkingAccess = true;
+    });
+    _checkAccess();
   }
 
   @override
@@ -194,6 +209,12 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
         email: widget.user.email,
         status: _waitingStatus!,
         onAccessGranted: _onAccessGranted,
+      );
+    }
+
+    if (_showOnboarding) {
+      return OnboardingCarouselPage(
+        onFinished: () => setState(() => _showOnboarding = false),
       );
     }
 

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'subscription_billing_service.dart';
+import 'company_collaborator_limit_service.dart';
 import 'user_subscription_snapshot.dart';
 
 /// Lettura e aggiornamento campi abbonamento su `users` / `companies`.
@@ -9,20 +11,49 @@ abstract final class UserSubscriptionService {
 
   static Map<String, dynamic> _subscriptionFrom(Map<String, dynamic>? data) {
     final map = data ?? {};
+    final couponRaw = (map['couponCode'] ?? '').toString().trim();
     return {
       'subscriptionPlan': (map['subscriptionPlan'] ?? 'free').toString(),
       'subscriptionStatus':
           (map['subscriptionStatus'] ?? 'active').toString(),
-      'couponCode': map['couponCode'],
+      'couponCode': couponRaw.isEmpty ? null : couponRaw,
       'lifetimeAccess': map['lifetimeAccess'] == true,
       'subscriptionCancelledAt': map['subscriptionCancelledAt'],
     };
   }
 
+  /// Se il profilo non ha `couponCode`, recupera il coupon usato in registrazione.
+  static Future<Map<String, dynamic>> _enrichSubscriptionFromCouponUsage(
+    String uid,
+    Map<String, dynamic> subscription,
+  ) async {
+    final enriched = Map<String, dynamic>.from(subscription);
+    final existing = (enriched['couponCode'] ?? '').toString().trim();
+    if (existing.isNotEmpty) return enriched;
+
+    try {
+      final snap = await _firestore
+          .collection('coupons')
+          .where('lastUsedBy', isEqualTo: uid)
+          .limit(1)
+          .get();
+      if (snap.docs.isEmpty) return enriched;
+
+      final doc = snap.docs.first;
+      final data = doc.data();
+      enriched['couponCode'] = doc.id;
+      if (enriched['lifetimeAccess'] != true) {
+        enriched['lifetimeAccess'] = data['lifetimeFree'] as bool? ?? true;
+      }
+    } catch (_) {}
+
+    return enriched;
+  }
+
   static Future<_SubscriptionContext> _resolveContext(String uid) async {
     final userDoc = await _firestore.collection('users').doc(uid).get();
     final userData = userDoc.data() ?? {};
-    final type = (userData['type'] ?? 'public').toString();
+    final type = (userData['type'] ?? 'public').toString().trim().toLowerCase();
 
     if (type == 'work') {
       final companyId = (userData['companyId'] ?? '').toString();
@@ -46,23 +77,27 @@ abstract final class UserSubscriptionService {
       );
     }
 
-    if (type == 'company') {
-      final companyDoc =
-          await _firestore.collection('companies').doc(uid).get();
+    final companyDoc =
+        await _firestore.collection('companies').doc(uid).get();
+    final isCompanyAccount = type == 'company' || companyDoc.exists;
+
+    if (isCompanyAccount) {
       final sub = companyDoc.exists
           ? _subscriptionFrom(companyDoc.data())
           : _subscriptionFrom(userData);
       return _SubscriptionContext(
-        registerType: type,
+        registerType: 'company',
         canManage: true,
         subscription: sub,
         userRef: _firestore.collection('users').doc(uid),
-        companyRef: _firestore.collection('companies').doc(uid),
+        companyRef: companyDoc.exists
+            ? _firestore.collection('companies').doc(uid)
+            : null,
       );
     }
 
     return _SubscriptionContext(
-      registerType: type,
+      registerType: 'public',
       canManage: true,
       subscription: _subscriptionFrom(userData),
       userRef: _firestore.collection('users').doc(uid),
@@ -107,7 +142,15 @@ abstract final class UserSubscriptionService {
       );
     }
     final ctx = await _resolveContext(uid);
-    return _toSnapshot(ctx);
+    final subscription =
+        await _enrichSubscriptionFromCouponUsage(uid, ctx.subscription);
+    return _toSnapshot(_SubscriptionContext(
+      registerType: ctx.registerType,
+      canManage: ctx.canManage,
+      subscription: subscription,
+      userRef: ctx.userRef,
+      companyRef: ctx.companyRef,
+    ));
   }
 
   static Future<void> changePlan(String newPlanId) async {
@@ -130,6 +173,12 @@ abstract final class UserSubscriptionService {
     final currentPlan = ctx.subscription['subscriptionPlan'] as String;
     if (currentPlan == newPlanId) return;
 
+    if (SubscriptionBillingService.planUsesStripeCheckout(newPlanId)) {
+      throw StateError(
+        'I piani a pagamento si attivano tramite la pagina di pagamento Stripe.',
+      );
+    }
+
     final updates = <String, dynamic>{
       'subscriptionPlan': newPlanId,
       'subscriptionCancelledAt': FieldValue.delete(),
@@ -142,6 +191,17 @@ abstract final class UserSubscriptionService {
     }
 
     await _writeSubscription(ctx, updates);
+
+    if (ctx.companyRef != null) {
+      final companyCode = await _resolveCompanyCode(ctx);
+      if (companyCode.isNotEmpty) {
+        await CompanyCollaboratorLimitService.syncPlanLimitForCompany(
+          companyId: ctx.companyRef!.id,
+          companyCode: companyCode,
+          subscriptionPlan: newPlanId,
+        );
+      }
+    }
   }
 
   static Future<void> cancelSubscription() async {
@@ -162,6 +222,11 @@ abstract final class UserSubscriptionService {
       throw StateError('Il piano gratuito non ha un abbonamento da annullare.');
     }
 
+    if (SubscriptionBillingService.planUsesStripeCheckout(plan)) {
+      await SubscriptionBillingService.openCustomerPortal();
+      return;
+    }
+
     await _writeSubscription(ctx, {
       'subscriptionStatus': 'cancelled',
       'subscriptionCancelledAt': FieldValue.serverTimestamp(),
@@ -180,6 +245,18 @@ abstract final class UserSubscriptionService {
       batch.update(ctx.companyRef!, updates);
     }
     await batch.commit();
+  }
+
+  static Future<String> _resolveCompanyCode(_SubscriptionContext ctx) async {
+    if (ctx.companyRef == null) return '';
+    try {
+      final snap = await ctx.companyRef!.get();
+      final data = snap.data() ?? {};
+      final code = (data['companyCode'] ?? data['userCode'] ?? '').toString();
+      return code.trim();
+    } catch (_) {
+      return '';
+    }
   }
 }
 

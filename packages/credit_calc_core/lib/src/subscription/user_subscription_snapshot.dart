@@ -37,7 +37,10 @@ class UserSubscriptionSnapshot {
   bool get canChangePlan => canManage && !lifetimeAccess;
 
   String get statusLabel {
-    if (lifetimeAccess) return 'Attivo (coupon lifetime)';
+    if (lifetimeAccess || hasCoupon) {
+      if (lifetimeAccess) return 'Attivo (coupon lifetime)';
+      return 'Attivo (coupon applicato)';
+    }
     return switch (subscriptionStatus) {
       'cancelled' => 'Abbonamento annullato',
       'pending' => 'In attesa di attivazione',

@@ -145,8 +145,18 @@ class _WaitingPageState extends State<WaitingPage> {
     });
   }
 
-  Future<void> _grantAccess() async {
+  Future<void> _grantAccess(Map<String, dynamic> userData) async {
     if (_accessGranted) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await UserAccountStatus.ensureWorkUserActivated(
+        user: user,
+        userData: userData,
+      );
+    }
+
+    if (!mounted) return;
     setState(() {
       _accessGranted = true;
       _blocked = false;
@@ -155,7 +165,14 @@ class _WaitingPageState extends State<WaitingPage> {
     _timer?.cancel();
     await Future<void>.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
-    widget.onAccessGranted?.call();
+
+    final onAccess = widget.onAccessGranted;
+    if (onAccess != null) {
+      onAccess();
+      return;
+    }
+
+    await OnboardingNavigation.goToHomeOrOnboarding(context);
   }
 
   Future<void> _pollAccountStatus() async {
@@ -203,7 +220,7 @@ class _WaitingPageState extends State<WaitingPage> {
         return;
       }
 
-      await _grantAccess();
+      await _grantAccess(userDoc.data()!);
     } catch (_) {
       // Mantiene la schermata di attesa anche in caso di rete lenta.
     }

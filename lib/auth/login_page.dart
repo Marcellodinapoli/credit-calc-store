@@ -15,10 +15,14 @@ import '../widgets/public_top_menu.dart';
 import 'login_pricing_page.dart';
 import 'registration_coupon_field.dart';
 import 'registration_coupon_service.dart';
+import 'registration_company_code_field.dart';
 import 'registration_plan_field.dart';
 import 'registration_plan_selection_result.dart';
 import 'registration_privacy_consents_page.dart';
 import 'registration_consents_service.dart';
+import 'work_code_service.dart';
+import 'work_company_link_service.dart';
+import 'waiting_page.dart';
 
 abstract final class AppTheme {
   static const accent = Color(0xFF0A66C2);
@@ -67,7 +71,13 @@ class _LoginPageState extends State<LoginPage> {
   final _refPerson = TextEditingController();
   final _refRole = TextEditingController();
   final _website = TextEditingController();
+  final _companyCode = TextEditingController();
 
+  WorkCompanyLinkContext? _companyLinkContext;
+  bool _validatingCompanyCode = false;
+  String? _companyCodeError;
+
+  bool get _companyLinkActive => _companyLinkContext != null;
   bool _obscure = true;
   bool _busy = false;
 
@@ -244,6 +254,7 @@ class _LoginPageState extends State<LoginPage> {
     _refPerson.dispose();
     _refRole.dispose();
     _website.dispose();
+    _companyCode.dispose();
     _couponController.dispose();
     super.dispose();
   }
@@ -257,6 +268,55 @@ class _LoginPageState extends State<LoginPage> {
   void _clearRegisterFeedback() {
     _registerNotice = null;
     _registerFieldErrors.clear();
+  }
+
+  void _clearCompanyLink() {
+    _companyLinkContext = null;
+    _companyCodeError = null;
+    _validatingCompanyCode = false;
+    _companyCode.clear();
+  }
+
+  Future<void> _validateCompanyCode() async {
+    setState(() {
+      _validatingCompanyCode = true;
+      _companyCodeError = null;
+    });
+
+    final result = await WorkCodeService.validate(_companyCode.text);
+    if (!mounted) return;
+
+    if (!result.ok) {
+      setState(() {
+        _validatingCompanyCode = false;
+        _companyCodeError = result.errorMessage;
+        _companyLinkContext = null;
+      });
+      return;
+    }
+
+    final link = result.context!;
+    final capacity = await WorkCompanyLinkService.checkCapacity(link.workCode);
+    if (!mounted) return;
+
+    if (!capacity.allowed) {
+      setState(() {
+        _validatingCompanyCode = false;
+        _companyCodeError = capacity.message;
+        _companyLinkContext = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _validatingCompanyCode = false;
+      _companyLinkContext = link;
+      _companyCode.text = link.workCode;
+      _companyCodeError = null;
+      _registerPlan = null;
+      _registerFieldErrors.remove('plan');
+      _clearRegistrationCoupon();
+    });
   }
 
   void _resetPrivacyAcceptance() {
@@ -326,7 +386,8 @@ class _LoginPageState extends State<LoginPage> {
           'Devi leggere e accettare l\'informativa su privacy e consensi.';
     }
 
-    if (_registerPlan == null || _registerPlan!.trim().isEmpty) {
+    if (!_companyLinkActive &&
+        (_registerPlan == null || _registerPlan!.trim().isEmpty)) {
       errors['plan'] = 'Seleziona un piano (Gratis, Plus o Enterprise).';
     }
 
@@ -605,7 +666,8 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _register() async {
-    if (_registerType == null || _registerPlan == null) return;
+    if (_registerType == null) return;
+    if (!_companyLinkActive && _registerPlan == null) return;
 
     final email = _email.text.trim();
     final password = _password.text.trim();
@@ -638,6 +700,11 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     try {
+      if (_companyLinkActive && _registerType == 'public') {
+        await _registerAsCompanyLinkedUser(email: email, password: password);
+        return;
+      }
+
       final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
@@ -815,6 +882,112 @@ class _LoginPageState extends State<LoginPage> {
         }
       });
     } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _registerNotice = 'Errore durante la registrazione. Riprova più tardi.';
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _navigateToWaitingAfterRegistration(String email) {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => WaitingPage(
+            email: email,
+            status: 'pending',
+          ),
+        ),
+      );
+    });
+  }
+
+  Future<void> _registerAsCompanyLinkedUser({
+    required String email,
+    required String password,
+  }) async {
+    final link = _companyLinkContext;
+    if (link == null) return;
+
+    UserCredential? cred;
+    try {
+      cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final user = cred.user;
+      if (user == null) return;
+
+      await user.sendEmailVerification();
+
+      final userRef =
+          FirebaseFirestore.instance.collection('users').doc(user.uid);
+
+      await WorkCompanyLinkService.registerWorkUser(
+        link: link,
+        userRef: userRef,
+        userData: {
+          'uid': user.uid,
+          'email': email,
+          'name': _name.text.trim(),
+          'surname': _surname.text.trim(),
+          'type': 'work',
+          'companyUid': link.companyId,
+          'companyId': link.companyId,
+          'companyCode': link.companyCode,
+          'workRole': link.workRole,
+          'workCode': link.workCode,
+          'createdAt': FieldValue.serverTimestamp(),
+          'status': 'pending',
+          'onboardingDone': false,
+        },
+      );
+
+      await _saveRegistrationPrivacyConsent(uid: user.uid, isCompany: false);
+
+      if (!mounted) return;
+      _navigateToWaitingAfterRegistration(email);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        switch (e.code) {
+          case 'email-already-in-use':
+            _registerNotice =
+                'Esiste già un account con questa email. Accedi o recupera la password.';
+          case 'invalid-email':
+            _registerFieldErrors['email'] =
+                'L’indirizzo email non sembra corretto.';
+          case 'weak-password':
+            _registerFieldErrors['password'] =
+                'La password deve contenere almeno 8 caratteri e un carattere speciale.';
+          default:
+            _registerNotice =
+                'Registrazione non riuscita. Controlla i dati e riprova.';
+        }
+      });
+    } on StateError catch (e) {
+      try {
+        await cred?.user?.delete();
+      } catch (_) {}
+      try {
+        await FirebaseAuth.instance.signOut();
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _registerNotice = e.message.replaceFirst('Bad state: ', '');
+      });
+    } catch (_) {
+      try {
+        await cred?.user?.delete();
+      } catch (_) {}
+      try {
+        await FirebaseAuth.instance.signOut();
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _registerNotice = 'Errore durante la registrazione. Riprova più tardi.';
@@ -1158,7 +1331,27 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(height: 12),
                       ],
 
-                      if (!_isLogin && _registerType != null) ...[
+                      if (!_isLogin && _registerType == 'public') ...[
+                        RegistrationCompanyCodeField(
+                          controller: _companyCode,
+                          validating: _validatingCompanyCode,
+                          linked: _companyLinkActive,
+                          linkedCompanyName: _companyLinkContext?.companyName,
+                          errorText: _companyCodeError,
+                          onValidate: _validateCompanyCode,
+                          onClear: () {
+                            setState(() {
+                              _clearCompanyLink();
+                              _registerPlan ??= 'free';
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      if (!_isLogin &&
+                          _registerType != null &&
+                          !_companyLinkActive) ...[
                         RegistrationPlanField(
                           registerType: _registerType!,
                           selectedPlanId: _registerPlan,
@@ -1222,7 +1415,8 @@ class _LoginPageState extends State<LoginPage> {
                           errorText: _regError('confirmPassword'),
                         ),
                         const SizedBox(height: 16),
-                        RegistrationCouponSection(
+                        if (!_companyLinkActive)
+                          RegistrationCouponSection(
                           controller: _couponController,
                           checking: _couponChecking,
                           error: _couponError,
@@ -1231,7 +1425,7 @@ class _LoginPageState extends State<LoginPage> {
                           onApply: _applyCoupon,
                           onClear: _clearCoupon,
                         ),
-                        const SizedBox(height: 16),
+                        if (!_companyLinkActive) const SizedBox(height: 16),
                         _buildPrivacyConsentRow(),
                       ],
 
@@ -1342,6 +1536,7 @@ class _LoginPageState extends State<LoginPage> {
                                     setState(() {
                                       _registerType = type;
                                       _registerPlan = 'free';
+                                      _clearCompanyLink();
                                       _clearRegistrationCoupon();
                                       _isLogin = false;
                                       _resetPrivacyAcceptance();
@@ -1353,6 +1548,7 @@ class _LoginPageState extends State<LoginPage> {
                                       _isLogin = true;
                                       _registerType = null;
                                       _registerPlan = null;
+                                      _clearCompanyLink();
                                       _clearRegistrationCoupon();
                                       _resetPrivacyAcceptance();
                                       _clearRegisterFeedback();
