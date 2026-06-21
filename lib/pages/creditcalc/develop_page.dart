@@ -1,10 +1,7 @@
-﻿import 'package:credit_calc_core/credit_calc_core.dart'
-    hide BalanceWriteOffPage, DevelopPage;
+﻿import 'package:credit_calc_core/credit_calc_core.dart' hide DevelopPage;
 import 'package:flutter/material.dart';
 
 import 'itinerary/itinerary_hub_page.dart';
-import 'balance_write_off_page.dart';
-import 'standard_repayment_plan_page.dart';
 
 class DevelopPage extends StatelessWidget {
   const DevelopPage({super.key});
@@ -14,6 +11,7 @@ class DevelopPage extends StatelessWidget {
     const items = [
       'Piano di rientro',
       'Saldo e stralcio',
+      'Riscontro backoffice',
       'Itinerario e mappa',
     ];
 
@@ -36,10 +34,12 @@ class DevelopPage extends StatelessWidget {
                     page = const StandardRepaymentPlanPage();
                   } else if (title == 'Saldo e stralcio') {
                     page = const BalanceWriteOffPage();
+                  } else if (title == 'Riscontro backoffice') {
+                    page = const BackofficePendingPlansPage();
                   } else {
                     page = const ItineraryHubPage();
                   }
-                  Navigator.of(context).push(
+                  Navigator.of(context, rootNavigator: true).push(
                     MaterialPageRoute(builder: (_) => page),
                   );
                 },

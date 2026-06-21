@@ -11,7 +11,11 @@ import '../core/theme/app_form_fields.dart';
 import '../core/theme/project_colors.dart';
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
+import '../section_lock/section_lock_scope.dart';
+import '../subscription/public_usage_guard.dart';
+import '../subscription/public_plan_limits.dart';
 
+import 'backoffice_pending_plan.dart';
 import 'commission_export_dialog.dart';
 import 'commission_payment_resolver.dart';
 import 'repayment_plan_commission_export.dart';
@@ -33,7 +37,20 @@ class _InstallmentLine {
 enum _AmountEditSource { debito, percent, stralciato, residuo }
 
 class BalanceWriteOffPage extends StatefulWidget {
-  const BalanceWriteOffPage({super.key});
+  const BalanceWriteOffPage({
+    super.key,
+    this.pendingPlanId,
+    this.initialFormData,
+    this.skipInitialUsageGuard = false,
+    this.autoOpenCommissionExport = false,
+    this.initialCommissionDocIds = const [],
+  });
+
+  final String? pendingPlanId;
+  final Map<String, dynamic>? initialFormData;
+  final bool skipInitialUsageGuard;
+  final bool autoOpenCommissionExport;
+  final List<String> initialCommissionDocIds;
 
   @override
   State<BalanceWriteOffPage> createState() => _BalanceWriteOffPageState();
@@ -60,6 +77,8 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   bool _isResetting = false;
   bool _calcolato = false;
   bool _exporting = false;
+  bool _savingBackofficePending = false;
+  bool _pendingRestoreApplied = false;
   final List<String> _sessionCommissionDocIds = [];
   List<_InstallmentLine> _installments = const [];
   String? _calcError;
@@ -90,7 +109,11 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
           _paymentMethodKey = null;
         }
       });
+      _tryRestorePendingPlan(options);
     });
+    if (widget.initialCommissionDocIds.isNotEmpty) {
+      _sessionCommissionDocIds.addAll(widget.initialCommissionDocIds);
+    }
   }
 
   @override
@@ -329,7 +352,16 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     setState(() => _showValidationErrors = true);
   }
 
-  void _sviluppa() {
+  Future<void> _sviluppa({bool skipUsageGuard = false}) async {
+    if (!mounted) return;
+    if (!skipUsageGuard) {
+      final allowed = await PublicUsageGuard.checkAndConsume(
+        context,
+        PublicUsageMetric.balanceWriteOff,
+      );
+      if (!allowed || !mounted) return;
+    }
+
     final error = _validate();
     if (error != null) {
       setState(() {
@@ -431,6 +463,12 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
         _sessionCommissionDocIds.addAll(result.savedDocIds);
       }
     });
+    if (widget.pendingPlanId != null && _sessionCommissionDocIds.isNotEmpty) {
+      await BackofficePendingPlanService.updateCommissionDocIds(
+        widget.pendingPlanId!,
+        _sessionCommissionDocIds,
+      );
+    }
 
     if (result.savedCount > 0 && !result.hasErrors) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -534,6 +572,170 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   }
 
   String _formatDate(DateTime date) => formatCommissionExportDate(date);
+
+  Map<String, dynamic> _captureBackofficeFormData() {
+    return {
+      'creditorId': _creditorId ?? '',
+      'debito': _debitoCtrl.text.trim(),
+      'percent': _percentCtrl.text.trim(),
+      'stralciato': _stralciatoCtrl.text.trim(),
+      'residuo': _residuoCtrl.text.trim(),
+      'installmentCount': _installmentCount,
+      'firstPaymentDateIso': _firstPaymentDate.toIso8601String(),
+      'paymentMethodKey': _paymentMethodKey ?? '',
+    };
+  }
+
+  List<BackofficeSummaryRow> _captureBackofficeSummaryRows() {
+    final stralciato = EuroFormat.parse(_stralciatoCtrl.text);
+    final residuo = EuroFormat.parse(_residuoCtrl.text);
+    final paymentLabel = _paymentMethodKey == null
+        ? '—'
+        : CommissionPaymentResolver.labelForKey(_paymentMethodKey!);
+
+    final rows = <BackofficeSummaryRow>[
+      BackofficeSummaryRow(label: 'Creditore', value: _creditorName ?? '—'),
+      BackofficeSummaryRow(label: 'Debito totale', value: _labelEuro(_debito)),
+      BackofficeSummaryRow(label: 'Percentuale stralcio', value: _labelPercent()),
+      BackofficeSummaryRow(
+        label: 'Importo da stralciare',
+        value: _labelEuro(stralciato),
+      ),
+      BackofficeSummaryRow(
+        label: 'Residuo da pagare',
+        value: _labelEuro(residuo),
+      ),
+      BackofficeSummaryRow(
+        label: 'Dilazioni residuo',
+        value: '$_installmentCount',
+      ),
+      BackofficeSummaryRow(
+        label: 'Data prima rata',
+        value: _formatDate(_firstPaymentDate),
+      ),
+      BackofficeSummaryRow(
+        label: 'Modalità di pagamento',
+        value: paymentLabel,
+      ),
+    ];
+
+    if (_calcolato && _installments.isNotEmpty) {
+      final total = _installments.fold<double>(0, (sum, line) => sum + line.amount);
+      final firstAmount = _installments.first.amount;
+      final allEqual = _installments.every(
+        (line) => (line.amount - firstAmount).abs() < 0.009,
+      );
+      rows.add(
+        BackofficeSummaryRow(
+          label: 'Totale recupero piano',
+          value: EuroFormat.format(total),
+          highlight: true,
+        ),
+      );
+      rows.add(
+        BackofficeSummaryRow(
+          label: 'Struttura rate',
+          value: allEqual
+              ? '${_installments.length} rate da ${EuroFormat.format(firstAmount)}'
+              : '${_installments.length} rate per ${EuroFormat.format(total)}',
+        ),
+      );
+      if (_dataFineFromInstallments != null) {
+        rows.add(
+          BackofficeSummaryRow(
+            label: 'Data fine piano',
+            value: _formatDate(_dataFineFromInstallments!),
+          ),
+        );
+      }
+    }
+    return rows;
+  }
+
+  DateTime? get _dataFineFromInstallments =>
+      _installments.isEmpty ? null : _installments.last.date;
+
+  Future<void> _applyBackofficeFormData(Map<String, dynamic> data) async {
+    final creditorId = (data['creditorId'] ?? '').toString();
+    _creditorId = creditorId.isEmpty ? null : creditorId;
+    _debitoCtrl.text = (data['debito'] ?? '').toString();
+    _percentCtrl.text = (data['percent'] ?? '').toString();
+    _stralciatoCtrl.text = (data['stralciato'] ?? '').toString();
+    _residuoCtrl.text = (data['residuo'] ?? '').toString();
+    _installmentCount = int.tryParse('${data['installmentCount']}') ?? 1;
+    final firstIso = data['firstPaymentDateIso']?.toString();
+    if (firstIso != null && firstIso.isNotEmpty) {
+      _firstPaymentDate =
+          DateTime.tryParse(firstIso) ?? _firstPaymentDate;
+    }
+    final paymentKey = (data['paymentMethodKey'] ?? '').toString();
+    _paymentMethodKey = paymentKey.isEmpty ? null : paymentKey;
+    if (_creditorId != null) {
+      await _loadPaymentOptions(_creditorId!);
+    }
+  }
+
+  Future<void> _tryRestorePendingPlan(List<_CreditorOption> options) async {
+    if (_pendingRestoreApplied || widget.initialFormData == null) return;
+    _pendingRestoreApplied = true;
+    await _applyBackofficeFormData(widget.initialFormData!);
+    if (!mounted) return;
+    setState(() {});
+    await _sviluppa(skipUsageGuard: widget.skipInitialUsageGuard);
+    if (!mounted) return;
+    await _maybeAutoOpenCommissionExport();
+  }
+
+  Future<void> _maybeAutoOpenCommissionExport() async {
+    if (!widget.autoOpenCommissionExport || !_calcolato) return;
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    await _aggiungiIncasso();
+  }
+
+  Future<void> _attendiEsitoBackoffice() async {
+    final creditorId = _creditorId;
+    final creditorName = _creditorName;
+    if (!_calcolato || creditorId == null || creditorName == null) return;
+
+    setState(() => _savingBackofficePending = true);
+    BackofficePendingSaveResult result;
+    try {
+      result = await BackofficePendingPlanService.save(
+        existingId: widget.pendingPlanId,
+        type: BackofficePendingPlanType.balanceWriteOff,
+        creditorId: creditorId,
+        creditorName: creditorName,
+        formData: _captureBackofficeFormData(),
+        summaryRows: _captureBackofficeSummaryRows(),
+        commissionDocIds: _sessionCommissionDocIds,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _savingBackofficePending = false);
+      }
+    }
+    if (!mounted) return;
+
+    if (!result.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.errorMessage ??
+                'Impossibile salvare il piano in attesa di riscontro.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Piano salvato in Riscontro backoffice.'),
+      ),
+    );
+    Navigator.of(context).pop();
+  }
 
   String _labelEuro(double? value) =>
       value == null ? '—' : EuroFormat.format(value);
@@ -949,38 +1151,66 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
                   '${EuroFormat.format(_installments[i].amount)}',
                 ),
               const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _exporting || _incassoGiaRegistrato
-                      ? null
-                      : _aggiungiIncasso,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _primaryBlue,
-                    disabledForegroundColor: Colors.grey.shade600,
-                    side: WidgetStateBorderSide.resolveWith((states) {
-                      if (states.contains(WidgetState.disabled)) {
-                        return BorderSide(color: Colors.grey.shade400);
-                      }
-                      return const BorderSide(color: _primaryBlue);
-                    }),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _exporting || _incassoGiaRegistrato
+                          ? null
+                          : _aggiungiIncasso,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _primaryBlue,
+                        disabledForegroundColor: Colors.grey.shade600,
+                        side: WidgetStateBorderSide.resolveWith((states) {
+                          if (states.contains(WidgetState.disabled)) {
+                            return BorderSide(color: Colors.grey.shade400);
+                          }
+                          return const BorderSide(color: _primaryBlue);
+                        }),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      icon: _exporting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.payments_outlined),
+                      label: Text(
+                        _exporting
+                            ? 'Registrazione incassi...'
+                            : _incassoGiaRegistrato
+                                ? 'Incasso registrato'
+                                : 'Aggiungi incasso',
+                      ),
+                    ),
                   ),
-                  icon: _exporting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.payments_outlined),
-                  label: Text(
-                    _exporting
-                        ? 'Registrazione incassi...'
-                        : _incassoGiaRegistrato
-                            ? 'Incasso registrato'
-                            : 'Aggiungi incasso',
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _savingBackofficePending
+                          ? null
+                          : _attendiEsitoBackoffice,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange.shade900,
+                        side: BorderSide(color: Colors.orange.shade300),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      icon: _savingBackofficePending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.hourglass_top_outlined),
+                      label: Text(
+                        _savingBackofficePending
+                            ? 'Salvataggio...'
+                            : 'Attendi esito',
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ],
           ],
@@ -1081,9 +1311,12 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
       secondary: true,
       pageTitle: 'Saldo e stralcio',
       current: CreditCalcNavItem.develop,
-      body: options == null
-          ? const Center(child: CircularProgressIndicator())
-          : _buildContent(options),
+      body: SectionLockScope(
+        sectionKey: 'balance_write_off',
+        child: options == null
+            ? const Center(child: CircularProgressIndicator())
+            : _buildContent(options),
+      ),
     );
   }
 }

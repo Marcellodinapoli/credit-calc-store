@@ -3,6 +3,7 @@
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
 
+import 'backoffice_pending_plans_page.dart';
 import 'balance_write_off_page.dart';
 import 'standard_repayment_plan_page.dart';
 
@@ -14,6 +15,7 @@ class DevelopPage extends StatelessWidget {
     const items = [
       'Piano di rientro',
       'Saldo e stralcio',
+      'Riscontro backoffice',
     ];
 
     return wrapCreditCalcPage(
@@ -30,10 +32,13 @@ class DevelopPage extends StatelessWidget {
               title: Text(items[index]),
               onTap: () {
                 final title = items[index];
-                final page = title == 'Piano di rientro'
-                    ? const StandardRepaymentPlanPage()
-                    : const BalanceWriteOffPage();
-                Navigator.of(context).push(
+                final page = switch (title) {
+                  'Piano di rientro' => const StandardRepaymentPlanPage(),
+                  'Saldo e stralcio' => const BalanceWriteOffPage(),
+                  'Riscontro backoffice' => const BackofficePendingPlansPage(),
+                  _ => const StandardRepaymentPlanPage(),
+                };
+                Navigator.of(context, rootNavigator: true).push(
                   MaterialPageRoute(builder: (_) => page),
                 );
               },

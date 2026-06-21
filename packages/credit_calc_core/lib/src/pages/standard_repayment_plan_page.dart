@@ -11,7 +11,11 @@ import '../core/theme/app_form_fields.dart';
 import '../core/theme/project_colors.dart';
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
+import '../section_lock/section_lock_scope.dart';
+import '../subscription/public_usage_guard.dart';
+import '../subscription/public_plan_limits.dart';
 
+import 'backoffice_pending_plan.dart';
 import 'commission_export_dialog.dart';
 import 'repayment_plan_commission_export.dart';
 
@@ -19,7 +23,20 @@ const _maxPlanScheduleIterations = 2400;
 
 /// Piano di rientro — creditori da impostazioni (Firestore `creditors`).
 class StandardRepaymentPlanPage extends StatefulWidget {
-  const StandardRepaymentPlanPage({super.key});
+  const StandardRepaymentPlanPage({
+    super.key,
+    this.pendingPlanId,
+    this.initialFormData,
+    this.skipInitialUsageGuard = false,
+    this.autoOpenCommissionExport = false,
+    this.initialCommissionDocIds = const [],
+  });
+
+  final String? pendingPlanId;
+  final Map<String, dynamic>? initialFormData;
+  final bool skipInitialUsageGuard;
+  final bool autoOpenCommissionExport;
+  final List<String> initialCommissionDocIds;
 
   @override
   State<StandardRepaymentPlanPage> createState() =>
@@ -55,6 +72,7 @@ class _RepaymentInstallmentPlan {
   final double finalAmount;
   final double netAmountOriginal;
   final bool cappedToMax;
+  final List<double>? recordedPayments;
 
   const _RepaymentInstallmentPlan({
     required this.mode,
@@ -64,9 +82,13 @@ class _RepaymentInstallmentPlan {
     required this.finalAmount,
     required this.netAmountOriginal,
     required this.cappedToMax,
+    this.recordedPayments,
   });
 
   double get totalRecovered {
+    if (recordedPayments != null && recordedPayments!.isNotEmpty) {
+      return recordedPayments!.fold<double>(0, (total, p) => total + p);
+    }
     if (mode == _RepaymentSplitMode.lastAdjustment) {
       // Conguaglio: l'ultima rata assorbe i centesimi → totale = importo da recuperare.
       return (netAmountOriginal * 100).round() / 100;
@@ -428,6 +450,9 @@ class _RepaymentInstallmentPlan {
   }
 
   List<double> get installmentAmountsList {
+    if (recordedPayments != null) {
+      return List<double>.from(recordedPayments!);
+    }
     if (installmentCount <= 1) return [finalAmount];
     if (mode == _RepaymentSplitMode.allEqual) {
       return List<double>.filled(installmentCount, equalAmount);
@@ -445,6 +470,8 @@ class _RepaymentInstallmentPlan {
     if (payments.isEmpty) return null;
 
     final recovered = payments.fold<double>(0, (total, p) => total + p);
+    if (recovered - netAmount > 0.009) return null;
+
     final count = payments.length;
     final allSame =
         payments.every((p) => (p - payments.first).abs() < 0.009);
@@ -458,17 +485,39 @@ class _RepaymentInstallmentPlan {
         finalAmount: payments.first,
         netAmountOriginal: netAmount,
         cappedToMax: false,
+        recordedPayments: List<double>.from(payments),
       );
+    }
+
+    if (count > 1) {
+      final firstAmount = payments.first;
+      final allButLastSame = payments
+          .sublist(0, count - 1)
+          .every((p) => (p - firstAmount).abs() < 0.009);
+      final lastDiffers = (payments.last - firstAmount).abs() >= 0.009;
+      if (allButLastSame && lastDiffers) {
+        return _RepaymentInstallmentPlan(
+          mode: _RepaymentSplitMode.lastAdjustment,
+          installmentCount: count,
+          equalCount: count - 1,
+          equalAmount: firstAmount,
+          finalAmount: payments.last,
+          netAmountOriginal: netAmount,
+          cappedToMax: false,
+          recordedPayments: List<double>.from(payments),
+        );
+      }
     }
 
     return _RepaymentInstallmentPlan(
       mode: _RepaymentSplitMode.allEqual,
       installmentCount: count,
       equalCount: count,
-      equalAmount: recovered / count,
+      equalAmount: payments.first,
       finalAmount: payments.last,
       netAmountOriginal: netAmount,
       cappedToMax: false,
+      recordedPayments: List<double>.from(payments),
     );
   }
 }
@@ -670,30 +719,46 @@ List<_PracticeDilazionePhase> _buildDilazionePhasesFromSegments({
   required List<double> biAmounts,
   required List<DateTime> soloDates,
   required List<double> soloAmounts,
+  bool monthlyParallel = false,
 }) {
   final phases = <_PracticeDilazionePhase>[];
 
-  void addPhase(
+  void addPhases(
     List<DateTime> dates,
     List<double> amounts,
     String frequency,
   ) {
     if (dates.isEmpty || amounts.isEmpty) return;
-    final displayAmount = amounts.reduce((a, b) => a > b ? a : b);
-    phases.add(
-      _PracticeDilazionePhase(
-        paymentCount: dates.length,
-        installmentAmount: displayAmount,
-        startDate: dates.first,
-        endDate: dates.last,
-        rateFrequencyLabel: frequency,
-      ),
-    );
+    assert(dates.length == amounts.length);
+
+    var runStart = 0;
+    for (var i = 0; i <= amounts.length; i++) {
+      final runEnds = i == amounts.length ||
+          (amounts[i] - amounts[runStart]).abs() >= 0.009;
+      if (!runEnds) continue;
+
+      final count = i - runStart;
+      if (count > 0) {
+        phases.add(
+          _PracticeDilazionePhase(
+            paymentCount: count,
+            installmentAmount: amounts[runStart],
+            startDate: dates[runStart],
+            endDate: dates[i - 1],
+            rateFrequencyLabel: frequency,
+          ),
+        );
+      }
+      runStart = i;
+    }
   }
 
-  addPhase(triDates, triAmounts, 'trimestrali');
-  addPhase(biDates, biAmounts, 'bimestrali');
-  addPhase(soloDates, soloAmounts, 'mensili');
+  final triLabel = monthlyParallel ? 'mensili' : 'trimestrali';
+  final biLabel = monthlyParallel ? 'mensili' : 'bimestrali';
+
+  addPhases(triDates, triAmounts, triLabel);
+  addPhases(biDates, biAmounts, biLabel);
+  addPhases(soloDates, soloAmounts, 'mensili');
   return phases;
 }
 
@@ -1041,7 +1106,8 @@ class _MultiPracticePlanResult {
     final n = sortedDebts.length;
     if (n < 2) return null;
 
-    if (monthlyPayment / n + 1e-9 < minRata) return null;
+    final minShareEuro = (monthlyPayment / n).floor();
+    if (minShareEuro + 1e-9 < minRata) return null;
 
     _PdrBand? bandFor(double amount) {
       final value = amount.round();
@@ -1060,8 +1126,10 @@ class _MultiPracticePlanResult {
         ),
     ];
 
-    final balances = numberedDebts.map((d) => d.netAmount).toList();
-    if (balances.any((b) => b <= 0)) return null;
+    final balancesCents = numberedDebts
+        .map((d) => (d.netAmount * 100).round())
+        .toList();
+    if (balancesCents.any((b) => b <= 0)) return null;
 
     final paymentAmounts = List.generate(n, (_) => <double>[]);
     final paymentDates = List.generate(n, (_) => <DateTime>[]);
@@ -1083,13 +1151,14 @@ class _MultiPracticePlanResult {
     while (true) {
       final active = <int>[];
       for (var i = 0; i < n; i++) {
-        if (balances[i] > 0.009) active.add(i);
+        if (balancesCents[i] > 0) active.add(i);
       }
       if (active.isEmpty) break;
       if (monthOffset > _maxPlanScheduleIterations) return null;
 
-      final share = monthlyPayment / active.length;
-      if (share + 1e-9 < minRata) return null;
+      final shareEuro = (monthlyPayment / active.length).floor();
+      final shareCents = shareEuro * 100;
+      if (shareEuro + 1e-9 < minRata) return null;
 
       final phase = switch (active.length) {
         1 =>
@@ -1107,8 +1176,12 @@ class _MultiPracticePlanResult {
 
       final date = addMonthsSameCalendarDay(startDate, monthOffset);
       for (final i in active) {
-        final pay = balances[i] < share + 0.009 ? balances[i] : share;
-        if (pay < 0.009) continue;
+        if (balancesCents[i] < shareCents) {
+          balancesCents[i] = 0;
+          continue;
+        }
+
+        final pay = shareEuro.toDouble();
 
         calendar.add(
           _ScheduledClientPayment(
@@ -1120,7 +1193,7 @@ class _MultiPracticePlanResult {
         );
         paymentAmounts[i].add(pay);
         paymentDates[i].add(date);
-        balances[i] = (balances[i] - pay).clamp(0.0, double.infinity);
+        balancesCents[i] -= shareCents;
 
         switch (active.length) {
           case 1:
@@ -1181,6 +1254,7 @@ class _MultiPracticePlanResult {
             biAmounts: biAmounts[i],
             soloDates: soloDates[i],
             soloAmounts: soloAmounts[i],
+            monthlyParallel: true,
           ),
         ),
       );
@@ -1339,10 +1413,12 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   bool _showPdrFeedback = false;
   bool _showBirthYearInfo = false;
   bool _exportingCommissions = false;
+  bool _savingBackofficePending = false;
+  bool _pendingRestoreApplied = false;
   final List<String> _sessionCommissionDocIds = [];
 
   final _mobileScrollController = ScrollController();
-  final _summaryKey = GlobalKey();
+  final _simulationsKey = GlobalKey();
   final FocusNode _accontoFocusNode = FocusNode();
   late final Listenable _formAmountFieldsListenable;
 
@@ -1367,6 +1443,9 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         FirestoreUserScope.creditorsOrdered().snapshots().listen(
       _applyCreditorsSnapshot,
     );
+    if (widget.initialCommissionDocIds.isNotEmpty) {
+      _sessionCommissionDocIds.addAll(widget.initialCommissionDocIds);
+    }
   }
 
   @override
@@ -1484,6 +1563,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
     if (_cachedCreditorOptions == null) {
       setState(() => _cachedCreditorOptions = options);
+      _tryRestorePendingPlan(options);
       return;
     }
 
@@ -1492,6 +1572,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     } else {
       _cachedCreditorOptions = options;
     }
+    _tryRestorePendingPlan(options);
   }
 
   bool _creditorOptionsListEquals(
@@ -2543,8 +2624,17 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     _formatDebtControllers();
   }
 
-  Future<void> _calcola() async {
+  Future<void> _calcola({bool skipUsageGuard = false}) async {
     if (_creditor == null) return;
+
+    if (!mounted) return;
+    if (!skipUsageGuard) {
+      final allowed = await PublicUsageGuard.checkAndConsume(
+        context,
+        PublicUsageMetric.repaymentPlan,
+      );
+      if (!allowed || !mounted) return;
+    }
 
     _prepareFieldsBeforeDevelop();
 
@@ -2724,7 +2814,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
     _captureFormSnapshot();
     setState(() => _calcolato = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSummary());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSimulations());
   }
 
   void _calcolaModulated(int eta) {
@@ -2813,7 +2903,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       _calcolato = true;
       _modulatedSizingError = null;
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSummary());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSimulations());
   }
 
   void _calcolaMultiPractice(int eta) {
@@ -2899,7 +2989,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
     _captureFormSnapshot();
     setState(() => _calcolato = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSummary());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSimulations());
   }
 
   int _monthsBetween(DateTime from, DateTime to) {
@@ -2999,15 +3089,19 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         'giorno ${_dataInizio.day} (come data inizio)';
   }
 
-  void _scrollToSummary() {
-    final target = _summaryKey.currentContext;
-    if (target == null) return;
-    Scrollable.ensureVisible(
-      target,
-      duration: const Duration(milliseconds: 450),
-      curve: Curves.easeInOut,
-      alignment: 0.05,
-    );
+  void _scrollToSimulations() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final target = _simulationsKey.currentContext;
+        if (target == null) return;
+        Scrollable.ensureVisible(
+          target,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeInOut,
+          alignment: 0.08,
+        );
+      });
+    });
   }
 
   Future<void> _pickDataInizio() async {
@@ -3029,6 +3123,341 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   String _formatDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  DateTime _parseDateFromForm(String raw) {
+    final parts = raw.split('/');
+    if (parts.length != 3) return DateTime.now();
+    final day = int.tryParse(parts[0]) ?? DateTime.now().day;
+    final month = int.tryParse(parts[1]) ?? DateTime.now().month;
+    final year = int.tryParse(parts[2]) ?? DateTime.now().year;
+    return DateTime(year, month, day);
+  }
+
+  void _applyBackofficeFormData(
+    Map<String, dynamic> data,
+    List<_CreditorOption> options,
+  ) {
+    _cadenza = (data['cadenza'] ?? 'Mensile').toString();
+    _monthlyPlanCount = int.tryParse('${data['monthlyPlans']}') ?? 1;
+    final creditorId = (data['creditorId'] ?? '').toString();
+    _creditorId = creditorId.isEmpty ? null : creditorId;
+    _CreditorOption? matchedCreditor;
+    for (final option in options) {
+      if (option.id == _creditorId) {
+        matchedCreditor = option;
+        break;
+      }
+    }
+    _creditor = matchedCreditor;
+    _metodo = (data['metodo'] ?? '').toString();
+    _modalitaRate = _RepaymentSplitMode.values.firstWhere(
+      (mode) => mode.name == data['modalita'],
+      orElse: () => _RepaymentSplitMode.lastAdjustment,
+    );
+    _planSizingMode = _PlanSizingMode.values.firstWhere(
+      (mode) => mode.name == data['planSizing'],
+      orElse: () => _PlanSizingMode.automatic,
+    );
+    _manualTarget = _ManualSizingTarget.values.firstWhere(
+      (target) => target.name == data['manualTarget'],
+      orElse: () => _ManualSizingTarget.byInstallmentAmount,
+    );
+    _importo1Ctrl.text = (data['i1'] ?? '').toString();
+    _importo2Ctrl.text = (data['i2'] ?? '').toString();
+    _importo3Ctrl.text = (data['i3'] ?? '').toString();
+    _accontoCtrl.text = (data['acconto'] ?? '0,00 €').toString();
+    _birthYearCtrl.text = (data['birth'] ?? '').toString();
+    _desiredInstallmentCtrl.text = (data['desiredRata'] ?? '').toString();
+    _desiredInstallmentCountCtrl.text = (data['desiredCount'] ?? '').toString();
+    _rataMensileCondivisaCtrl.text = (data['rata'] ?? '').toString();
+    _modPhase1MonthsCtrl.text = (data['mod1m'] ?? '').toString();
+    _modPhase1AmountCtrl.text = (data['mod1a'] ?? '').toString();
+    _modPhase2MonthsCtrl.text = (data['mod2m'] ?? '').toString();
+    _modPhase2AmountCtrl.text = (data['mod2a'] ?? '').toString();
+    _modPhase3MonthsCtrl.text = (data['mod3m'] ?? '').toString();
+    _modPhase3AmountCtrl.text = (data['mod3a'] ?? '').toString();
+    _modulatedVisiblePhaseCount =
+        int.tryParse('${data['modulatedVisiblePhaseCount']}') ?? 1;
+    final startIso = data['dataInizioIso']?.toString();
+    if (startIso != null && startIso.isNotEmpty) {
+      _dataInizio = DateTime.tryParse(startIso) ?? _dataInizio;
+    } else {
+      _dataInizio = _parseDateFromForm((data['start'] ?? '').toString());
+    }
+  }
+
+  Future<void> _tryRestorePendingPlan(List<_CreditorOption> options) async {
+    if (_pendingRestoreApplied || widget.initialFormData == null) return;
+    _pendingRestoreApplied = true;
+    _applyBackofficeFormData(widget.initialFormData!, options);
+    if (!mounted) return;
+    setState(() {});
+    await _calcola(skipUsageGuard: widget.skipInitialUsageGuard);
+    if (!mounted) return;
+    await _maybeAutoOpenCommissionExport();
+  }
+
+  Future<void> _maybeAutoOpenCommissionExport() async {
+    if (!widget.autoOpenCommissionExport || !_calcolato) return;
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    await _aggiungiIncassoInProvvigioni();
+  }
+
+  Map<String, dynamic> _captureBackofficeFormData() {
+    return {
+      ..._currentFormSnapshot(),
+      'modulatedVisiblePhaseCount': _modulatedVisiblePhaseCount,
+      'dataInizioIso': _dataInizio.toIso8601String(),
+    };
+  }
+
+  List<BackofficeSummaryRow> _captureBackofficeSummaryRows() {
+    if (!_calcolato) return const [];
+
+    final rows = <BackofficeSummaryRow>[];
+    final multi = _multiPracticePlan;
+    if (multi != null) {
+      rows.add(
+        BackofficeSummaryRow(
+          label: multi.monthlyParallel
+              ? 'Importo mensile disponibile'
+              : 'Rata mensile cliente',
+          value: EuroFormat.format(multi.monthlyClientPayment),
+          highlight: true,
+        ),
+      );
+      rows.add(
+        BackofficeSummaryRow(
+          label: 'Data fine complessiva',
+          value: _formatDate(multi.overallEndDate),
+          highlight: true,
+        ),
+      );
+      final practices = [...multi.practices]
+        ..sort(_comparePracticeScheduleByNet);
+      for (final practice in practices) {
+        rows.add(
+          BackofficeSummaryRow(
+            label: practice.label,
+            value:
+                '${EuroFormat.format(practice.netAmount)} · recupero '
+                '${EuroFormat.format(practice.totalRecovered)}',
+          ),
+        );
+        if (practice.dilazionePhases.isNotEmpty) {
+          for (final phase in practice.dilazionePhases) {
+            rows.add(
+              BackofficeSummaryRow(
+                label: 'Struttura ${practice.label}',
+                value: _dilazionePhaseLine(phase),
+              ),
+            );
+          }
+        } else {
+          rows.add(
+            BackofficeSummaryRow(
+              label: 'Periodo ${practice.label}',
+              value:
+                  '${_formatDate(practice.startDate)} – '
+                  '${_formatDate(practice.endDate)}',
+            ),
+          );
+        }
+      }
+      return rows;
+    }
+
+    final mod = _modulatedPlan;
+    if (mod != null) {
+      rows
+        ..add(
+          BackofficeSummaryRow(
+            label: 'Durata fasi personalizzate',
+            value: '${mod.modulatedMonths} mesi',
+          ),
+        )
+        ..add(
+          BackofficeSummaryRow(
+            label: 'Debito residuo dilazionato',
+            value: EuroFormat.format(mod.residualDebt),
+            highlight: true,
+          ),
+        )
+        ..add(
+          BackofficeSummaryRow(
+            label: 'Numero rate totali',
+            value: '${mod.totalInstallmentCount}',
+            highlight: true,
+          ),
+        );
+      _appendTotaleRecuperoSummary(rows, mod.netAmountOriginal, mod.totalRecovered);
+      _appendAccontoSummary(rows);
+      _appendStructureSummary(rows, mod.phaseSummaryLines(_metodo, _formatDate));
+      if (_dataFine != null) {
+        rows.add(
+          BackofficeSummaryRow(
+            label: 'Data fine piano',
+            value: _formatDate(_dataFine!),
+          ),
+        );
+      }
+      _appendPdrSummary(rows);
+      return rows;
+    }
+
+    rows.add(
+      BackofficeSummaryRow(
+        label: 'Numero rate',
+        value: '$_numeroRate',
+        highlight: true,
+      ),
+    );
+    final plan = _installmentPlan;
+    if (plan != null) {
+      _appendTotaleRecuperoSummary(rows, _netto, plan.totalRecovered);
+    }
+    _appendAccontoSummary(rows);
+    if (plan != null) {
+      _appendStructureSummary(rows, plan.structureLines(_metodo));
+    }
+    if (_dataFine != null) {
+      rows.add(
+        BackofficeSummaryRow(
+          label: 'Data fine piano',
+          value: _formatDate(_dataFine!),
+        ),
+      );
+    }
+    _appendPdrSummary(rows);
+    if (_installmentPlan?.cappedToMax == true) {
+      rows.add(
+        BackofficeSummaryRow(
+          label: '',
+          value: '',
+          note:
+              'Piano adeguato al massimo di dilazioni previste dalla fascia PDR.',
+        ),
+      );
+    }
+    if (_metodo == 'Cambiali' && _importoDilazionato != null) {
+      rows
+        ..add(
+          BackofficeSummaryRow(
+            label: 'Importo dilazionato',
+            value: EuroFormat.format(_importoDilazionato!),
+          ),
+        )
+        ..add(
+          BackofficeSummaryRow(
+            label: 'Costo acquisizione cambiali',
+            value: EuroFormat.format(
+              _costoAcquisizioneCambiali(_importoDilazionato!),
+            ),
+            highlight: true,
+          ),
+        );
+    }
+    return rows;
+  }
+
+  void _appendTotaleRecuperoSummary(
+    List<BackofficeSummaryRow> rows,
+    double originalNet,
+    double totalRecovered,
+  ) {
+    final decurtazione = originalNet - totalRecovered;
+    final suffixColor = decurtazione.abs() < 0.009 ? 'green' : 'red';
+    rows.add(
+      BackofficeSummaryRow(
+        label: 'Totale recupero piano',
+        value: EuroFormat.format(totalRecovered),
+        valueSuffix: _decurtazioneParenthesisText(originalNet, totalRecovered),
+        valueSuffixColor: suffixColor,
+      ),
+    );
+  }
+
+  void _appendAccontoSummary(List<BackofficeSummaryRow> rows) {
+    final acconto = EuroFormat.parse(_accontoCtrl.text) ?? 0;
+    if (acconto <= 0) return;
+    rows.add(
+      BackofficeSummaryRow(
+        label: 'Acconto',
+        value: EuroFormat.format(acconto),
+      ),
+    );
+  }
+
+  void _appendStructureSummary(
+    List<BackofficeSummaryRow> rows,
+    List<String> lines,
+  ) {
+    if (lines.isEmpty) return;
+    rows.add(
+      BackofficeSummaryRow(
+        label: 'Struttura rate',
+        value: lines.join('\n'),
+      ),
+    );
+  }
+
+  void _appendPdrSummary(List<BackofficeSummaryRow> rows) {
+    if (_matchedPdrBand == null) return;
+    rows.add(
+      BackofficeSummaryRow(
+        label: 'Fascia PDR',
+        value:
+            '${EuroFormat.format(_matchedPdrBand!.from.toDouble())} – '
+            '${EuroFormat.format(_matchedPdrBand!.to.toDouble())} · '
+            '${_matchedPdrBand!.installments} dilazioni max',
+      ),
+    );
+  }
+
+  Future<void> _attendiEsitoBackoffice() async {
+    final creditor = _creditor;
+    final creditorId = _creditorId;
+    if (!_calcolato || creditor == null || creditorId == null) return;
+
+    setState(() => _savingBackofficePending = true);
+    BackofficePendingSaveResult result;
+    try {
+      result = await BackofficePendingPlanService.save(
+        existingId: widget.pendingPlanId,
+        type: BackofficePendingPlanType.repayment,
+        creditorId: creditorId,
+        creditorName: creditor.name,
+        formData: _captureBackofficeFormData(),
+        summaryRows: _captureBackofficeSummaryRows(),
+        commissionDocIds: _sessionCommissionDocIds,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _savingBackofficePending = false);
+      }
+    }
+    if (!mounted) return;
+
+    if (!result.ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.errorMessage ??
+                'Impossibile salvare il piano in attesa di riscontro.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Piano salvato in Riscontro backoffice.'),
+      ),
+    );
+    Navigator.of(context).pop();
+  }
 
   List<_PdrBand> _parsePdrBands(dynamic raw) {
     if (raw is! List) return const [];
@@ -3268,7 +3697,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: _primaryBlue.withValues(alpha: 0.04),
@@ -3454,34 +3882,66 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
           ),
         ),
       const Divider(height: 20),
-      Text(
-        'Piani di rientro (dal più piccolo)',
-        style: TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: 15,
-          color: Colors.grey.shade900,
-        ),
-      ),
-      const SizedBox(height: 10),
-      for (final practice in [...multi.practices]
-        ..sort(_comparePracticeScheduleByNet))
-        _pianoRientroSummaryCard(practice),
-      Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(
-          multi.monthlyParallel
-              ? 'Il cliente versa ${EuroFormat.format(multi.monthlyClientPayment)} '
-                  'ogni mese calendario, ripartito in parti uguali tra i piani ancora '
-                  'aperti (tutti pagano nello stesso mese). Alla chiusura del più piccolo '
-                  'la quota si ridistribuisce sui restanti; sull\'ultimo piano resta '
-                  'l\'intero importo mensile. Il totale rateizzato può essere inferiore '
-                  'al debito originario. Limite età e dilazioni PDR non si applicano.'
-              : 'Il cliente versa ${EuroFormat.format(multi.monthlyClientPayment)} ogni mese '
-                  'calendario, assegnato a rotazione ai piani aperti: con 3 pratiche la cadenza '
-                  'effettiva per ciascuna è trimestrale, con 2 bimestrale, con 1 sola pratica '
-                  'residua mensile fino a chiusura. Il totale rateizzato può essere inferiore '
-                  'al debito originario.',
-          style: TextStyle(fontSize: 12, height: 1.45, color: Colors.grey.shade700),
+      KeyedSubtree(
+        key: _simulationsKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Piani di rientro (dal più piccolo)',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                color: Colors.grey.shade900,
+              ),
+            ),
+            const SizedBox(height: 10),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final practices = [...multi.practices]
+                  ..sort(_comparePracticeScheduleByNet);
+                const spacing = 12.0;
+                final maxWidth = constraints.maxWidth;
+                final columns = maxWidth >= 700 ? 2 : 1;
+                final cardWidth = columns == 2
+                    ? ((maxWidth - spacing) / 2).clamp(280.0, 460.0)
+                    : maxWidth;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    for (final practice in practices)
+                      SizedBox(
+                        width: cardWidth,
+                        child: _pianoRientroSummaryCard(practice),
+                      ),
+                  ],
+                );
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                multi.monthlyParallel
+                    ? 'Il cliente versa ${EuroFormat.format(multi.monthlyClientPayment)} '
+                        'ogni mese calendario, ripartito in parti uguali tra i piani ancora '
+                        'aperti (tutti pagano nello stesso mese). Alla chiusura del più piccolo '
+                        'la quota si ridistribuisce sui restanti; sull\'ultimo piano resta '
+                        'l\'intero importo mensile. Il totale rateizzato può essere inferiore '
+                        'al debito originario. Limite età e dilazioni PDR non si applicano.'
+                    : 'Il cliente versa ${EuroFormat.format(multi.monthlyClientPayment)} ogni mese '
+                        'calendario, assegnato a rotazione ai piani aperti: con 3 pratiche la cadenza '
+                        'effettiva per ciascuna è trimestrale, con 2 bimestrale, con 1 sola pratica '
+                        'residua mensile fino a chiusura. Il totale rateizzato può essere inferiore '
+                        'al debito originario.',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.45,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     ];
@@ -3936,61 +4396,78 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
             if (_calcolato) ...[
               const Divider(height: 24),
               if (_multiPracticePlan != null) ..._multiPracticeSummaryWidgets()
-              else if (_modulatedPlan != null) ..._modulatedSummaryWidgets()
-              else ...[
-                _summaryRow(
-                  'Numero rate',
-                  _numeroRate.toString(),
-                  highlight: true,
+              else if (_modulatedPlan != null)
+                KeyedSubtree(
+                  key: _simulationsKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _modulatedSummaryWidgets(),
+                  ),
+                )
+              else
+                KeyedSubtree(
+                  key: _simulationsKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _summaryRow(
+                        'Numero rate',
+                        _numeroRate.toString(),
+                        highlight: true,
+                      ),
+                      if (_installmentPlan != null)
+                        _summaryRowTotaleRecupero(
+                          originalNet: _netto,
+                          totalRecovered: _installmentPlan!.totalRecovered,
+                        ),
+                      ..._summaryAccontoRowsBeforeStructure(),
+                      if (_installmentPlan != null)
+                        _summaryStructureRow(
+                          _installmentPlan!.structureLines(_metodo),
+                        ),
+                      if (_dataFine != null)
+                        _summaryRow(
+                          'Data fine piano',
+                          _formatDate(_dataFine!),
+                        ),
+                      if (_matchedPdrBand != null)
+                        _summaryRow(
+                          'Fascia PDR',
+                          '${EuroFormat.format(_matchedPdrBand!.from.toDouble())} – '
+                          '${EuroFormat.format(_matchedPdrBand!.to.toDouble())} · '
+                          '${_matchedPdrBand!.installments} dilazioni max',
+                        ),
+                      if (_cappedToAvailableMonths && _matchedPdrBand != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, bottom: 4),
+                          child: Text(
+                            'Piano calcolato su ${_installmentPlan?.installmentCount ?? _numeroRate} '
+                            'dilazioni: limite imposto dai '
+                            '${_availablePlanMonths()} mesi disponibili '
+                            '(fascia PDR: ${_matchedPdrBand!.installments} dilazioni max).',
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.4,
+                              color: Colors.red.shade800,
+                            ),
+                          ),
+                        )
+                      else if (_installmentPlan?.cappedToMax == true)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4, bottom: 4),
+                          child: Text(
+                            'Piano adeguato al massimo di dilazioni previste dalla '
+                            'fascia PDR.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.4,
+                              color: Colors.blue.shade800,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-                if (_installmentPlan != null)
-                  _summaryRowTotaleRecupero(
-                    originalNet: _netto,
-                    totalRecovered: _installmentPlan!.totalRecovered,
-                  ),
-                ..._summaryAccontoRowsBeforeStructure(),
-                if (_installmentPlan != null)
-                  _summaryStructureRow(
-                    _installmentPlan!.structureLines(_metodo),
-                  ),
-                if (_dataFine != null)
-                  _summaryRow('Data fine piano', _formatDate(_dataFine!)),
-                if (_matchedPdrBand != null)
-                  _summaryRow(
-                    'Fascia PDR',
-                    '${EuroFormat.format(_matchedPdrBand!.from.toDouble())} – '
-                    '${EuroFormat.format(_matchedPdrBand!.to.toDouble())} · '
-                    '${_matchedPdrBand!.installments} dilazioni max',
-                  ),
-                if (_cappedToAvailableMonths && _matchedPdrBand != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, bottom: 4),
-                    child: Text(
-                      'Piano calcolato su ${_installmentPlan?.installmentCount ?? _numeroRate} '
-                      'dilazioni: limite imposto dai '
-                      '${_availablePlanMonths()} mesi disponibili '
-                      '(fascia PDR: ${_matchedPdrBand!.installments} dilazioni max).',
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.4,
-                        color: Colors.red.shade800,
-                      ),
-                    ),
-                  )
-                else if (_installmentPlan?.cappedToMax == true)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4, bottom: 4),
-                    child: Text(
-                      'Piano adeguato al massimo di dilazioni previste dalla '
-                      'fascia PDR.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.4,
-                        color: Colors.blue.shade800,
-                      ),
-                    ),
-                  ),
-              ],
               if (_metodo == 'Cambiali' && _importoDilazionato != null) ...[
                 const Divider(height: 20),
                 _summaryRow(
@@ -4039,38 +4516,66 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
                 ),
               Padding(
                 padding: const EdgeInsets.only(top: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _exportingCommissions || _incassoGiaRegistrato
-                        ? null
-                        : _aggiungiIncassoInProvvigioni,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _primaryBlue,
-                      disabledForegroundColor: Colors.grey.shade600,
-                      side: WidgetStateBorderSide.resolveWith((states) {
-                        if (states.contains(WidgetState.disabled)) {
-                          return BorderSide(color: Colors.grey.shade400);
-                        }
-                        return const BorderSide(color: _primaryBlue);
-                      }),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _exportingCommissions || _incassoGiaRegistrato
+                            ? null
+                            : _aggiungiIncassoInProvvigioni,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _primaryBlue,
+                          disabledForegroundColor: Colors.grey.shade600,
+                          side: WidgetStateBorderSide.resolveWith((states) {
+                            if (states.contains(WidgetState.disabled)) {
+                              return BorderSide(color: Colors.grey.shade400);
+                            }
+                            return const BorderSide(color: _primaryBlue);
+                          }),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        icon: _exportingCommissions
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.payments_outlined),
+                        label: Text(
+                          _exportingCommissions
+                              ? 'Registrazione incassi...'
+                              : _incassoGiaRegistrato
+                                  ? 'Incasso registrato'
+                                  : 'Aggiungi incasso',
+                        ),
+                      ),
                     ),
-                    icon: _exportingCommissions
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.payments_outlined),
-                    label: Text(
-                      _exportingCommissions
-                          ? 'Registrazione incassi...'
-                          : _incassoGiaRegistrato
-                              ? 'Incasso registrato'
-                              : 'Aggiungi incasso',
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _savingBackofficePending
+                            ? null
+                            : _attendiEsitoBackoffice,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.orange.shade900,
+                          side: BorderSide(color: Colors.orange.shade300),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        icon: _savingBackofficePending
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.hourglass_top_outlined),
+                        label: Text(
+                          _savingBackofficePending
+                              ? 'Salvataggio...'
+                              : 'Attendi esito',
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ],
@@ -4283,6 +4788,12 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         _sessionCommissionDocIds.addAll(result.savedDocIds);
       }
     });
+    if (widget.pendingPlanId != null && _sessionCommissionDocIds.isNotEmpty) {
+      await BackofficePendingPlanService.updateCommissionDocIds(
+        widget.pendingPlanId!,
+        _sessionCommissionDocIds,
+      );
+    }
 
     if (result.savedCount > 0 && !result.hasErrors) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4449,10 +4960,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
             Expanded(child: _formCard(options)),
             const SizedBox(width: 16),
             Expanded(
-              child: KeyedSubtree(
-                key: _summaryKey,
-                child: _summaryCard(),
-              ),
+              child: _summaryCard(),
             ),
           ],
         );
@@ -4481,10 +4989,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
                 children: [
                   _formCard(options),
                   const SizedBox(height: 16),
-                  KeyedSubtree(
-                    key: _summaryKey,
-                    child: _summaryCard(),
-                  ),
+                  _summaryCard(),
                   const SizedBox(height: 16),
                 ],
               ),
@@ -4502,9 +5007,12 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       secondary: true,
       pageTitle: 'Sviluppo piano di rientro',
       current: CreditCalcNavItem.develop,
-      body: _cachedCreditorOptions == null
-          ? const Center(child: CircularProgressIndicator())
-          : _buildContent(_cachedCreditorOptions!),
+      body: SectionLockScope(
+        sectionKey: 'repayment_plan',
+        child: _cachedCreditorOptions == null
+            ? const Center(child: CircularProgressIndicator())
+            : _buildContent(_cachedCreditorOptions!),
+      ),
     );
   }
 
