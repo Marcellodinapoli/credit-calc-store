@@ -254,7 +254,6 @@ class SyncEngine {
   /// Al login: aggiorna se in ritardo, altrimenti ripara la copia locale se corrotta.
   Future<SyncRunResult?> catchUpOrRepairIfNeeded() async {
     if (!await ConnectivityService.isOnline()) return null;
-    await sessionService.ensureLocalSession();
 
     if (await isBehindRemote()) {
       return runSync();
@@ -306,15 +305,6 @@ class SyncEngine {
   Future<SyncRunResult> runSync() async {
     if (!await ConnectivityService.isOnline()) {
       return SyncRunResult.failed('Connessione non disponibile.');
-    }
-
-    await sessionService.ensureLocalSession();
-
-    if (!await sessionService.holdsActiveSession()) {
-      return SyncRunResult.failed(
-        'La sessione è attiva su un altro dispositivo. '
-        'Riapri CreditCalc qui e scegli «Continua qui».',
-      );
     }
 
     final initialDone = await modePrefs.isInitialSyncDoneLocally();
@@ -404,12 +394,6 @@ class SyncEngine {
     if (!await ConnectivityService.isOnline()) {
       return SyncRunResult.failed('Connessione non disponibile.');
     }
-    if (!await sessionService.holdsActiveSession()) {
-      return SyncRunResult.failed(
-        'La sessione è attiva su un altro dispositivo.',
-      );
-    }
-
     var pushed = 0;
     var pulled = 0;
 

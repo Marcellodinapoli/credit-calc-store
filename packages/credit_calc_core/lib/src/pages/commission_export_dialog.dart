@@ -390,3 +390,107 @@ Widget _scheduledPaymentsList(List<CommissionExportScheduleLine> lines) {
     ],
   );
 }
+
+/// Popup minimo: solo ragione sociale del debitore (es. «Attendi esito»).
+Future<String?> showDebtorCompanyNameDialog({
+  required BuildContext context,
+  String title = 'Ragione sociale debitore',
+  String? description,
+  String? initialValue,
+}) {
+  return showDialog<String>(
+    context: context,
+    builder: (dialogContext) => _DebtorCompanyNameDialog(
+      title: title,
+      description: description,
+      initialValue: initialValue,
+    ),
+  );
+}
+
+class _DebtorCompanyNameDialog extends StatefulWidget {
+  const _DebtorCompanyNameDialog({
+    required this.title,
+    this.description,
+    this.initialValue,
+  });
+
+  final String title;
+  final String? description;
+  final String? initialValue;
+
+  @override
+  State<_DebtorCompanyNameDialog> createState() =>
+      _DebtorCompanyNameDialogState();
+}
+
+class _DebtorCompanyNameDialogState extends State<_DebtorCompanyNameDialog> {
+  late final TextEditingController _companyCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _companyCtrl = TextEditingController(text: widget.initialValue ?? '');
+  }
+
+  @override
+  void dispose() {
+    _companyCtrl.dispose();
+    super.dispose();
+  }
+
+  void _confirm() {
+    final name = _companyCtrl.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(context, name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.description != null) ...[
+              Text(
+                widget.description!,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.45,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            TextField(
+              controller: _companyCtrl,
+              textCapitalization: TextCapitalization.words,
+              decoration: appFormFieldDecoration(
+                'Ragione sociale debitore',
+              ).copyWith(
+                hintText: 'Nome committente / debitore',
+              ),
+              autofocus: true,
+              onSubmitted: (_) => _confirm(),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          style: AppActionStyles.cancelText,
+          child: const Text('Annulla'),
+        ),
+        FilledButton(
+          onPressed: _confirm,
+          child: const Text('Conferma'),
+        ),
+      ],
+    );
+  }
+}

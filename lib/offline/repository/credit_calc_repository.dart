@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
 
 import '../credit_calc_runtime.dart';
-import '../exceptions/session_write_blocked_exception.dart';
 import '../models/credit_calc_mode.dart';
 import '../models/sync_record_status.dart';
 import '../services/connectivity_service.dart';
@@ -43,7 +42,6 @@ class CreditCalcRepository {
     _instance = CreditCalcRepository._()
       .._mode = mode
       .._userId = userId
-      .._sessionService = sessionService
       .._syncEngine = syncEngine;
   }
 
@@ -51,7 +49,6 @@ class CreditCalcRepository {
 
   CreditCalcMode _mode = CreditCalcMode.web;
   String _userId = '';
-  SessionService? _sessionService;
   SyncEngine? _syncEngine;
   final _creditorsRevision = StreamController<int>.broadcast();
   final _calculationsRevision = StreamController<int>.broadcast();
@@ -71,22 +68,10 @@ class CreditCalcRepository {
     unawaited(CreditCalcRuntime.refreshPendingSyncCount());
   }
 
-  Future<void> _assertCanWrite() async {
-    final session = _sessionService;
-    if (session == null) return;
-    if (!await session.holdsActiveSession()) {
-      const message =
-          'La sessione CreditCore è attiva su un altro dispositivo. '
-          'Chiudi e riapri l\'app qui, poi scegli «Continua qui» al login.';
-      CreditCalcRuntime.notifyWriteBlocked(message);
-      throw SessionWriteBlockedException(message);
-    }
-  }
+  Future<void> _assertCanWrite() async {}
 
   Future<void> _maybeSync() async {
     if (!await ConnectivityService.isOnline()) return;
-    final session = _sessionService;
-    if (session != null && !await session.holdsActiveSession()) return;
     unawaited(_syncEngine?.syncPendingChanges());
   }
 

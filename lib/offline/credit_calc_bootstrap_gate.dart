@@ -127,7 +127,6 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     _realtimeSync ??= RealtimeSyncService(
       userId: user.uid,
       modePrefs: _modePrefs!,
-      sessionService: _sessionService!,
       syncEngine: _syncEngine!,
       onDataChanged: _notifyRepositoryDataChanged,
     );

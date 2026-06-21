@@ -14,6 +14,7 @@ import '../nav/credit_calc_nav.dart';
 import '../section_lock/section_lock_scope.dart';
 import '../subscription/public_usage_guard.dart';
 import '../subscription/public_plan_limits.dart';
+import '../subscription/public_usage_limit_scope.dart';
 
 import 'backoffice_pending_plan.dart';
 import 'commission_export_dialog.dart';
@@ -3420,6 +3421,18 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     final creditorId = _creditorId;
     if (!_calcolato || creditor == null || creditorId == null) return;
 
+    final existingCompanyName =
+        (widget.initialFormData?['companyName'] ?? '').toString().trim();
+    final companyName = await showDebtorCompanyNameDialog(
+      context: context,
+      title: 'Attendi esito',
+      description:
+          'Inserisci la ragione sociale del debitore per salvare il piano '
+          'in attesa di riscontro.',
+      initialValue: existingCompanyName.isEmpty ? null : existingCompanyName,
+    );
+    if (companyName == null || !mounted) return;
+
     setState(() => _savingBackofficePending = true);
     BackofficePendingSaveResult result;
     try {
@@ -3428,7 +3441,10 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         type: BackofficePendingPlanType.repayment,
         creditorId: creditorId,
         creditorName: creditor.name,
-        formData: _captureBackofficeFormData(),
+        formData: {
+          ..._captureBackofficeFormData(),
+          'companyName': companyName,
+        },
         summaryRows: _captureBackofficeSummaryRows(),
         commissionDocIds: _sessionCommissionDocIds,
       );
@@ -5010,9 +5026,13 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       current: CreditCalcNavItem.develop,
       body: SectionLockScope(
         sectionKey: 'repayment_plan',
-        child: _cachedCreditorOptions == null
-            ? const Center(child: CircularProgressIndicator())
-            : _buildContent(_cachedCreditorOptions!),
+        child: PublicUsageLimitScope(
+          metric: PublicUsageMetric.repaymentPlan,
+          title: 'Piano di rientro',
+          child: _cachedCreditorOptions == null
+              ? const Center(child: CircularProgressIndicator())
+              : _buildContent(_cachedCreditorOptions!),
+        ),
       ),
     );
   }

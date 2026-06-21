@@ -6,22 +6,19 @@ import 'package:flutter/foundation.dart';
 import '../models/credit_calc_mode.dart';
 import 'connectivity_service.dart';
 import 'mode_preferences_service.dart';
-import 'session_service.dart';
 import 'sync_engine.dart';
 
-/// Ascolta Firebase e aggiorna il DB locale in tempo reale (solo sessione attiva).
+/// Ascolta Firebase e aggiorna il DB locale in tempo reale.
 class RealtimeSyncService {
   RealtimeSyncService({
     required this.userId,
     required this.modePrefs,
-    required this.sessionService,
     required this.syncEngine,
     required this.onDataChanged,
   });
 
   final String userId;
   final ModePreferencesService modePrefs;
-  final SessionService sessionService;
   final SyncEngine syncEngine;
   final VoidCallback onDataChanged;
 
@@ -39,10 +36,6 @@ class RealtimeSyncService {
       return;
     }
     if (!await ConnectivityService.isOnline()) {
-      stop();
-      return;
-    }
-    if (!await sessionService.holdsActiveSession()) {
       stop();
       return;
     }
@@ -72,11 +65,6 @@ class RealtimeSyncService {
     String collection,
     QuerySnapshot<Map<String, dynamic>> snap,
   ) async {
-    if (!await sessionService.holdsActiveSession()) {
-      stop();
-      return;
-    }
-
     var changed = false;
     for (final change in snap.docChanges) {
       final applied = await syncEngine.applyRemoteChange(

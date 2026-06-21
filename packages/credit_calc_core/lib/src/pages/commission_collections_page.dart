@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../core/firestore_server_reads.dart';
 import '../core/firestore_user_scope.dart';
 import '../core/theme/app_action_styles.dart';
 import '../core/theme/app_card_theme.dart';
@@ -471,7 +472,9 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
       pageTitle: 'Elenco incassi',
       current: CreditCalcNavItem.commissions,
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirestoreUserScope.userCalculations().snapshots(),
+        stream: FirestoreServerReads.watchQuery(
+          FirestoreUserScope.userCalculations(),
+        ),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());

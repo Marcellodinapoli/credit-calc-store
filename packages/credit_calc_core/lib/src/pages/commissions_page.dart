@@ -1,6 +1,7 @@
 ﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../core/firestore_server_reads.dart';
 import '../core/firestore_user_scope.dart';
 import '../core/theme/app_card_theme.dart';
 import '../preferences/commission_ui_preferences.dart';
@@ -135,7 +136,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
             ),
           ),
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirestoreUserScope.userCalculations().snapshots(),
+            stream: FirestoreServerReads.watchQuery(
+              FirestoreUserScope.userCalculations(),
+            ),
             builder: (context, snapshot) {
               if (!_previewPreferenceLoaded) {
                 return const SizedBox.shrink();

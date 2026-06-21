@@ -74,13 +74,7 @@ class _CreditCalcSettingsPageState extends State<CreditCalcSettingsPage> {
 
   int? _remoteCalculations;
 
-  String? _activeDevice;
-
-  String? _activeDeviceType;
-
   String? _localDeviceLabel;
-
-  bool _holdsSession = true;
 
   bool _online = true;
 
@@ -137,10 +131,6 @@ class _CreditCalcSettingsPageState extends State<CreditCalcSettingsPage> {
 
     final last = await widget.modePrefs.lastSyncAt();
 
-    final session = await widget.sessionService.currentSession();
-
-    final holds = await widget.sessionService.holdsActiveSession();
-
     final localProfile = await DeviceIdentityService.deviceProfile();
 
     final online = await ConnectivityService.isOnline();
@@ -187,13 +177,7 @@ class _CreditCalcSettingsPageState extends State<CreditCalcSettingsPage> {
 
       _lastSync = last;
 
-      _activeDevice = session?.active == true ? session?.deviceLabel : null;
-
-      _activeDeviceType = session?.active == true ? session?.deviceType : null;
-
       _localDeviceLabel = localProfile.label;
-
-      _holdsSession = holds;
 
       _online = online;
 
@@ -424,31 +408,6 @@ class _CreditCalcSettingsPageState extends State<CreditCalcSettingsPage> {
 
                   value: _localDeviceLabel ?? '—',
 
-                ),
-
-                _InfoTile(
-
-                  label: 'Sessione CreditCalc',
-
-                  value: _holdsSession
-                      ? 'Attiva su questo dispositivo'
-                      : (_activeDevice == null
-                          ? 'Altro dispositivo'
-                          : 'Su $_activeDevice ($_activeDeviceType)'),
-
-                ),
-
-                Padding(
-                  padding: const EdgeInsets.only(top: 6, bottom: 8),
-                  child: Text(
-                    'Un solo dispositivo alla volta. Per cambiare dispositivo '
-                    'apri CreditCalc altrove e scegli «Continua qui».',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                      height: 1.35,
-                    ),
-                  ),
                 ),
 
                 const SizedBox(height: 16),

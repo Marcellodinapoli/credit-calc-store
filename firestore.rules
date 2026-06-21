@@ -250,9 +250,12 @@ match /credit_calc_sessions/{userId} {
     || request.auth.token.admin == true
   );
 
-  allow create, update: if request.auth != null
+  allow create: if request.auth != null
     && request.auth.uid == userId
     && request.resource.data.userId == request.auth.uid;
+
+  // Aggiornamenti parziali (es. sections.repayment_plan) senza riscrivere tutto il doc.
+  allow update: if request.auth != null && request.auth.uid == userId;
 
   allow delete: if request.auth != null && (
     request.auth.uid == userId
@@ -437,6 +440,16 @@ match /companies/{companyId}/registration_consents_history/{docId} {
           && request.auth.uid == userId;
         allow delete: if request.auth != null
           && request.auth.token.admin == true;
+      }
+
+      match /public_usage/{docId} {
+        allow read, write: if request.auth != null
+          && request.auth.uid == userId;
+      }
+
+      match /backoffice_pending_plans/{planId} {
+        allow read, write: if request.auth != null
+          && request.auth.uid == userId;
       }
 
       match /visit_itineraries/{dateId} {

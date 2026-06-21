@@ -200,16 +200,21 @@ abstract final class BackofficePendingPlanService {
   }
 
   static Stream<List<BackofficePendingPlan>> watchAll() {
-    final collection = _collection();
-    if (collection == null) {
-      return const Stream.empty();
-    }
-    return collection
-        .orderBy('submittedAt', descending: true)
-        .snapshots()
-        .map(
-          (snap) => snap.docs.map(BackofficePendingPlan.fromDoc).toList(),
-        );
+    return FirebaseAuth.instance.authStateChanges().asyncExpand((user) {
+      if (user == null) {
+        return Stream.value(const <BackofficePendingPlan>[]);
+      }
+
+      return FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('backoffice_pending_plans')
+          .orderBy('submittedAt', descending: true)
+          .snapshots()
+          .map(
+            (snap) => snap.docs.map(BackofficePendingPlan.fromDoc).toList(),
+          );
+    });
   }
 
   static Future<BackofficePendingSaveResult> save({

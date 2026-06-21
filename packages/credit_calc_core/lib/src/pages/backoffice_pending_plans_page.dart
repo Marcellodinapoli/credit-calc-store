@@ -242,8 +242,43 @@ class BackofficePendingPlansPage extends StatelessWidget {
       body: StreamBuilder<List<BackofficePendingPlan>>(
         stream: BackofficePendingPlanService.watchAll(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData &&
+              !snapshot.hasError) {
             return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, size: 40, color: Colors.red.shade700),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Impossibile caricare i piani in attesa di riscontro.',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade900,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${snapshot.error}',
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        height: 1.45,
+                        fontSize: 13,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
 
           final plans = snapshot.data ?? const [];

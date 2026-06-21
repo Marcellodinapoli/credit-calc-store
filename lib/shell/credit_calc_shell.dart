@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import '../auth/biometric_lock_gate.dart';
 import '../core/dimensions.dart';
 import '../offline/credit_calc_runtime.dart';
-import '../session/credit_core_session_runtime.dart';
 import '../offline/services/connectivity_service.dart';
 import '../pages/creditcalc/commissions_page.dart';
 import '../pages/creditcalc/credit_calc_settings_page.dart';
@@ -106,12 +105,6 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     if (action == null) return;
 
     CreditCalcRuntime.realtimeSync?.stop();
-    try {
-      await (CreditCoreSessionRuntime.sessionService ??
-              CreditCalcRuntime.sessionService)
-          ?.releaseSession()
-          .timeout(const Duration(seconds: 5));
-    } catch (_) {}
 
     if (action == 'lock') {
       BiometricLockGate.lockAgain();
@@ -254,6 +247,11 @@ class _MobileShell extends StatelessWidget {
             selectedIcon: Icon(Icons.payments),
             label: 'Provvigioni',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.card_membership_outlined),
+            selectedIcon: Icon(Icons.card_membership),
+            label: 'Il mio piano',
+          ),
         ],
       ),
     );
@@ -379,6 +377,12 @@ class _SideNav extends StatelessWidget {
                 label: 'Provvigioni',
                 selected: section == CreditCalcNavItem.commissions,
                 onTap: () => onSectionChanged(CreditCalcNavItem.commissions),
+              ),
+              _NavTile(
+                icon: Icons.card_membership,
+                label: 'Il mio piano',
+                selected: section == CreditCalcNavItem.subscription,
+                onTap: () => onSectionChanged(CreditCalcNavItem.subscription),
               ),
               const Spacer(),
               const CreditCoreSiteListTile(dense: true),
