@@ -21,6 +21,31 @@ class SubscriptionAccountBody extends StatefulWidget {
 
 class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
   bool _busy = false;
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Widget _planScrollView({required List<Widget> children}) {
+    return AbsorbPointer(
+      absorbing: _busy,
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        primary: false,
+        padding: const EdgeInsets.all(16),
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
+      ),
+    );
+  }
 
   Future<void> _runAction(
     Future<void> Function() action, {
@@ -175,11 +200,8 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
           final plans = companySubscriptionPlans();
           final current = companySubscriptionPlanForId(sub.planId);
 
-          return AbsorbPointer(
-            absorbing: _busy,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
+          return _planScrollView(
+            children: [
                 Text(
                   'Il tuo piano',
                   style: GoogleFonts.inter(
@@ -306,18 +328,14 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                   const Center(child: CircularProgressIndicator()),
                 ],
               ],
-            ),
           );
         }
 
         final plans = subscriptionPlansForType(sub.registerType);
         final current = sub.planOption(plans);
 
-        return AbsorbPointer(
-          absorbing: _busy,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
+        return _planScrollView(
+          children: [
               Text(
                 'Il tuo piano',
                 style: GoogleFonts.inter(
@@ -457,7 +475,6 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                 const Center(child: CircularProgressIndicator()),
               ],
             ],
-          ),
         );
       },
     );
