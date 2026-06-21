@@ -94,7 +94,7 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
         title: isUpgrade ? 'Upgrade a ${plan.name}' : 'Cambia piano',
         message:
             'Verrai reindirizzato alla pagina di pagamento Stripe per '
-            'completare ${isUpgrade ? "l\'upgrade" : "il cambio"} verso '
+            'completare ${isUpgrade ? "l'upgrade" : "il cambio"} verso '
             '${plan.name} (${plan.price}).\n\n'
             'Il piano si aggiornerà automaticamente al termine del pagamento.',
         confirmLabel: 'Vai al pagamento',
@@ -905,7 +905,6 @@ class _PlanCard extends StatelessWidget {
     required this.canChange,
     this.onSelect,
     this.tierLabelOverride,
-    this.actionLabel,
     this.isCompanyAudience = false,
   });
 
@@ -915,7 +914,6 @@ class _PlanCard extends StatelessWidget {
   final bool canChange;
   final VoidCallback? onSelect;
   final String? tierLabelOverride;
-  final String? actionLabel;
   final bool isCompanyAudience;
 
   @override
@@ -1019,8 +1017,7 @@ class _PlanCard extends StatelessWidget {
                   visualDensity: VisualDensity.compact,
                 ),
               ),
-            ] else if (onSelect != null &&
-                (canChange || actionLabel != null)) ...[
+            ] else if (onSelect != null && canChange) ...[
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerLeft,
@@ -1030,12 +1027,11 @@ class _PlanCard extends StatelessWidget {
                     backgroundColor: ProjectColors.area,
                   ),
                   child: Text(
-                    actionLabel ??
-                        _defaultActionLabel(
-                          plan: plan,
-                          currentPlanId: currentPlanId,
-                          isCompanyAudience: isCompanyAudience,
-                        ),
+                    _defaultActionLabel(
+                      plan: plan,
+                      currentPlanId: currentPlanId,
+                      isCompanyAudience: isCompanyAudience,
+                    ),
                   ),
                 ),
               ),

@@ -4794,6 +4794,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         _sessionCommissionDocIds,
       );
     }
+    if (!mounted) return;
 
     if (result.savedCount > 0 && !result.hasErrors) {
       ScaffoldMessenger.of(context).showSnackBar(

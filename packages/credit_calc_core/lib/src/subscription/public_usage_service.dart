@@ -204,7 +204,7 @@ abstract final class PublicUsageService {
       PublicUsageMetric.commissionSchema => _countCommissionSchemas(uid),
       PublicUsageMetric.activeCourse => _countActiveCourses(uid),
       _ when limits.isMonthly(metric) => _readMonthlyCount(uid, metric),
-      _ => 0,
+      _ => Future<int>.value(0),
     };
   }
 

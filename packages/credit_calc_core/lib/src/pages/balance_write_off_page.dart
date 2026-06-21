@@ -469,6 +469,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
         _sessionCommissionDocIds,
       );
     }
+    if (!mounted) return;
 
     if (result.savedCount > 0 && !result.hasErrors) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -620,7 +621,10 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     ];
 
     if (_calcolato && _installments.isNotEmpty) {
-      final total = _installments.fold<double>(0, (sum, line) => sum + line.amount);
+      final total = _installments.fold<double>(
+        0,
+        (runningTotal, line) => runningTotal + line.amount,
+      );
       final firstAmount = _installments.first.amount;
       final allEqual = _installments.every(
         (line) => (line.amount - firstAmount).abs() < 0.009,

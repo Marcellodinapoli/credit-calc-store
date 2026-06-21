@@ -34,6 +34,7 @@ export 'src/pages/creditors_page.dart';
 export 'src/pages/develop_detail_page.dart';
 export 'src/pages/develop_page.dart';
 export 'src/pages/repayment_plan_commission_export.dart';
+export 'src/pages/standard_repayment_plan_page.dart';
 export 'src/pages/subscription_account_body.dart';
 export 'src/pages/subscription_account_page.dart';
 export 'src/section_lock/section_lock_config.dart';
