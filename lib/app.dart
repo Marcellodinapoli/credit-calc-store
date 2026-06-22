@@ -152,7 +152,8 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
       final companyDoc = await FirebaseFirestore.instance
           .collection('companies')
           .doc(widget.user.uid)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 8));
       if (!mounted) return;
       final consentsOk = await RegistrationConsentsService.ensureAcceptedOnLogin(
         context,
@@ -169,8 +170,9 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
         return;
       }
 
-      final needsOnboarding =
-          await OnboardingNavigation.needsOnboardingForCurrentUser();
+      final needsOnboarding = await OnboardingNavigation
+          .needsOnboardingForCurrentUser()
+          .timeout(const Duration(seconds: 8), onTimeout: () => false);
       if (!mounted) return;
 
       setState(() {

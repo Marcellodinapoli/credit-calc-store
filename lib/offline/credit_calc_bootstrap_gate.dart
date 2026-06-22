@@ -73,45 +73,67 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    await _waitForPlatformSession(user.uid);
-
-    final platformSession = CreditCoreSessionRuntime.sessionService;
-    if (platformSession == null || platformSession.userId != user.uid) {
-      if (!mounted) return;
-      _cancelStartupWatchdog();
-      setState(() => _step = _BootstrapStep.startupSlow);
-      return;
-    }
-
     try {
-      _sessionService = platformSession;
-      _modePrefs = ModePreferencesService(userId: user.uid);
-      _syncEngine = SyncEngine(
-        userId: user.uid,
-        modePrefs: _modePrefs!,
-        sessionService: _sessionService!,
-      );
-
-      _connectivitySub = ConnectivityService.watchOnline().listen((hasLink) {
-        if (!hasLink) {
-          _realtimeSync?.stop();
-          return;
-        }
-        unawaited(_whenInternetAvailable());
-      });
-
-      await _modePrefs!.ensureOfflineSyncMode();
-      await _continueAfterMode();
+      await _bootstrapCore(user).timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      await _bootstrapFastPath(user);
     } catch (_) {
-      if (!mounted) return;
-      final done = await _modePrefs?.isInitialSyncDoneLocally() ?? false;
-      final localCount = await _syncEngine?.localRecordCount() ?? 0;
-      if (done || localCount > 0) {
-        await _continueAfterMode();
-      } else {
-        _cancelStartupWatchdog();
-        setState(() => _step = _BootstrapStep.offlineSyncRequired);
+      await _bootstrapFastPath(user);
+    }
+  }
+
+  void _ensurePlatformSession(String userId) {
+    final existing = CreditCoreSessionRuntime.sessionService;
+    if (existing != null && existing.userId == userId) return;
+    CreditCoreSessionRuntime.sessionService = SessionService(userId: userId);
+    CreditCoreSessionRuntime.bootstrapComplete = true;
+    CreditCoreSessionRuntime.bootstrapFuture = null;
+  }
+
+  Future<void> _bootstrapCore(User user) async {
+    await _waitForPlatformSession(user.uid);
+    _ensurePlatformSession(user.uid);
+
+    _sessionService = CreditCoreSessionRuntime.sessionService;
+    _modePrefs = ModePreferencesService(userId: user.uid);
+    _syncEngine = SyncEngine(
+      userId: user.uid,
+      modePrefs: _modePrefs!,
+      sessionService: _sessionService!,
+    );
+
+    _connectivitySub ??= ConnectivityService.watchOnline().listen((hasLink) {
+      if (!hasLink) {
+        _realtimeSync?.stop();
+        return;
       }
+      unawaited(_whenInternetAvailable());
+    });
+
+    await _modePrefs!.ensureOfflineSyncMode();
+    await _continueAfterMode();
+  }
+
+  Future<void> _bootstrapFastPath(User user) async {
+    if (!mounted) return;
+    _ensurePlatformSession(user.uid);
+    _sessionService ??= CreditCoreSessionRuntime.sessionService;
+    _modePrefs ??= ModePreferencesService(userId: user.uid);
+    _syncEngine ??= SyncEngine(
+      userId: user.uid,
+      modePrefs: _modePrefs!,
+      sessionService: _sessionService!,
+    );
+    await _continueAfterMode(skipNetworkChecks: true);
+  }
+
+  Future<int> _safeLocalRecordCount() async {
+    try {
+      return await _syncEngine!
+          .localRecordCount()
+          .timeout(const Duration(seconds: 4), onTimeout: () => 0);
+    } catch (_) {
+      return 0;
     }
   }
 
@@ -172,7 +194,7 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     );
 
     var done = await _modePrefs!.isInitialSyncDoneLocally();
-    final localCount = await _syncEngine!.localRecordCount();
+    final localCount = await _safeLocalRecordCount();
     final hasLocalCache = done || localCount > 0;
 
     if (!done && localCount > 0) {
@@ -204,9 +226,9 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     if (!mounted) return;
     _cancelStartupWatchdog();
     if (!skipNetworkChecks &&
-        await ConnectivityService.isOnline(timeout: const Duration(seconds: 6))) {
+        await ConnectivityService.isOnline(timeout: const Duration(seconds: 4))) {
       try {
-        await _syncCatchUpIfNeeded().timeout(const Duration(seconds: 12));
+        await _syncCatchUpIfNeeded().timeout(const Duration(seconds: 8));
       } catch (_) {}
     }
 
@@ -217,13 +239,22 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
 
   Future<void> _continueOfflineIfPossible() async {
     if (_modePrefs == null || _syncEngine == null) {
-      await _bootstrap();
+      await _bootstrapFastPath(FirebaseAuth.instance.currentUser!);
       return;
     }
-    final done = await _modePrefs!.isInitialSyncDoneLocally();
-    final localCount = await _syncEngine!.localRecordCount();
-    if (!done && localCount == 0) return;
     await _continueAfterMode(skipNetworkChecks: true);
+  }
+
+  Future<void> _startInitialSync() async {
+    if (_modePrefs == null || _syncEngine == null) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      await _bootstrapFastPath(user);
+      return;
+    }
+    if (!mounted) return;
+    _cancelStartupWatchdog();
+    setState(() => _step = _BootstrapStep.initialSync);
   }
 
   Future<void> _syncCatchUpIfNeeded() async {
@@ -374,9 +405,9 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'La connessione a CreditCore sta impiegando più tempo '
-                        'del previsto. Puoi riprovare o attendere ancora qualche '
-                        'secondo.',
+                        'L\'avvio sta impiegando più tempo del previsto. '
+                        'Puoi continuare senza attendere o avviare la '
+                        'sincronizzazione dati.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.grey.shade700,
@@ -401,7 +432,12 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
                       const SizedBox(height: 12),
                       OutlinedButton(
                         onPressed: () => unawaited(_continueOfflineIfPossible()),
-                        child: const Text('Continua con dati locali'),
+                        child: const Text('Continua senza attendere'),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        onPressed: () => unawaited(_startInitialSync()),
+                        child: const Text('Avvia sincronizzazione'),
                       ),
                     ],
                   ),
