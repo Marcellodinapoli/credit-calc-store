@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../core/date_month_utils.dart';
 import '../core/euro_format.dart';
@@ -4636,6 +4637,39 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     return const [];
   }
 
+  String _sharePlanText() {
+    final creditor = _creditor;
+    final schedule = _commissionPaymentSchedule();
+    final totaleRateizzato =
+        schedule.fold<double>(0, (sum, payment) => sum + payment.amount);
+    final acconto = EuroFormat.parse(_accontoCtrl.text) ?? 0;
+    final lines = <String>[
+      'Sviluppo piano di rientro',
+      if (creditor != null) 'Creditore: ${creditor.name}',
+      'Data inizio: ${_formatDate(_dataInizio)}',
+      if (_dataFine != null) 'Data fine: ${_formatDate(_dataFine!)}',
+      if (totaleRateizzato > 0)
+        'Totale rateizzato: ${EuroFormat.format(totaleRateizzato)}',
+      if (acconto > 0) 'Acconto: ${EuroFormat.format(acconto)}',
+      '',
+      'Scadenze:',
+      if (schedule.isEmpty) 'Nessuna scadenza disponibile',
+      for (var i = 0; i < schedule.length; i++)
+        'Rata ${i + 1}: ${_formatDate(schedule[i].date)} - ${EuroFormat.format(schedule[i].amount)}',
+    ];
+    return lines.join('\n');
+  }
+
+  Future<void> _condividiPiano() async {
+    if (!_calcolato) return;
+    await SharePlus.instance.share(
+      ShareParams(
+        text: _sharePlanText(),
+        subject: 'Piano di rientro',
+      ),
+    );
+  }
+
   List<RepaymentPlanCommissionSlice> _commissionExportSlices() {
     final multi = _multiPracticePlan;
     if (multi != null) {
@@ -4961,6 +4995,21 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
             label: Text(_calcolato ? 'Piano sviluppato' : 'Sviluppa piano'),
           ),
         ),
+        if (_calcolato) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _condividiPiano,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: ProjectColors.calc,
+                side: BorderSide(color: ProjectColors.calc.withValues(alpha: 0.55)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              icon: const Icon(Icons.share_outlined),
+              label: const Text('Condividi'),
+            ),
+          ),
+        ],
       ],
     );
       },

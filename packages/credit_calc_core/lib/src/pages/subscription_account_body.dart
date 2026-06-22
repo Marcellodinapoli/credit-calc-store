@@ -535,13 +535,9 @@ class _CurrentPlanCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                plan!.description,
-                style: TextStyle(
-                  color: Colors.grey.shade800,
-                  height: 1.45,
-                  fontSize: 14,
-                ),
+              _PlanDescriptionList(
+                description: plan!.description,
+                fontSize: 14,
               ),
             ],
             if (snapshot.cancelledAt != null) ...[
@@ -986,13 +982,9 @@ class _PlanCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            Text(
-              plan.description,
-              style: TextStyle(
-                color: Colors.grey.shade800,
-                height: 1.45,
-                fontSize: 13,
-              ),
+            _PlanDescriptionList(
+              description: plan.description,
+              fontSize: 13,
             ),
             if (!plan.availableNow && plan.id != 'free') ...[
               const SizedBox(height: 8),
@@ -1098,6 +1090,69 @@ class _StatusChip extends StatelessWidget {
         label,
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       ),
+    );
+  }
+}
+
+class _PlanDescriptionList extends StatelessWidget {
+  const _PlanDescriptionList({
+    required this.description,
+    required this.fontSize,
+  });
+
+  final String description;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = TextStyle(
+      color: Colors.grey.shade800,
+      height: 1.45,
+      fontSize: fontSize,
+    );
+    final blocks = description
+        .split('\n\n')
+        .map((block) => block.trim())
+        .where((block) => block.isNotEmpty)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < blocks.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          _buildBlock(blocks[i], textStyle),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBlock(String block, TextStyle textStyle) {
+    if (!block.contains(' · ')) {
+      return Text(block, style: textStyle);
+    }
+
+    final items = block
+        .split(' · ')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < items.length; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: i < items.length - 1 ? 4 : 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('• ', style: textStyle),
+                Expanded(child: Text(items[i], style: textStyle)),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

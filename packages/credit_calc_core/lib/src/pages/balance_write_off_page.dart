@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../core/date_month_utils.dart';
 import '../core/euro_format.dart';
@@ -574,6 +575,32 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   }
 
   String _formatDate(DateTime date) => formatCommissionExportDate(date);
+
+  String _sharePlanText() {
+    final lines = <String>[
+      'Sviluppo saldo e stralcio',
+      if (_creditorName != null) 'Creditore: $_creditorName',
+      'Debito totale: ${_labelEuro(_debito)}',
+      'Percentuale stralcio: ${_labelPercent()}',
+      'Importo da stralciare: ${_labelEuro(EuroFormat.parse(_stralciatoCtrl.text))}',
+      'Residuo da pagare: ${_labelEuro(EuroFormat.parse(_residuoCtrl.text))}',
+      '',
+      'Scadenze:',
+      for (var i = 0; i < _installments.length; i++)
+        'Rata ${i + 1}: ${_formatDate(_installments[i].date)} - ${EuroFormat.format(_installments[i].amount)}',
+    ];
+    return lines.join('\n');
+  }
+
+  Future<void> _condividiSaldo() async {
+    if (!_calcolato || _installments.isEmpty) return;
+    await SharePlus.instance.share(
+      ShareParams(
+        text: _sharePlanText(),
+        subject: 'Saldo e stralcio',
+      ),
+    );
+  }
 
   Map<String, dynamic> _captureBackofficeFormData() {
     return {
@@ -1273,6 +1300,21 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
             ),
           ),
         ),
+        if (_calcolato) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _condividiSaldo,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: ProjectColors.calc,
+                side: BorderSide(color: ProjectColors.calc.withValues(alpha: 0.55)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              icon: const Icon(Icons.share_outlined),
+              label: const Text('Condividi'),
+            ),
+          ),
+        ],
       ],
     );
   }

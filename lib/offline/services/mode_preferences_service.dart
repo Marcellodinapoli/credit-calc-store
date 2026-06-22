@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -52,6 +54,10 @@ class ModePreferencesService {
     await prefs.setString(_localModeKey, mode.storageValue);
     await prefs.setBool(_localModeChosenKey, true);
 
+    unawaited(_syncModeToFirestore(mode));
+  }
+
+  Future<void> _syncModeToFirestore(CreditCalcMode mode) async {
     try {
       await FirebaseFirestore.instance.collection('users').doc(userId).set(
         {
@@ -59,7 +65,7 @@ class ModePreferencesService {
           'creditCalcModeChosenAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
-      );
+      ).timeout(const Duration(seconds: 8));
     } catch (_) {}
   }
 

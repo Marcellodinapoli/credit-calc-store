@@ -73,8 +73,13 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
+    await _waitForPlatformSession(user.uid);
+
     final platformSession = CreditCoreSessionRuntime.sessionService;
     if (platformSession == null || platformSession.userId != user.uid) {
+      if (!mounted) return;
+      _cancelStartupWatchdog();
+      setState(() => _step = _BootstrapStep.startupSlow);
       return;
     }
 
@@ -110,6 +115,16 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     }
   }
 
+  Future<void> _waitForPlatformSession(String userId) async {
+    const attempts = 20;
+    for (var i = 0; i < attempts; i++) {
+      final session = CreditCoreSessionRuntime.sessionService;
+      if (session != null && session.userId == userId) return;
+      await CreditCoreSessionRuntime.waitUntilReady();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
   void _cancelStartupWatchdog() {
     _startupWatchdog?.cancel();
     _startupWatchdog = null;
@@ -138,7 +153,7 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     await _realtimeSync?.refresh();
   }
 
-  Future<void> _continueAfterMode() async {
+  Future<void> _continueAfterMode({bool skipNetworkChecks = false}) async {
     const mode = CreditCalcMode.offlineSync;
 
     CreditCalcRepositorySetup.apply(
@@ -168,9 +183,16 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
       done = true;
     }
 
+    if (hasLocalCache) {
+      _cancelStartupWatchdog();
+    }
+
     if (!hasLocalCache) {
       if (!mounted) return;
-      if (!await ConnectivityService.isOnline()) {
+      if (!skipNetworkChecks &&
+          !await ConnectivityService.isOnline(
+            timeout: const Duration(seconds: 8),
+          )) {
         _cancelStartupWatchdog();
         setState(() => _step = _BootstrapStep.offlineSyncRequired);
         return;
@@ -181,13 +203,27 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     }
     if (!mounted) return;
     _cancelStartupWatchdog();
-    if (await ConnectivityService.isOnline()) {
-      await _syncCatchUpIfNeeded();
+    if (!skipNetworkChecks &&
+        await ConnectivityService.isOnline(timeout: const Duration(seconds: 6))) {
+      try {
+        await _syncCatchUpIfNeeded().timeout(const Duration(seconds: 12));
+      } catch (_) {}
     }
 
     if (!mounted) return;
     setState(() => _step = _BootstrapStep.ready);
     unawaited(_startRealtimeIfNeeded());
+  }
+
+  Future<void> _continueOfflineIfPossible() async {
+    if (_modePrefs == null || _syncEngine == null) {
+      await _bootstrap();
+      return;
+    }
+    final done = await _modePrefs!.isInitialSyncDoneLocally();
+    final localCount = await _syncEngine!.localRecordCount();
+    if (!done && localCount == 0) return;
+    await _continueAfterMode(skipNetworkChecks: true);
   }
 
   Future<void> _syncCatchUpIfNeeded() async {
@@ -361,6 +397,11 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
                           unawaited(_bootstrap());
                         },
                         child: const Text('Riprova avvio'),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () => unawaited(_continueOfflineIfPossible()),
+                        child: const Text('Continua con dati locali'),
                       ),
                     ],
                   ),
