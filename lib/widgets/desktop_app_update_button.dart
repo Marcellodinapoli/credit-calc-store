@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Pulsante «Aggiorna» per OTA desktop (Firestore `platform_config/credit_calc_desktop`).
+/// Pulsante «Aggiorna» OTA (Firestore `platform_config/credit_calc_desktop`).
 class DesktopAppUpdateButton extends StatefulWidget {
   final bool compact;
 
@@ -24,7 +24,16 @@ class _DesktopAppUpdateButtonState extends State<DesktopAppUpdateButton> {
 
   static bool get _enabled {
     if (kIsWeb) return false;
-    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    return Platform.isWindows ||
+        Platform.isMacOS ||
+        Platform.isLinux ||
+        Platform.isAndroid ||
+        Platform.isIOS;
+  }
+
+  String get _downloadActionLabel {
+    if (Platform.isAndroid || Platform.isIOS) return 'Aggiorna';
+    return 'Scarica';
   }
 
   Future<void> _startDownload(RecoveryToolUpdateInfo info) async {
@@ -96,7 +105,7 @@ class _DesktopAppUpdateButtonState extends State<DesktopAppUpdateButton> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Scarica'),
+            child: Text(_downloadActionLabel),
           ),
         ],
       ),

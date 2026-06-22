@@ -1,6 +1,10 @@
+import 'package:flutter/foundation.dart';
+
 import 'app_version_utils.dart';
 
 /// Documento Firestore: `platform_config/credit_calc_desktop`
+/// Desktop: `windowsInstallerUrl` / `windowsDownloadUrl`
+/// Mobile: `androidDownloadUrl`, `iosDownloadUrl`
 abstract final class RecoveryToolUpdateConfig {
   static const firestorePath = 'platform_config/credit_calc_desktop';
 
@@ -31,13 +35,35 @@ abstract final class RecoveryToolUpdateConfig {
     );
   }
 
-  /// Installer Setup.exe ha priorità sul vecchio ZIP in `windowsDownloadUrl`.
+  /// URL di download/store in base alla piattaforma corrente.
   static String _resolveDownloadUrl(Map<String, dynamic> data) {
+    if (!kIsWeb) {
+      switch (defaultTargetPlatform) {
+        case TargetPlatform.android:
+          final android = (data['androidDownloadUrl'] ?? '').toString().trim();
+          if (android.isNotEmpty) return android;
+        case TargetPlatform.iOS:
+          final ios = (data['iosDownloadUrl'] ?? '').toString().trim();
+          if (ios.isNotEmpty) return ios;
+        case TargetPlatform.macOS:
+          final mac = (data['macDownloadUrl'] ?? '').toString().trim();
+          if (mac.isNotEmpty) return mac;
+        case TargetPlatform.linux:
+          final linux = (data['linuxDownloadUrl'] ?? '').toString().trim();
+          if (linux.isNotEmpty) return linux;
+        default:
+          break;
+      }
+    }
+
     final installer = (data['windowsInstallerUrl'] ?? '').toString().trim();
     if (installer.isNotEmpty) return installer;
 
     final legacy = (data['windowsDownloadUrl'] ?? '').toString().trim();
     if (legacy.toLowerCase().contains('-setup.exe')) return legacy;
+
+    final generic = (data['downloadUrl'] ?? '').toString().trim();
+    if (generic.isNotEmpty) return generic;
 
     return legacy;
   }

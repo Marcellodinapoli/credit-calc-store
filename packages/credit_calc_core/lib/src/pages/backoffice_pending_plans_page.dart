@@ -18,10 +18,11 @@ class BackofficePendingPlansPage extends StatelessWidget {
   }
 
   String _acceptedLabel(BackofficePendingPlan plan) {
-    final via = plan.acceptedVia == BackofficeAcceptedVia.commission
-        ? 'tramite incasso in provvigioni'
-        : 'manualmente';
-    return 'Accettato il ${_formatDate(plan.acceptedAt!)} · $via';
+    final date = plan.acceptedAt!;
+    final time =
+        '${date.hour.toString().padLeft(2, '0')}:'
+        '${date.minute.toString().padLeft(2, '0')}';
+    return 'Accettato il ${_formatDate(date)} alle $time';
   }
 
   List<Widget> _planMetaLines(BackofficePendingPlan plan) {

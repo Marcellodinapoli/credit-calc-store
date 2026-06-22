@@ -505,8 +505,7 @@ class _CommissionStatisticsSectionState
           padding: const EdgeInsets.only(top: 4),
           child: Text(
             hasData
-                ? 'Provvigioni ${CommissionCollectionsHelper.formatEuro(entry.totals.commission)}'
-                    ' · Incassato ${CommissionCollectionsHelper.formatEuro(entry.totals.collected)}'
+                ? 'Incassato ${CommissionCollectionsHelper.formatEuro(entry.totals.collected)}'
                     ' · ${entry.totals.practiceCount} pratiche'
                 : 'Nessun incasso registrato',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
