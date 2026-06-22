@@ -7,15 +7,16 @@ class AddressFieldWithScan extends StatefulWidget {
   const AddressFieldWithScan({
     super.key,
     required this.controller,
+    this.companyNameController,
     this.labelText = 'Indirizzo visita',
-    this.hintText =
-        'Es. Via Roma 143, 80100 Napoli NA (ancora meglio con CAP)',
+    this.hintText = 'Es. Via Roma, 143 - 80100 Napoli',
     this.maxLines = 2,
     this.enabled = true,
     this.onScanned,
   });
 
   final TextEditingController controller;
+  final TextEditingController? companyNameController;
   final String labelText;
   final String hintText;
   final int maxLines;
@@ -64,25 +65,42 @@ class _AddressFieldWithScanState extends State<AddressFieldWithScan> {
     }
 
     try {
-      final address =
+      final result =
           await AddressScanService.captureAndExtractAddress(source: source);
       if (!mounted) return;
 
-      if (address == null || address.trim().isEmpty) {
+      if (result == null ||
+          (result.address.trim().isEmpty &&
+              (result.companyName == null || result.companyName!.trim().isEmpty))) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Nessun indirizzo rilevato. Riprova con una foto più nitida.',
+              'Nessun dato rilevato. Riprova con una foto più nitida.',
             ),
           ),
         );
         return;
       }
 
-      widget.controller.text = address.trim();
+      final address = result.address.trim();
+      if (address.isNotEmpty) {
+        widget.controller.text = address;
+      }
+      final companyName = result.companyName?.trim();
+      if (companyName != null &&
+          companyName.isNotEmpty &&
+          widget.companyNameController != null) {
+        widget.companyNameController!.text = companyName;
+      }
       widget.onScanned?.call();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Indirizzo inserito dalla scansione.')),
+        SnackBar(
+          content: Text(
+            companyName != null && companyName.isNotEmpty
+                ? 'Nominativo e indirizzo inseriti dalla scansione.'
+                : 'Indirizzo inserito dalla scansione.',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;

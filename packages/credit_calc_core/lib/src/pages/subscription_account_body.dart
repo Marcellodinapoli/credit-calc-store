@@ -196,6 +196,89 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
         final sub = snapshot.data!;
         final isCompany = isCompanySubscriptionAudience(sub.registerType);
 
+        if (!sub.canManage) {
+          return _planScrollView(
+            children: [
+              Text(
+                'Il tuo piano',
+                style: GoogleFonts.inter(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Il piano è gestito dalla tua azienda.',
+                style: TextStyle(
+                  color: Colors.grey.shade700,
+                  height: 1.45,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                color: ProjectColors.area.withValues(alpha: 0.06),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppCardTheme.radius),
+                  side: BorderSide(
+                    color: ProjectColors.area.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Piano attuale',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: ProjectColors.area,
+                        ),
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        'Gratis',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+              Text(
+                'I miei consumi',
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppCardTheme.radius),
+                  side: BorderSide(color: Colors.grey.shade200),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Utilizzo gestito dall\'azienda.',
+                    style: TextStyle(
+                      color: Colors.grey.shade800,
+                      fontSize: 14,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
         if (isCompany) {
           final plans = companySubscriptionPlans();
           final current = companySubscriptionPlanForId(sub.planId);

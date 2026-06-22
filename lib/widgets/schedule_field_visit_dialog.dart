@@ -7,10 +7,12 @@ import 'field_visit_day_picker.dart';
 
 class ScheduleFieldVisitResult {
   const ScheduleFieldVisitResult({
+    required this.companyName,
     required this.address,
     required this.scheduledAt,
   });
 
+  final String companyName;
   final String address;
   final DateTime scheduledAt;
 }
@@ -34,7 +36,10 @@ Future<bool> showScheduleFieldVisitDialog(
 
   try {
     await FieldVisitService.importFromCalculation(
-      calculation: calculation,
+      calculation: {
+        ...calculation,
+        'companyName': result.companyName,
+      },
       calculationId: calculationId,
       scheduledAt: result.scheduledAt,
       address: result.address,
@@ -70,12 +75,17 @@ class _ScheduleFieldVisitDialog extends StatefulWidget {
 }
 
 class _ScheduleFieldVisitDialogState extends State<_ScheduleFieldVisitDialog> {
+  late final TextEditingController _companyCtrl;
   late final TextEditingController _addressCtrl;
   late DateTime _scheduled;
 
   @override
   void initState() {
     super.initState();
+    final calculation = widget.calculation;
+    _companyCtrl = TextEditingController(
+      text: (calculation['companyName'] ?? '').toString(),
+    );
     _addressCtrl = TextEditingController();
     final day = widget.initialDay;
     _scheduled = DateTime(day.year, day.month, day.day, 10, 0);
@@ -97,14 +107,17 @@ class _ScheduleFieldVisitDialogState extends State<_ScheduleFieldVisitDialog> {
 
   @override
   void dispose() {
+    _companyCtrl.dispose();
     _addressCtrl.dispose();
     super.dispose();
   }
 
   void _confirm() {
+    if (_companyCtrl.text.trim().isEmpty) return;
     Navigator.pop(
       context,
       ScheduleFieldVisitResult(
+        companyName: _companyCtrl.text.trim(),
         address: _addressCtrl.text,
         scheduledAt: _scheduled,
       ),
@@ -125,13 +138,18 @@ class _ScheduleFieldVisitDialogState extends State<_ScheduleFieldVisitDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                (calculation['companyName'] ?? 'Pratica').toString(),
-                style: const TextStyle(fontWeight: FontWeight.w600),
+              TextField(
+                controller: _companyCtrl,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Ragione sociale / debitore',
+                  hintText: 'Es. Verdone Alfio',
+                  border: OutlineInputBorder(),
+                ),
               ),
               if (creditorName.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     'Creditore: $creditorName',
                     style: const TextStyle(color: Colors.black54),
@@ -140,7 +158,9 @@ class _ScheduleFieldVisitDialogState extends State<_ScheduleFieldVisitDialog> {
               const SizedBox(height: 12),
               AddressFieldWithScan(
                 controller: _addressCtrl,
+                companyNameController: _companyCtrl,
                 labelText: 'Indirizzo visita',
+                hintText: 'Es. Via Roma, 143 - 80100 Napoli',
                 onScanned: () => setState(() {}),
               ),
               const SizedBox(height: 12),

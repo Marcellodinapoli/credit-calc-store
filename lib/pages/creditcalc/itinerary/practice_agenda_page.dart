@@ -78,15 +78,19 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
                 children: [
                   TextField(
                     controller: companyCtrl,
+                    textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(
                       labelText: 'Ragione sociale / debitore',
+                      hintText: 'Es. Verdone Alfio',
                       border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 12),
                   AddressFieldWithScan(
                     controller: addressCtrl,
+                    companyNameController: companyCtrl,
                     labelText: 'Indirizzo visita',
+                    hintText: 'Es. Via Roma, 143 - 80100 Napoli',
                     onScanned: () => setLocal(() {}),
                   ),
                   const SizedBox(height: 12),

@@ -4,6 +4,21 @@ import '../core/euro_format.dart';
 import '../core/theme/app_action_styles.dart';
 import '../core/theme/app_form_fields.dart';
 
+const _dialogPrimaryBlue = Color(0xFF0A66C2);
+
+ShapeBorder get _commissionExportDialogShape => RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(28),
+    );
+
+ButtonStyle get _commissionExportConfirmStyle => FilledButton.styleFrom(
+      backgroundColor: _dialogPrimaryBlue,
+      foregroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+    );
+
 /// Come registrare gli incassi quando ci sono rate in mesi successivi a quello corrente.
 enum CommissionExportDateMode {
   /// Un unico incasso nella data scelta nel calendario.
@@ -56,14 +71,17 @@ Future<CommissionExportDialogResult?> showCommissionExportDialog({
   required bool hasPaymentsAfterCurrentMonth,
   List<CommissionExportScheduleLine> scheduledPayments = const [],
   DateTime? initialCollectionDate,
+  String? initialCompanyName,
 }) {
   return showDialog<CommissionExportDialogResult>(
     context: context,
+    useRootNavigator: true,
     builder: (dialogContext) => _CommissionExportDialog(
       description: description,
       hasPaymentsAfterCurrentMonth: hasPaymentsAfterCurrentMonth,
       scheduledPayments: scheduledPayments,
       initialCollectionDate: initialCollectionDate,
+      initialCompanyName: initialCompanyName,
     ),
   );
 }
@@ -74,12 +92,14 @@ class _CommissionExportDialog extends StatefulWidget {
     required this.hasPaymentsAfterCurrentMonth,
     required this.scheduledPayments,
     this.initialCollectionDate,
+    this.initialCompanyName,
   });
 
   final String description;
   final bool hasPaymentsAfterCurrentMonth;
   final List<CommissionExportScheduleLine> scheduledPayments;
   final DateTime? initialCollectionDate;
+  final String? initialCompanyName;
 
   @override
   State<_CommissionExportDialog> createState() => _CommissionExportDialogState();
@@ -97,7 +117,10 @@ class _CommissionExportDialogState extends State<_CommissionExportDialog> {
   @override
   void initState() {
     super.initState();
-    _companyCtrl = TextEditingController();
+    final initialName = widget.initialCompanyName?.trim();
+    _companyCtrl = TextEditingController(
+      text: initialName == null || initialName.isEmpty ? '' : initialName,
+    );
     final initial = widget.initialCollectionDate ?? DateTime.now();
     _collectionDate = DateTime(initial.year, initial.month, initial.day);
   }
@@ -130,7 +153,16 @@ class _CommissionExportDialogState extends State<_CommissionExportDialog> {
         _showScheduleChoice && _dateMode == CommissionExportDateMode.respectSchedule;
 
     return AlertDialog(
-      title: const Text('Registra incassi in provvigioni'),
+      shape: _commissionExportDialogShape,
+      actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      title: const Text(
+        'Registra incassi in provvigioni',
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF212121),
+        ),
+      ),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -275,6 +307,7 @@ class _CommissionExportDialogState extends State<_CommissionExportDialog> {
         ),
         FilledButton(
           onPressed: _confirm,
+          style: _commissionExportConfirmStyle,
           child: const Text('Conferma'),
         ),
       ],

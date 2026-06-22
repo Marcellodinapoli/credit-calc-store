@@ -7,7 +7,7 @@ import 'address_text_parser.dart';
 
 /// OCR indirizzo da fotocamera/galleria (Android/iOS).
 abstract final class AddressScanService {
-  static Future<String?> recognizeFromImagePath(String imagePath) async {
+  static Future<AddressScanResult?> recognizeFromImagePath(String imagePath) async {
     if (kIsWeb) return null;
 
     final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
@@ -22,13 +22,13 @@ abstract final class AddressScanService {
       }
       final raw = buffer.toString().trim();
       if (raw.isEmpty) return null;
-      return AddressTextParser.extractLikelyAddress(raw);
+      return AddressTextParser.parseScannedText(raw);
     } finally {
       await recognizer.close();
     }
   }
 
-  static Future<String?> captureAndExtractAddress({
+  static Future<AddressScanResult?> captureAndExtractAddress({
     required ImageSource source,
   }) async {
     if (source == ImageSource.camera) {

@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "field_visits",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "preVisitPushSent", "order": "ASCENDING" },
+        { "fieldPath": "scheduledAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "field_reminders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "pushSent", "order": "ASCENDING" },
+        { "fieldPath": "remindAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

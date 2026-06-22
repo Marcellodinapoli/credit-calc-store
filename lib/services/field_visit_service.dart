@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/firestore_user_scope.dart';
 import '../models/field_visit.dart';
 import 'creditor_visit_address_service.dart';
+import 'field_visit_notification_service.dart';
 import 'geocoding_service.dart';
 
 abstract final class FieldVisitService {
@@ -135,16 +136,43 @@ abstract final class FieldVisitService {
       'preVisitPushSent': false,
     });
 
+    String savedId;
     if (id == null || id.isEmpty) {
       final ref = await _col.add(data);
-      return ref.id;
+      savedId = ref.id;
+    } else {
+      await _col.doc(id).set(data, SetOptions(merge: true));
+      savedId = id;
     }
 
-    await _col.doc(id).set(data, SetOptions(merge: true));
-    return id;
+    await FieldVisitNotificationService.cancelForVisit(savedId);
+    if (status == FieldVisitStatus.planned) {
+      await FieldVisitNotificationService.scheduleIfEnabled(
+        FieldVisit(
+          id: savedId,
+          userId: userId,
+          companyName: visit.companyName,
+          address: visit.address,
+          scheduledAt: visit.scheduledAt,
+          status: visit.status,
+          latitude: visit.latitude,
+          longitude: visit.longitude,
+          creditorId: visit.creditorId,
+          creditorName: visit.creditorName,
+          calculationId: visit.calculationId,
+          notes: visit.notes,
+          routeOrder: visit.routeOrder,
+        ),
+      );
+    }
+
+    return savedId;
   }
 
-  static Future<void> delete(String id) => _col.doc(id).delete();
+  static Future<void> delete(String id) async {
+    await FieldVisitNotificationService.cancelForVisit(id);
+    await _col.doc(id).delete();
+  }
 
   static Future<bool> refreshGeocoding(FieldVisit visit) async {
     if (visit.address.trim().isEmpty) return false;
@@ -179,11 +207,27 @@ abstract final class FieldVisitService {
     });
   }
 
-  static Future<void> updateStatus(String id, FieldVisitStatus status) {
-    return _col.doc(id).update({
+  static Future<void> updateStatus(String id, FieldVisitStatus status) async {
+    await _col.doc(id).update({
       'status': status.name,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    if (status != FieldVisitStatus.planned) {
+      await FieldVisitNotificationService.cancelForVisit(id);
+      return;
+    }
+
+    final doc = await _col.doc(id).get();
+    if (!doc.exists) return;
+    await FieldVisitNotificationService.scheduleIfEnabled(
+      FieldVisit.fromDoc(doc),
+    );
+  }
+
+  static Future<List<FieldVisit>> fetchAllForUser(String userId) async {
+    final snap = await _col.where('userId', isEqualTo: userId).get();
+    return snap.docs.map(FieldVisit.fromDoc).toList();
   }
 
   static Future<void> saveRouteOrder(List<FieldVisit> ordered) async {

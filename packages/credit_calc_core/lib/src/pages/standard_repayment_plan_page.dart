@@ -19,6 +19,7 @@ import '../subscription/public_usage_limit_scope.dart';
 
 import 'backoffice_pending_plan.dart';
 import 'commission_export_dialog.dart';
+import 'developed_plan_session_cache.dart';
 import 'repayment_plan_commission_export.dart';
 
 const _maxPlanScheduleIterations = 2400;
@@ -1417,7 +1418,21 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   bool _exportingCommissions = false;
   bool _savingBackofficePending = false;
   bool _pendingRestoreApplied = false;
+  bool _sessionRestoreApplied = false;
+  bool _discardSessionOnDispose = false;
   final List<String> _sessionCommissionDocIds = [];
+
+  static const _euroSnapshotKeys = {
+    'i1',
+    'i2',
+    'i3',
+    'acconto',
+    'rata',
+    'desiredRata',
+    'mod1a',
+    'mod2a',
+    'mod3a',
+  };
 
   final _mobileScrollController = ScrollController();
   final _simulationsKey = GlobalKey();
@@ -1452,6 +1467,12 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   @override
   void dispose() {
+    if (_calcolato && !_discardSessionOnDispose) {
+      DevelopedPlanSessionCache.save(
+        DevelopedPlanSessionCache.standardRepayment,
+        _collectDevelopedSessionState(),
+      );
+    }
     _creditorsSub?.cancel();
     _accontoFocusNode.removeListener(_onAccontoFocusChange);
     _accontoFocusNode.dispose();
@@ -1475,6 +1496,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   void _resetCalcolo() {
     if (!_calcolato) return;
+    DevelopedPlanSessionCache.clear(DevelopedPlanSessionCache.standardRepayment);
     setState(() {
       _calcolato = false;
       _formSnapshotAtCalcolo = null;
@@ -1520,12 +1542,31 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     _formSnapshotAtCalcolo = _currentFormSnapshot();
   }
 
+  bool _snapshotValueChanged(String key, String current, String? saved) {
+    if (saved == null) return true;
+    if (_euroSnapshotKeys.contains(key)) {
+      final parsedCurrent = EuroFormat.parse(current);
+      final parsedSaved = EuroFormat.parse(saved);
+      if (parsedCurrent == null && parsedSaved == null) {
+        return current.trim() != saved.trim();
+      }
+      return parsedCurrent != parsedSaved;
+    }
+    return current != saved;
+  }
+
   bool _hasFormChangedSinceCalcolo() {
     if (!_calcolato || _formSnapshotAtCalcolo == null) return false;
     final current = _currentFormSnapshot();
     if (current.length != _formSnapshotAtCalcolo!.length) return true;
     for (final entry in current.entries) {
-      if (_formSnapshotAtCalcolo![entry.key] != entry.value) return true;
+      if (_snapshotValueChanged(
+        entry.key,
+        entry.value,
+        _formSnapshotAtCalcolo![entry.key],
+      )) {
+        return true;
+      }
     }
     return false;
   }
@@ -1566,6 +1607,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     if (_cachedCreditorOptions == null) {
       setState(() => _cachedCreditorOptions = options);
       _tryRestorePendingPlan(options);
+      unawaited(_tryRestoreDevelopedSession(options));
       return;
     }
 
@@ -1575,6 +1617,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       _cachedCreditorOptions = options;
     }
     _tryRestorePendingPlan(options);
+    unawaited(_tryRestoreDevelopedSession(options));
   }
 
   bool _creditorOptionsListEquals(
@@ -2141,6 +2184,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       options.isNotEmpty && _canDevelopPlan;
 
   void _resetForm() {
+    DevelopedPlanSessionCache.clear(DevelopedPlanSessionCache.standardRepayment);
     _isResettingForm = true;
     FocusManager.instance.primaryFocus?.unfocus();
     _accontoFocusNode.unfocus();
@@ -3188,6 +3232,16 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     }
   }
 
+  Map<String, dynamic> _collectDevelopedSessionState() {
+    return {
+      'developed': true,
+      ..._currentFormSnapshot(),
+      'modulatedVisiblePhaseCount': _modulatedVisiblePhaseCount,
+      'dataInizioIso': _dataInizio.toIso8601String(),
+      'sessionCommissionDocIds': List<String>.from(_sessionCommissionDocIds),
+    };
+  }
+
   Future<void> _tryRestorePendingPlan(List<_CreditorOption> options) async {
     if (_pendingRestoreApplied || widget.initialFormData == null) return;
     _pendingRestoreApplied = true;
@@ -3197,6 +3251,37 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     await _calcola(skipUsageGuard: widget.skipInitialUsageGuard);
     if (!mounted) return;
     await _maybeAutoOpenCommissionExport();
+  }
+
+  Future<void> _tryRestoreDevelopedSession(List<_CreditorOption> options) async {
+    if (_sessionRestoreApplied ||
+        _pendingRestoreApplied ||
+        widget.initialFormData != null ||
+        _calcolato) {
+      return;
+    }
+    final cached = DevelopedPlanSessionCache.read(
+      DevelopedPlanSessionCache.standardRepayment,
+    );
+    if (cached == null || cached['developed'] != true) return;
+
+    _sessionRestoreApplied = true;
+    _isResettingForm = true;
+    _applyBackofficeFormData(cached, options);
+    final ids = cached['sessionCommissionDocIds'];
+    if (ids is List) {
+      _sessionCommissionDocIds
+        ..clear()
+        ..addAll(ids.map((id) => id.toString()));
+    }
+    _isResettingForm = false;
+
+    if (!mounted || _creditor == null) return;
+    setState(() {
+      _showPdrFeedback = true;
+      if (_parseBirthYear() != null) _showBirthYearInfo = true;
+    });
+    await _calcola(skipUsageGuard: true);
   }
 
   Future<void> _maybeAutoOpenCommissionExport() async {
@@ -4412,6 +4497,11 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
             ],
             if (_calcolato) ...[
               const Divider(height: 24),
+              const Text(
+                'Piano sviluppato',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+              ),
+              const SizedBox(height: 8),
               if (_multiPracticePlan != null) ..._multiPracticeSummaryWidgets()
               else if (_modulatedPlan != null)
                 KeyedSubtree(
@@ -4637,6 +4727,17 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     return const [];
   }
 
+  String _shareBoldField(String label, String value) => '*$label:* $value';
+
+  String _shareBoldDetailLine(String line) {
+    final colonIndex = line.indexOf(':');
+    if (colonIndex <= 0) return line;
+    return _shareBoldField(
+      line.substring(0, colonIndex).trim(),
+      line.substring(colonIndex + 1).trim(),
+    );
+  }
+
   String _sharePlanText() {
     final creditor = _creditor;
     final schedule = _commissionPaymentSchedule();
@@ -4644,20 +4745,82 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         schedule.fold<double>(0, (sum, payment) => sum + payment.amount);
     final acconto = EuroFormat.parse(_accontoCtrl.text) ?? 0;
     final lines = <String>[
-      'Sviluppo piano di rientro',
-      if (creditor != null) 'Creditore: ${creditor.name}',
-      'Data inizio: ${_formatDate(_dataInizio)}',
-      if (_dataFine != null) 'Data fine: ${_formatDate(_dataFine!)}',
+      '*Sviluppo piano di rientro:*',
+      if (creditor != null) _shareBoldField('Creditore', creditor.name),
+      _shareBoldField('Data inizio', _formatDate(_dataInizio)),
+      if (_dataFine != null)
+        _shareBoldField('Data fine', _formatDate(_dataFine!)),
       if (totaleRateizzato > 0)
-        'Totale rateizzato: ${EuroFormat.format(totaleRateizzato)}',
-      if (acconto > 0) 'Acconto: ${EuroFormat.format(acconto)}',
-      '',
-      'Scadenze:',
-      if (schedule.isEmpty) 'Nessuna scadenza disponibile',
-      for (var i = 0; i < schedule.length; i++)
-        'Rata ${i + 1}: ${_formatDate(schedule[i].date)} - ${EuroFormat.format(schedule[i].amount)}',
+        _shareBoldField(
+          'Totale rateizzato',
+          EuroFormat.format(totaleRateizzato),
+        ),
+      if (acconto > 0)
+        _shareBoldField('Acconto', EuroFormat.format(acconto)),
+      ..._shareDetailSection(schedule),
     ];
     return lines.join('\n');
+  }
+
+  List<String> _shareDetailSection(List<CommissionInstallmentPayment> schedule) {
+    final details = _shareDetailLines(schedule);
+    if (details.isEmpty) return const [];
+    return [
+      '',
+      '*Dettaglio:*',
+      for (final line in details) '• ${_shareBoldDetailLine(line)}',
+    ];
+  }
+
+  List<String> _shareDetailLines(List<CommissionInstallmentPayment> schedule) {
+    final details = <String>[];
+
+    if (_numeroRate > 0) {
+      details.add('Numero rate: $_numeroRate');
+    } else if (schedule.isNotEmpty) {
+      details.add('Numero rate: ${schedule.length}');
+    }
+
+    final mod = _modulatedPlan;
+    if (mod != null) {
+      details.addAll(mod.phaseSummaryLines(_metodo, _formatDate));
+    } else {
+      final multi = _multiPracticePlan;
+      if (multi != null) {
+        final rata = EuroFormat.parse(_rataMensileCondivisaCtrl.text);
+        if (rata != null && rata > 0) {
+          details.add('Rata mensile cliente: ${EuroFormat.format(rata)}');
+        }
+        details.add('Pagamenti in calendario: ${multi.calendar.length}');
+      } else {
+        final plan = _installmentPlan;
+        if (plan != null) {
+          details.addAll(plan.structureLines(_metodo));
+        } else if (schedule.isNotEmpty) {
+          final firstAmount = schedule.first.amount;
+          final allEqual = schedule.every(
+            (payment) => (payment.amount - firstAmount).abs() < 0.009,
+          );
+          details.add(
+            allEqual
+                ? 'Importo rata: ${EuroFormat.format(firstAmount)}'
+                : 'Importi rate: variabili',
+          );
+        }
+      }
+    }
+
+    if (_cadenza.isNotEmpty) {
+      details.add('Cadenza: $_cadenza');
+    }
+    if (_metodo.isNotEmpty) {
+      details.add('Modalità di pagamento: $_metodo');
+    }
+    if (schedule.isNotEmpty) {
+      details.add('Data prima rata: ${_formatDate(schedule.first.date)}');
+    }
+
+    return details;
   }
 
   Future<void> _condividiPiano() async {
@@ -4724,6 +4887,43 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   bool get _incassoGiaRegistrato => _sessionCommissionDocIds.isNotEmpty;
 
+  String? _savedDebtorCompanyName() {
+    final name = (widget.initialFormData?['companyName'] ?? '').toString().trim();
+    return name.isEmpty ? null : name;
+  }
+
+  String _pdrPaymentLabelForExport() {
+    return switch (_metodo) {
+      'Bollettino' => 'Pdr c/bollettini postali',
+      'Cambiali' => 'Pdr c/effetti cambiari',
+      _ => _metodo,
+    };
+  }
+
+  String _commissionExportDescription(
+    List<CommissionInstallmentPayment> schedule,
+  ) {
+    var rateizzato =
+        schedule.fold<double>(0, (sum, payment) => sum + payment.amount);
+    if (rateizzato <= 0) {
+      rateizzato = _commissionExportSlices()
+          .fold<double>(0, (sum, slice) => sum + slice.pdrAmount);
+    }
+    final acconto = EuroFormat.parse(_accontoCtrl.text) ?? 0;
+    final buffer = StringBuffer(
+      'Verranno registrati gli incassi per il piano di rientro '
+      '(${_pdrPaymentLabelForExport()})',
+    );
+    if (rateizzato > 0) {
+      buffer.write(', importo rateizzato ${EuroFormat.format(rateizzato)}');
+    }
+    if (acconto > 0.009) {
+      buffer.write(', acconto in contanti ${EuroFormat.format(acconto)}');
+    }
+    buffer.write('.');
+    return buffer.toString();
+  }
+
   Future<void> _aggiungiIncassoInProvvigioni() async {
     final creditor = _creditor;
     final creditorId = _creditorId;
@@ -4752,10 +4952,11 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
             label: schedulePreview.length > 1 ? 'Rata ${i + 1}' : null,
           ),
       ],
-      description:
-          'Verranno creati gli incassi con importo totale rateizzato '
-          '(${_metodo == 'Bollettino' ? 'Pdr c/bollettini postali' : 'Pdr c/effetti cambiari'}) '
-          'e, se presente, l\'acconto in contanti.',
+      description: _commissionExportDescription(schedulePreview),
+      initialCollectionDate: schedulePreview.isNotEmpty
+          ? schedulePreview.first.date
+          : _dataInizio,
+      initialCompanyName: _savedDebtorCompanyName(),
     );
 
     if (dialogResult == null || !mounted) return;
@@ -4924,7 +5125,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   Future<void> _annullaPiano() async {
     if (_sessionCommissionDocIds.isEmpty) {
-      _exitPlanScreen();
+      _exitPlanScreen(discardDevelopedSession: true);
       return;
     }
 
@@ -4942,17 +5143,23 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         await _deleteSessionCommissions();
         return;
       case PlanCancelWithCommissionsAction.exitKeepCommissions:
-        _exitPlanScreen();
+        _exitPlanScreen(discardDevelopedSession: true);
         return;
       case PlanCancelWithCommissionsAction.exitDeleteCommissions:
         if (await _deleteSessionCommissions()) {
-          _exitPlanScreen();
+          _exitPlanScreen(discardDevelopedSession: true);
         }
         return;
     }
   }
 
-  void _exitPlanScreen() {
+  void _exitPlanScreen({bool discardDevelopedSession = false}) {
+    if (discardDevelopedSession) {
+      DevelopedPlanSessionCache.clear(
+        DevelopedPlanSessionCache.standardRepayment,
+      );
+      _discardSessionOnDispose = true;
+    }
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
       navigator.pop();
@@ -4997,17 +5204,14 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         ),
         if (_calcolato) ...[
           const SizedBox(width: 12),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _condividiPiano,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: ProjectColors.calc,
-                side: BorderSide(color: ProjectColors.calc.withValues(alpha: 0.55)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              icon: const Icon(Icons.share_outlined),
-              label: const Text('Condividi'),
+          OutlinedButton(
+            onPressed: _condividiPiano,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: ProjectColors.calc,
+              side: BorderSide(color: ProjectColors.calc.withValues(alpha: 0.55)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
+            child: const Icon(Icons.share_outlined),
           ),
         ],
       ],

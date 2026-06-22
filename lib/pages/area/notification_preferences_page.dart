@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/dimensions.dart';
 import '../../services/field_reminder_notification_service.dart';
+import '../../services/field_visit_notification_service.dart';
 import '../../services/itinerary_notifications_service.dart';
 import '../../services/location_consent_service.dart';
 import '../../services/product_notifications_service.dart';
@@ -99,6 +100,7 @@ class _NotificationPreferencesPageState
     await LocationConsentService.setEnabled(uid: uid, enabled: value);
     if (value) {
       await FieldReminderNotificationService.syncAllForCurrentUser();
+      await FieldVisitNotificationService.syncAllForCurrentUser();
     }
 
     if (!mounted) return;

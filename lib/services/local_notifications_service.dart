@@ -152,12 +152,42 @@ class LocalNotificationsService {
     required String title,
     required String body,
     String? payload,
+  }) {
+    return _showNotification(
+      title: title,
+      body: body,
+      payload: payload,
+      channelId: _channelId,
+      channelName: _channelName,
+    );
+  }
+
+  static Future<void> showItineraryNotification({
+    required String title,
+    required String body,
+    String? payload,
+  }) {
+    return _showNotification(
+      title: title,
+      body: body,
+      payload: payload,
+      channelId: _itineraryChannelId,
+      channelName: _itineraryChannelName,
+    );
+  }
+
+  static Future<void> _showNotification({
+    required String title,
+    required String body,
+    required String channelId,
+    required String channelName,
+    String? payload,
   }) async {
     if (!_initialized || kIsWeb) return;
 
-    const androidDetails = AndroidNotificationDetails(
-      _channelId,
-      _channelName,
+    final androidDetails = AndroidNotificationDetails(
+      channelId,
+      channelName,
       importance: Importance.high,
       priority: Priority.high,
     );

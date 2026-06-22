@@ -71,20 +71,23 @@ class LoginPricingPage extends StatelessWidget {
                       name: 'FREE',
                       price: '€0',
                       description:
-                          'Accesso base alla piattaforma per uso personale. '
-                          'Funzioni limitate per test e utilizzo occasionale, '
-                          'senza strumenti avanzati né storico completo.',
+                          'Uso base per testare la piattaforma.\n\n'
+                          '3 corsi attivi · 10 quiz/mese · 5 Warm-up/mese · '
+                          '2 Roleplay/mese · 3 contestazioni/mese · 1 piano di rientro '
+                          '(simulazione) · 1 saldo/stralcio · 2 itinerari/mese · '
+                          '5 creditori · 1 schema provvigioni · 3 candidature/mese.',
                     ),
                     const SizedBox(height: 16),
                     const _PlanCard(
                       name: 'PLUS',
                       price: '€4,99 / mese',
                       description:
-                          'Accesso completo alle funzionalità principali per uso '
-                          'individuale. Include utilizzo illimitato dei servizi '
-                          'core, storico delle attività e salvataggio dei dati. '
-                          'Pensato per uso quotidiano con piena autonomia sulle '
-                          'funzioni base.',
+                          'Uso personale completo con limiti medi-alti.\n\n'
+                          'Fino a 50 corsi attivi · 200 quiz/mese · 100 Warm-up · '
+                          '80 Roleplay · 50 contestazioni · 20 piani di rientro · '
+                          '15 saldi/stralci · 20 itinerari · 200 creditori · '
+                          'storico provvigioni completo · 50 candidature/mese.\n\n'
+                          'Avviso al raggiungimento dell\'80% dei limiti.',
                       highlighted: true,
                       badge: 'Consigliato',
                     ),
@@ -93,11 +96,13 @@ class LoginPricingPage extends StatelessWidget {
                       name: 'ENTERPRISE',
                       price: '€9,99 / mese',
                       description:
-                          'Piano avanzato per utenti professionali. Include tutte '
-                          'le funzioni del PLUS con strumenti di analisi, '
-                          'personalizzazione dei flussi, maggiore controllo sui dati '
-                          'e priorità nelle prestazioni. Adatto a utilizzo intensivo '
-                          'e scenari complessi.',
+                          'Uso intensivo quasi senza limiti operativi.\n\n'
+                          'Corsi illimitati · Quiz illimitati · Warm-up illimitati · '
+                          'Roleplay illimitati · Contestazioni illimitate · '
+                          'Piani di rientro illimitati · Saldi e stralci illimitati · '
+                          'Itinerari illimitati · Creditori illimitati · '
+                          'Provvigioni illimitate · Candidature illimitate (fair use) · '
+                          'Analytics provvigioni avanzate.',
                     ),
                     const SizedBox(height: 32),
                     Divider(color: Colors.grey.shade300),
@@ -112,11 +117,11 @@ class LoginPricingPage extends StatelessWidget {
                       name: 'AZIENDA',
                       price: 'Prezzo su richiesta',
                       description:
-                          'Soluzione completa per team e organizzazioni. Workspace '
-                          'aziendale con gestione ruoli (admin, supervisor, dipendenti), '
-                          'pubblicazione offerte di lavoro, gestione candidati, '
-                          'assegnazione attività e monitoraggio performance tramite '
-                          'dashboard dedicate ai supervisor.',
+                          'Soluzione completa per team e organizzazioni.\n\n'
+                          'Workspace aziendale con gestione ruoli · '
+                          'Pubblicazione offerte di lavoro · Gestione candidati · '
+                          'Assegnazione attività · Dashboard dedicate ai supervisor · '
+                          'Monitoraggio performance del team.',
                     ),
                   ],
                 ),
@@ -236,13 +241,9 @@ class _PlanCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Text(
-            description,
-            style: TextStyle(
-              color: Colors.grey.shade800,
-              fontSize: 15,
-              height: 1.5,
-            ),
+          _PlanDescriptionList(
+            description: description,
+            fontSize: 15,
           ),
         ],
       ),
@@ -308,16 +309,75 @@ class _EnterprisePlanCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Text(
-            description,
-            style: TextStyle(
-              color: Colors.grey.shade800,
-              fontSize: 16,
-              height: 1.55,
-            ),
+          _PlanDescriptionList(
+            description: description,
+            fontSize: 16,
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PlanDescriptionList extends StatelessWidget {
+  const _PlanDescriptionList({
+    required this.description,
+    required this.fontSize,
+  });
+
+  final String description;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = TextStyle(
+      color: Colors.grey.shade800,
+      height: 1.5,
+      fontSize: fontSize,
+    );
+    final blocks = description
+        .split('\n\n')
+        .map((block) => block.trim())
+        .where((block) => block.isNotEmpty)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < blocks.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          _buildBlock(blocks[i], textStyle),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBlock(String block, TextStyle textStyle) {
+    if (!block.contains(' · ')) {
+      return Text(block, style: textStyle);
+    }
+
+    final items = block
+        .split(' · ')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < items.length; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: i < items.length - 1 ? 4 : 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('• ', style: textStyle),
+                Expanded(child: Text(items[i], style: textStyle)),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

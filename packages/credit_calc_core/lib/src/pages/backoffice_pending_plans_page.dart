@@ -301,6 +301,8 @@ class BackofficePendingPlansPage extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final plan = plans[index];
+              final companyName =
+                  (plan.formData['companyName'] ?? '').toString().trim();
               return Card(
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
@@ -321,8 +323,31 @@ class BackofficePendingPlansPage extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (plan.isAccepted)
+                              Container(
+                                margin: EdgeInsets.only(
+                                  left: plan.hasCommissionExport ? 6 : 0,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  'Accettato',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.green.shade800,
+                                  ),
+                                ),
+                              ),
                             if (plan.hasCommissionExport)
                               Container(
+                                margin: const EdgeInsets.only(left: 6),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
                                   vertical: 4,
@@ -347,23 +372,18 @@ class BackofficePendingPlansPage extends StatelessWidget {
                           plan.creditorName,
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
+                        if (companyName.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Ragione sociale: $companyName',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 8),
-                        Text(
-                          'Inviato il ${_formatDate(plan.submittedAt)}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _waitingLabel(plan),
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.orange.shade900,
-                          ),
-                        ),
+                        ..._planMetaLines(plan),
                       ],
                     ),
                   ),
