@@ -1,10 +1,16 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'personal_form_shell.dart';
 import '../../core/theme/custom_tabbar_theme.dart';
 import '../../core/dimensions.dart';
 import '../../ui/layout/page_shell.dart';
+import '../../models/warmup_contestation.dart';
+import '../../services/warmup_contestation_service.dart';
 import 'call_training_page.dart';
 import 'contestation_training_page.dart';
+import 'user_contestation_form_page.dart';
 import '../../services/listening_progress_service.dart';
 
 
@@ -443,28 +449,50 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
   ];
 
   final Map<String, bool> _completed = {};
+  List<WarmupContestation> _userContestations = [];
+  StreamSubscription<List<WarmupContestation>>? _userSub;
+  String? _uid;
+
+  WarmupContestationContext get _context => widget.isRecupero
+      ? WarmupContestationContext.recupero
+      : WarmupContestationContext.sollecito;
+
   // ---------------------------------------------------------------------------
   // LIFECYCLE
   // ---------------------------------------------------------------------------
   @override
   void initState() {
     super.initState();
+    _uid = FirebaseAuth.instance.currentUser?.uid;
+    _listenUserContestations();
     _initState();
   }
 
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    super.dispose();
+  }
+
+  void _listenUserContestations() {
+    _userSub?.cancel();
+    _userSub = WarmupContestationService.watchForContext(_context).listen((list) {
+      if (mounted) setState(() => _userContestations = list);
+    });
+  }
+
   Future<void> _initState() async {
-    // init mappa locale
     for (final c in _items) {
       _completed[c.id] = false;
     }
 
-    // restore da Firestore
     final data = await ListeningProgressService.getContestazioniProgress();
-    if (data.isEmpty) return;
+    if (!mounted) return;
 
     setState(() {
       for (final entry in data.entries) {
-        if (_completed.containsKey(entry.key)) {
+        if (_completed.containsKey(entry.key) ||
+            entry.key.startsWith('uc_')) {
           _completed[entry.key] = entry.value;
         }
       }
@@ -474,6 +502,28 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
   // ---------------------------------------------------------------------------
   // HELPERS
   // ---------------------------------------------------------------------------
+  bool get _allBuiltinCompleted {
+    if (_items.isEmpty) return true;
+    return _items.every((c) => _completed[c.id] == true);
+  }
+
+  List<WarmupContestation> get _mine {
+    final uid = _uid;
+    if (uid == null) return [];
+    return _userContestations.where((c) => c.authorUid == uid).toList();
+  }
+
+  List<WarmupContestation> get _communityApproved {
+    final uid = _uid;
+    return _userContestations
+        .where(
+          (c) =>
+              c.status == WarmupContestationStatus.approved &&
+              c.authorUid != uid,
+        )
+        .toList();
+  }
+
   bool _isEnabled(int index) {
     if (index == 0) return true;
     return _completed[_items[index - 1].id] == true;
@@ -519,6 +569,17 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
     }
   }
 
+  ContestationTrainingItem _trainingItemFromUser(WarmupContestation c) {
+    return ContestationTrainingItem(
+      title: c.title,
+      declared: c.declared,
+      meaning: c.meaning,
+      risk: c.risk,
+      objective: c.objective,
+      response: c.response,
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // ACTIONS
   // ---------------------------------------------------------------------------
@@ -540,26 +601,218 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
     }
   }
 
+  Future<void> _openUser(WarmupContestation contestation) async {
+    if (contestation.canEdit) {
+      final action = await showModalBottomSheet<String>(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.school_outlined),
+                title: const Text('Allenati'),
+                onTap: () => Navigator.pop(ctx, 'train'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Modifica'),
+                onTap: () => Navigator.pop(ctx, 'edit'),
+              ),
+              if (contestation.canDelete)
+                ListTile(
+                  leading: Icon(Icons.delete_outline, color: Colors.red.shade700),
+                  title: Text(
+                    'Elimina',
+                    style: TextStyle(color: Colors.red.shade700),
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'delete'),
+                ),
+            ],
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (action == 'edit') {
+        await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => UserContestationFormPage(
+              context: _context,
+              existing: contestation,
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (action == 'delete') {
+        try {
+          await WarmupContestationService.delete(contestation.id);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Contestazione eliminata.')),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(e.toString())),
+            );
+          }
+        }
+        return;
+      }
+
+      if (action != 'train') return;
+    }
+
+    final completed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ContestationTrainingPage(
+          item: _trainingItemFromUser(contestation),
+        ),
+      ),
+    );
+
+    if (completed == true) {
+      setState(() => _completed[contestation.progressKey] = true);
+      await ListeningProgressService.setContestationCompleted(
+        contestation.progressKey,
+      );
+    }
+  }
+
+  Future<void> _addUserContestation() async {
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UserContestationFormPage(context: _context),
+      ),
+    );
+  }
+
 // ---------------------------------------------------------------------------
 // BUILD
 // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    return Scrollbar(
-      thumbVisibility: true,
-      child: ListView.separated(
-      padding: Dimensions.scrollPadding(context),
-      itemCount: _items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 16),
-      itemBuilder: (context, index) {
-        final item = _items[index];
-        return _ContestationCard(
+    final children = <Widget>[];
+
+    for (var i = 0; i < _items.length; i++) {
+      final item = _items[i];
+      if (i > 0) children.add(const SizedBox(height: 16));
+      children.add(
+        _ContestationCard(
           item: item,
           completed: _completed[item.id] ?? false,
-          enabled: _isEnabled(index),
-          onTap: () => _open(item, index),
-        );
-      },
+          enabled: _isEnabled(i),
+          onTap: () => _open(item, i),
+        ),
+      );
+    }
+
+    final mine = _mine;
+    final community = _communityApproved;
+    if (mine.isNotEmpty || community.isNotEmpty) {
+      if (children.isNotEmpty) children.add(const SizedBox(height: 24));
+      children.add(
+        Text(
+          'Contestazioni personali e community',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+            color: Colors.grey.shade800,
+          ),
+        ),
+      );
+      children.add(const SizedBox(height: 12));
+    }
+
+    for (final c in mine) {
+      children.add(const SizedBox(height: 16));
+      children.add(
+        _UserContestationCard(
+          contestation: c,
+          completed: _completed[c.progressKey] ?? false,
+          isMine: true,
+          onTap: () => _openUser(c),
+        ),
+      );
+    }
+
+    for (final c in community) {
+      children.add(const SizedBox(height: 16));
+      children.add(
+        _UserContestationCard(
+          contestation: c,
+          completed: _completed[c.progressKey] ?? false,
+          isMine: false,
+          onTap: () => _openUser(c),
+        ),
+      );
+    }
+
+    if (_allBuiltinCompleted) {
+      children.add(const SizedBox(height: 24));
+      children.add(
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.orange.shade200),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: _addUserContestation,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Icon(Icons.add_circle_outline, color: Colors.orange.shade800),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Aggiungi la tua contestazione',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Racconta un caso reale nel contesto '
+                          '${_context.label.toLowerCase()}. Visibile subito a te; '
+                          'condivisa con tutti dopo approvazione BK.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade700,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Scrollbar(
+      thumbVisibility: true,
+      child: ListView(
+        padding: Dimensions.scrollPadding(context),
+        children: children,
       ),
     );
   }
@@ -589,6 +842,153 @@ enum ContestationCategory {
   salute,
   amministrativa,
   generica,
+}
+
+/// ===========================================================================
+/// USER CONTESTATION CARD
+/// ===========================================================================
+
+class _UserContestationCard extends StatelessWidget {
+  const _UserContestationCard({
+    required this.contestation,
+    required this.completed,
+    required this.isMine,
+    required this.onTap,
+  });
+
+  final WarmupContestation contestation;
+  final bool completed;
+  final bool isMine;
+  final VoidCallback onTap;
+
+  Color _categoryColor() {
+    return switch (contestation.category) {
+      WarmupContestationCategory.economica => Colors.orange,
+      WarmupContestationCategory.legale => Colors.blue,
+      WarmupContestationCategory.salute => Colors.deepPurple,
+      WarmupContestationCategory.amministrativa => Colors.green,
+      WarmupContestationCategory.generica => Colors.blueGrey,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _categoryColor();
+    final status = contestation.status;
+
+    return SizedBox(
+      width: double.infinity,
+      child: Card(
+        elevation: 3,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: isMine
+              ? BorderSide(color: Colors.orange.shade100)
+              : BorderSide.none,
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 6,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              contestation.title,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                          if (isMine)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _statusColor(status).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                status.label,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: _statusColor(status),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        contestation.declared,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black54,
+                          height: 1.35,
+                        ),
+                      ),
+                      if (isMine &&
+                          status == WarmupContestationStatus.rejected &&
+                          contestation.rejectionNote != null &&
+                          contestation.rejectionNote!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Motivo rifiuto: ${contestation.rejectionNote}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.red.shade700,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Icon(
+                  completed ? Icons.check_circle : Icons.radio_button_unchecked,
+                  color: completed ? Colors.green : Colors.black26,
+                  size: 28,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _statusColor(WarmupContestationStatus status) {
+    return switch (status) {
+      WarmupContestationStatus.draft => Colors.grey.shade700,
+      WarmupContestationStatus.pendingReview => Colors.orange.shade800,
+      WarmupContestationStatus.approved => Colors.green.shade700,
+      WarmupContestationStatus.rejected => Colors.red.shade700,
+    };
+  }
 }
 
 /// ===========================================================================

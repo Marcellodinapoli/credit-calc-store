@@ -13,6 +13,7 @@ class DevelopPage extends StatelessWidget {
       'Saldo e stralcio',
       'Riscontro backoffice',
       'Itinerario e mappa',
+      'Calcolatrice',
     ];
 
     return wrapCreditCalcPage(
@@ -36,6 +37,8 @@ class DevelopPage extends StatelessWidget {
                     page = const BalanceWriteOffPage();
                   } else if (title == 'Riscontro backoffice') {
                     page = const BackofficePendingPlansPage();
+                  } else if (title == 'Calcolatrice') {
+                    page = const ClassicCalculatorPage();
                   } else {
                     page = const ItineraryHubPage();
                   }

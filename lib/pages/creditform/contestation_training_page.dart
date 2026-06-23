@@ -54,6 +54,10 @@ class _ContestationTrainingPageState
   // AUDIO
   bool _isRecording = false;
   bool _hasRecording = false;
+  final _suggestionCtrl = TextEditingController();
+
+  bool get _canCompleteSimulation =>
+      _hasRecording && _suggestionCtrl.text.trim().isNotEmpty;
 
   // ---------------------------------------------------------------------------
   // LIFECYCLE
@@ -62,6 +66,12 @@ class _ContestationTrainingPageState
   void initState() {
     super.initState();
     _restoreProgress();
+  }
+
+  @override
+  void dispose() {
+    _suggestionCtrl.dispose();
+    super.dispose();
   }
 
   // ---------------------------------------------------------------------------
@@ -123,6 +133,27 @@ class _ContestationTrainingPageState
       default:
         return Colors.orange;
     }
+  }
+
+  void _tryFinish() {
+    if (_canCompleteSimulation) {
+      Navigator.pop(context, true);
+      return;
+    }
+    final missing = <String>[];
+    if (_suggestionCtrl.text.trim().isEmpty) {
+      missing.add('compila il suggerimento atteso');
+    }
+    if (!_hasRecording) {
+      missing.add('registra la tua risposta');
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Per concludere devi ${missing.join(' e ')}.',
+        ),
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -212,14 +243,37 @@ class _ContestationTrainingPageState
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(12),
+        if (widget.item.response.trim().isNotEmpty) ...[
+          Text(
+            'Linea di risposta corretta (riferimento)',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
           ),
-          child: Text(widget.item.response),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(widget.item.response),
+          ),
+          const SizedBox(height: 16),
+        ],
+        TextFormField(
+          controller: _suggestionCtrl,
+          maxLines: 4,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            labelText: 'Suggerimento atteso',
+            hintText: 'Scrivi la risposta professionale che intendi dare al cliente',
+            border: OutlineInputBorder(),
+            alignLabelWithHint: true,
+          ),
         ),
         const SizedBox(height: 28),
         Center(
@@ -292,7 +346,7 @@ class _ContestationTrainingPageState
             if (_step < 5) {
               _next();
             } else {
-              Navigator.pop(context, true);
+              _tryFinish();
             }
           },
           style: FilledButton.styleFrom(

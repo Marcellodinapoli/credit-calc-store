@@ -21,6 +21,44 @@ abstract final class FieldVisitService {
       '${value.month.toString().padLeft(2, '0')}-'
       '${value.day.toString().padLeft(2, '0')}';
 
+  static bool hasAppointmentAt(
+    List<FieldVisit> visits,
+    DateTime scheduledAt, {
+    String? excludeVisitId,
+  }) {
+    for (final visit in visits) {
+      if (visit.status == FieldVisitStatus.cancelled) continue;
+      if (excludeVisitId != null &&
+          excludeVisitId.isNotEmpty &&
+          visit.id == excludeVisitId) {
+        continue;
+      }
+      final existing = visit.scheduledAt;
+      if (existing.year == scheduledAt.year &&
+          existing.month == scheduledAt.month &&
+          existing.day == scheduledAt.day &&
+          existing.hour == scheduledAt.hour &&
+          existing.minute == scheduledAt.minute) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static Future<bool> hasConflictingAppointment(
+    DateTime scheduledAt, {
+    String? excludeVisitId,
+  }) async {
+    final userId = FirestoreUserScope.uid;
+    if (userId == null) return false;
+    final visits = await fetchAllForUser(userId);
+    return hasAppointmentAt(
+      visits,
+      scheduledAt,
+      excludeVisitId: excludeVisitId,
+    );
+  }
+
   static Map<String, int> visitCountsByDayId(
     List<FieldVisit> visits, {
     bool excludeCancelled = true,

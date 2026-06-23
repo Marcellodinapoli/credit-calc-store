@@ -32,6 +32,7 @@ export 'src/pages/commission_settings_page.dart';
 export 'src/pages/commissions_page.dart';
 export 'src/pages/creditor_detail_page.dart';
 export 'src/pages/creditors_page.dart';
+export 'src/pages/classic_calculator_page.dart';
 export 'src/pages/develop_detail_page.dart';
 export 'src/pages/develop_page.dart';
 export 'src/pages/repayment_plan_commission_export.dart';

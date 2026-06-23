@@ -66,6 +66,7 @@ class _RemindersPageState extends State<RemindersPage> {
                         final picked = await pickFieldVisitDateAndTime(
                           ctx,
                           initial: remindAt,
+                          checkAgendaConflict: false,
                         );
                         if (picked == null) return;
                         setLocal(() => remindAt = picked);

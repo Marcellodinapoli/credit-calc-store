@@ -104,6 +104,7 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
                         final picked = await pickFieldVisitDateAndTime(
                           ctx,
                           initial: scheduled,
+                          excludeVisitId: visit?.id,
                         );
                         if (picked == null) return;
                         setLocal(() => scheduled = picked);

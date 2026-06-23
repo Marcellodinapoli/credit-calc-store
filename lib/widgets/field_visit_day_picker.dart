@@ -43,6 +43,8 @@ Future<DateTime?> pickFieldVisitDateAndTime(
   required DateTime initial,
   DateTime? firstDate,
   DateTime? lastDate,
+  String? excludeVisitId,
+  bool checkAgendaConflict = true,
 }) async {
   final date = await showFieldVisitDayPicker(
     context,
@@ -59,13 +61,31 @@ Future<DateTime?> pickFieldVisitDateAndTime(
   );
   if (time == null) return null;
 
-  return DateTime(
+  final scheduled = DateTime(
     date.year,
     date.month,
     date.day,
     time.hour,
     time.minute,
   );
+
+  if (checkAgendaConflict) {
+    final conflict = await FieldVisitService.hasConflictingAppointment(
+      scheduled,
+      excludeVisitId: excludeVisitId,
+    );
+    if (!context.mounted) return null;
+    if (conflict) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Esiste già un appuntamento in agenda a quest\'ora.'),
+        ),
+      );
+      return null;
+    }
+  }
+
+  return scheduled;
 }
 
 class FieldVisitDayPickerDialog extends StatefulWidget {

@@ -7,6 +7,11 @@ import '../core/maintenance_service.dart';
 import '../core/admin/bk_admin_service.dart';
 import '../pages/area/personal_area_menu.dart';
 import '../pages/bk/bk_coupons_page.dart';
+import '../pages/bk/bk_warmup_contestations_page.dart';
+import '../pages/bk/bk_normative_search_page.dart';
+import '../pages/bk/bk_call_analysis_page.dart';
+import '../pages/creditcalc/normative_search_page.dart';
+import '../pages/creditcalc/phone_call_analysis_page.dart';
 import '../ui/layout/page_shell.dart';
 import '../pages/creditform/personal_form_menu.dart';
 import '../pages/creditjob/personal_job_menu.dart';
@@ -33,6 +38,7 @@ class CreditCoreAccountMenuSheet extends StatefulWidget {
 class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet> {
   static const _formColor = Color(0xFFFFA726);
   static const _jobColor = Color(0xFF00C4B3);
+  static const _calcColor = Color(0xFF00B0FF);
   static const _areaColor = Color(0xFF1565C0);
 
   static final _formLight = _formColor.withValues(alpha: 0.15);
@@ -278,6 +284,10 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
           maintenanceData,
           MaintenanceService.area,
         );
+        final calcBlocked = MaintenanceService.isSectionBlocked(
+          maintenanceData,
+          MaintenanceService.creditCalc,
+        );
 
         final children = <Widget>[
           _menuHeader(),
@@ -402,6 +412,40 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
 
           children.addAll([
             const Divider(height: 24),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Text(
+                'Strumenti',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+            ),
+            if (!calcBlocked) ...[
+              _item(
+                icon: Icons.balance_outlined,
+                title: 'Ricerca normativa',
+                iconColor: _calcColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const NormativeSearchPage(),
+                    ),
+                  );
+                }),
+              ),
+              _item(
+                icon: Icons.call_outlined,
+                title: 'Analisi telefonata',
+                iconColor: _calcColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const PhoneCallAnalysisPage(),
+                    ),
+                  );
+                }),
+              ),
+            ],
+            const Divider(height: 24),
             _areaHeader(),
             if (!areaBlocked) ...[
               _item(
@@ -458,6 +502,42 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const BkCouponsPage(),
+                    ),
+                  );
+                }),
+              ),
+              _item(
+                icon: Icons.record_voice_over_outlined,
+                title: 'Contestazioni warm-up',
+                iconColor: _areaColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BkWarmupContestationsPage(),
+                    ),
+                  );
+                }),
+              ),
+              _item(
+                icon: Icons.balance_outlined,
+                title: 'Prompt ricerca normativa',
+                iconColor: _areaColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BkNormativeSearchPage(),
+                    ),
+                  );
+                }),
+              ),
+              _item(
+                icon: Icons.call_outlined,
+                title: 'Prompt analisi telefonata',
+                iconColor: _areaColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BkCallAnalysisPage(),
                     ),
                   );
                 }),
