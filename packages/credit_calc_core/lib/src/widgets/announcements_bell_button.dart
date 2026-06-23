@@ -109,6 +109,11 @@ class AnnouncementsBellButton extends StatelessWidget {
             return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: seenStream,
               builder: (context, seenSnap) {
+                if (seenSnap.connectionState == ConnectionState.waiting &&
+                    !seenSnap.hasData) {
+                  return _bellButton(context, unread: 0);
+                }
+
                 final userType =
                     (userSnap.data?.data()?['type'] ?? 'public').toString();
                 final announcements = announcementsSnap.data?.docs ?? [];

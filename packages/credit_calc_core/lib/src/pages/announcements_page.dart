@@ -80,6 +80,11 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
                     .collection('seen_announcements')
                     .snapshots(),
                 builder: (context, seenSnap) {
+                  if (seenSnap.connectionState == ConnectionState.waiting &&
+                      !seenSnap.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
                   final seenIds =
                       seenSnap.data?.docs.map((e) => e.id).toSet() ?? {};
                   return _announcementsList(
