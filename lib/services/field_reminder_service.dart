@@ -1,8 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 import '../core/firestore_user_scope.dart';
 import '../models/field_reminder.dart';
 import 'field_reminder_notification_service.dart';
+import 'itinerary_storage.dart';
 
 class FieldReminderSaveResult {
   const FieldReminderSaveResult({
@@ -15,18 +14,18 @@ class FieldReminderSaveResult {
 }
 
 abstract final class FieldReminderService {
-  static CollectionReference<Map<String, dynamic>> get _col =>
-      FirebaseFirestore.instance.collection('field_reminders');
+  static ItineraryStorage get _storage => ItineraryStorage.instance;
 
-  static Stream<List<FieldReminder>> watchUpcoming() {
-    final userId = FirestoreUserScope.uid;
-    if (userId == null) return Stream.value(const []);
+  static Stream<List<FieldReminder>> watchUpcoming() =>
+      _storage.watchAllReminders();
 
-    return _col.where('userId', isEqualTo: userId).snapshots().map((snap) {
-      final items = snap.docs.map(FieldReminder.fromDoc).toList();
-      items.sort((a, b) => a.remindAt.compareTo(b.remindAt));
-      return items;
-    });
+  static Future<List<FieldReminder>> fetchAllForUser() =>
+      _storage.fetchAllReminders();
+
+  static Future<List<FieldReminder>> fetchAllForUserId(String userId) async {
+    final current = FirestoreUserScope.uid;
+    if (current == userId) return fetchAllForUser();
+    return const [];
   }
 
   static Future<FieldReminderSaveResult> save({
@@ -39,6 +38,7 @@ abstract final class FieldReminderService {
     final userId = FirestoreUserScope.uid;
     if (userId == null) throw StateError('Utente non autenticato');
 
+    final isNew = id == null || id.isEmpty;
     final reminder = FieldReminder(
       id: id ?? '',
       userId: userId,
@@ -48,23 +48,15 @@ abstract final class FieldReminderService {
       visitId: visitId,
     );
 
-    final data = FirestoreUserScope.withOwner({
-      ...reminder.toFirestore(resetPushSent: true),
-      if (id == null) 'createdAt': FieldValue.serverTimestamp(),
-      if (id == null) 'pushSent': false,
-    });
+    final savedId = await _storage.saveReminder(
+      id: id,
+      reminder: reminder,
+      isNew: isNew,
+      resetPushSent: !isNew,
+    );
 
-    final String savedId;
-    if (id == null || id.isEmpty) {
-      final ref = await _col.add(data);
-      savedId = ref.id;
-    } else {
-      await _col.doc(id).set(data, SetOptions(merge: true));
-      savedId = id;
-    }
-
-    await cancelLocalNotification(savedId);
-    final schedule = await _scheduleLocalNotification(
+    await FieldReminderNotificationService.cancelForReminder(savedId);
+    final schedule = await FieldReminderNotificationService.scheduleIfEnabled(
       FieldReminder(
         id: savedId,
         userId: userId,
@@ -74,26 +66,15 @@ abstract final class FieldReminderService {
         visitId: visitId,
       ),
     );
+
     return FieldReminderSaveResult(id: savedId, schedule: schedule);
   }
 
   static Future<void> delete(String id) async {
-    await cancelLocalNotification(id);
-    await _col.doc(id).delete();
-  }
-
-  static Future<List<FieldReminder>> fetchAllForUser(String userId) async {
-    final snap = await _col.where('userId', isEqualTo: userId).get();
-    final items = snap.docs.map(FieldReminder.fromDoc).toList();
-    items.sort((a, b) => a.remindAt.compareTo(b.remindAt));
-    return items;
+    await FieldReminderNotificationService.cancelForReminder(id);
+    await _storage.deleteReminder(id);
   }
 
   static Future<void> cancelLocalNotification(String id) =>
       FieldReminderNotificationService.cancelForReminder(id);
-
-  static Future<FieldReminderScheduleResult> _scheduleLocalNotification(
-    FieldReminder reminder,
-  ) =>
-      FieldReminderNotificationService.scheduleIfEnabled(reminder);
 }

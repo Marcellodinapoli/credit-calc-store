@@ -18,6 +18,7 @@ import 'services/mode_preferences_service.dart';
 import 'services/realtime_sync_service.dart';
 import 'services/session_service.dart';
 import 'services/sync_engine.dart';
+import 'develop_sync/develop_sync_coordinator.dart';
 
 enum _BootstrapStep {
   loading,
@@ -64,8 +65,12 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     CommissionEntryDataAccess.instance = FirestoreCommissionEntryDataAccess();
     CommissionCreditorDataAccess.instance =
         FirestoreCommissionCreditorDataAccess();
+    CommissionEntriesDataAccess.instance =
+        FirestoreCommissionEntriesDataAccess();
+    CreditorsListDataAccess.instance = FirestoreCreditorsListDataAccess();
     CreditCalcRepository.clear();
     CreditCalcRuntime.clear();
+    unawaited(DevelopSyncCoordinator.stop());
     super.dispose();
   }
 
@@ -192,6 +197,12 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
       syncEngine: _syncEngine!,
       realtimeSync: _realtimeSync,
     );
+
+    final developSync = await DevelopSyncCoordinator.startIfNeeded(
+      userId: FirebaseAuth.instance.currentUser!.uid,
+      onDataChanged: _notifyRepositoryDataChanged,
+    );
+    _syncEngine!.developSyncEnabled = developSync;
 
     var done = await _modePrefs!.isInitialSyncDoneLocally();
     final localCount = await _safeLocalRecordCount();

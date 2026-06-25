@@ -3,6 +3,27 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../auth/registration_coupon_service.dart';
 
+enum CouponAdminType {
+  registration,
+  resetLimits;
+
+  String get storageValue => switch (this) {
+        CouponAdminType.registration => 'registration',
+        CouponAdminType.resetLimits => 'reset_limits',
+      };
+
+  String get label => switch (this) {
+        CouponAdminType.registration => 'Registrazione (accesso lifetime)',
+        CouponAdminType.resetLimits => 'Azzera limiti mensili',
+      };
+
+  static CouponAdminType fromStorage(String? raw) {
+    final value = (raw ?? '').trim().toLowerCase();
+    if (value == 'reset_limits') return CouponAdminType.resetLimits;
+    return CouponAdminType.registration;
+  }
+}
+
 class CouponRecord {
   final String code;
   final bool enabled;
@@ -14,12 +35,14 @@ class CouponRecord {
   final String? label;
   final DateTime? createdAt;
   final String? lastUsedBy;
+  final String type;
 
   const CouponRecord({
     required this.code,
     required this.enabled,
     required this.lifetimeFree,
     required this.usedCount,
+    required this.type,
     this.maxUses,
     this.expiresAt,
     this.plan,
@@ -59,8 +82,13 @@ class CouponRecord {
       lastUsedBy: (data['lastUsedBy'] ?? '').toString().trim().isEmpty
           ? null
           : (data['lastUsedBy'] ?? '').toString(),
+      type: CouponAdminType.fromStorage(data['type']?.toString()).storageValue,
     );
   }
+
+  CouponAdminType get adminType => CouponAdminType.fromStorage(type);
+
+  bool get isResetLimits => adminType == CouponAdminType.resetLimits;
 
   bool get exhausted =>
       maxUses != null && maxUses! > 0 && usedCount >= maxUses!;
@@ -88,6 +116,7 @@ abstract final class CouponAdminService {
 
   static Future<void> createCoupon({
     required String code,
+    required CouponAdminType type,
     String? label,
     int? maxUses,
     DateTime? expiresAt,
@@ -104,14 +133,18 @@ abstract final class CouponAdminService {
     }
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
+    final isRegistration = type == CouponAdminType.registration;
     await _col.doc(normalized).set({
       'enabled': true,
-      'lifetimeFree': true,
+      'type': type.storageValue,
+      'lifetimeFree': isRegistration,
       'usedCount': 0,
       if (label != null && label.trim().isNotEmpty) 'label': label.trim(),
       if (maxUses != null && maxUses > 0) 'maxUses': maxUses,
       if (expiresAt != null) 'expiresAt': Timestamp.fromDate(expiresAt),
-      if (restrictedPlan != null && restrictedPlan.trim().isNotEmpty)
+      if (isRegistration &&
+          restrictedPlan != null &&
+          restrictedPlan.trim().isNotEmpty)
         'plan': restrictedPlan.trim().toLowerCase(),
       'createdAt': FieldValue.serverTimestamp(),
       if (uid != null) 'createdBy': uid,

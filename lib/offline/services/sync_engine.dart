@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../develop_sync/develop_sync_coordinator.dart';
 import '../models/sync_record_status.dart';
 import '../utils/firestore_json_codec.dart';
 import 'connectivity_service.dart';
@@ -59,6 +60,8 @@ class SyncEngine {
   final _db = LocalDatabaseService.instance;
   final _firestore = FirebaseFirestore.instance;
 
+  bool developSyncEnabled = false;
+
   Future<SyncRemoteCounts> probeRemoteCounts() async {
     final creditors = await _firestore
         .collection('creditors')
@@ -83,6 +86,27 @@ class SyncEngine {
   Future<void> performInitialSync({
     void Function(SyncProgress progress)? onProgress,
   }) async {
+    if (developSyncEnabled) {
+      if (!await ConnectivityService.isOnline()) {
+        throw StateError(
+          'Connessione internet richiesta per la prima sincronizzazione.',
+        );
+      }
+      onProgress?.call(const SyncProgress('Sincronizzazione multi-dispositivo…', 0.5));
+      final result = await DevelopSyncCoordinator.syncNow();
+      final localCount = await _localRecordCount();
+      final version = DateTime.now().millisecondsSinceEpoch.toString();
+      await modePrefs.markInitialSyncComplete(
+        recordCount: localCount,
+        dataVersion: version,
+      );
+      onProgress?.call(const SyncProgress('Completata', 1));
+      if (result == null) {
+        throw StateError('Sincronizzazione multi-dispositivo non riuscita.');
+      }
+      return;
+    }
+
     if (!await ConnectivityService.isOnline()) {
       throw StateError('Connessione internet richiesta per la prima sincronizzazione.');
     }
@@ -137,6 +161,7 @@ class SyncEngine {
 
   /// `true` se Firebase ha più dati di quelli presenti in copia locale.
   Future<bool> isBehindRemote() async {
+    if (developSyncEnabled) return false;
     if (!await ConnectivityService.isOnline()) return false;
     final localCount = await _localRecordCount();
     if (localCount == 0) return true;
@@ -150,6 +175,7 @@ class SyncEngine {
 
   /// `true` se i conteggi coincidono ma la copia locale è incompleta o corrotta.
   Future<bool> needsRepairSync() async {
+    if (developSyncEnabled) return false;
     if (!await ConnectivityService.isOnline()) return false;
     if (!await modePrefs.isInitialSyncDoneLocally()) return false;
 
@@ -307,6 +333,10 @@ class SyncEngine {
       return SyncRunResult.failed('Connessione non disponibile.');
     }
 
+    if (developSyncEnabled) {
+      return _runDevelopSync();
+    }
+
     final initialDone = await modePrefs.isInitialSyncDoneLocally();
     final localCount = await _localRecordCount();
     SyncRemoteCounts remote;
@@ -394,6 +424,11 @@ class SyncEngine {
     if (!await ConnectivityService.isOnline()) {
       return SyncRunResult.failed('Connessione non disponibile.');
     }
+
+    if (developSyncEnabled) {
+      return _runDevelopSync();
+    }
+
     var pushed = 0;
     var pulled = 0;
 
@@ -560,5 +595,25 @@ class SyncEngine {
           conflict ? SyncRecordStatus.conflict : SyncRecordStatus.synced,
       origin: 'firebase',
     );
+  }
+
+  Future<SyncRunResult> _runDevelopSync() async {
+    try {
+      final result = await DevelopSyncCoordinator.syncNow();
+      if (result == null) {
+        return SyncRunResult.failed('Sincronizzazione multi-dispositivo non attiva.');
+      }
+      final localCount = await _localRecordCount();
+      return SyncRunResult(
+        success: true,
+        pushed: result.pushed,
+        pulled: result.pulled,
+        message: result.pushed == 0 && result.pulled == 0
+            ? 'Nessuna modifica. Locali: $localCount.'
+            : 'Sincronizzazione multi-dispositivo (↑${result.pushed} ↓${result.pulled}).',
+      );
+    } catch (e) {
+      return SyncRunResult.failed(e.toString());
+    }
   }
 }

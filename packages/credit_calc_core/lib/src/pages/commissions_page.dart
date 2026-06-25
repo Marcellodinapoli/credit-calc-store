@@ -1,15 +1,14 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-import '../core/firestore_server_reads.dart';
-import '../core/firestore_user_scope.dart';
 import '../core/theme/app_card_theme.dart';
 import '../preferences/commission_ui_preferences.dart';
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
+import '../subscription/public_usage_guard.dart';
 
 import 'commission_collections_page.dart';
 import 'commission_collections_shared.dart';
+import 'commission_entries_data_access.dart';
 import 'commission_entry_page.dart';
 import 'commission_settings_page.dart';
 
@@ -52,11 +51,11 @@ class _CommissionsPageState extends State<CommissionsPage> {
   }
 
   Widget _compactPreview(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> allDocs,
+    List<CommissionEntryRecord> allEntries,
   ) {
     final currentMonth = CommissionMonthKey.fromDate(DateTime.now());
     final monthDocs = CommissionCollectionsHelper.filterDocs(
-      allDocs,
+      allEntries,
       month: currentMonth,
     );
     final totalCommission =
@@ -135,10 +134,9 @@ class _CommissionsPageState extends State<CommissionsPage> {
               ),
             ),
           ),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirestoreServerReads.watchQuery(
-              FirestoreUserScope.userCalculations(),
-            ),
+          StreamBuilder<List<CommissionEntryRecord>>(
+            stream: CommissionEntriesDataAccess.instance
+                .watchCommissionEntries(),
             builder: (context, snapshot) {
               if (!_previewPreferenceLoaded) {
                 return const SizedBox.shrink();
@@ -161,9 +159,7 @@ class _CommissionsPageState extends State<CommissionsPage> {
                   );
                 }
 
-                return _compactPreview(
-                  CommissionCollectionsHelper.commissionDocs(snapshot.data),
-                );
+                return _compactPreview(snapshot.data ?? const []);
               }
 
               return const SizedBox.shrink();
@@ -172,8 +168,15 @@ class _CommissionsPageState extends State<CommissionsPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: OutlinedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
+              onPressed: () async {
+                final navigator = Navigator.of(context);
+                if (!await PublicUsageGuard.ensureCommissionHistoryAllowed(
+                  context,
+                )) {
+                  return;
+                }
+                if (!mounted) return;
+                navigator.push(
                   MaterialPageRoute(
                     builder: (_) => const CommissionCollectionsPage(),
                   ),
@@ -220,13 +223,21 @@ class _CommissionsPageState extends State<CommissionsPage> {
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
-                final saved = await Navigator.of(context).push<bool>(
+                final navigator = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                if (!await PublicUsageGuard.ensureCommissionHistoryAllowed(
+                  context,
+                )) {
+                  return;
+                }
+                if (!mounted) return;
+                final saved = await navigator.push<bool>(
                   MaterialPageRoute(
                     builder: (_) => const CommissionEntryPage(),
                   ),
                 );
-                if (saved == true && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                if (saved == true && mounted) {
+                  messenger.showSnackBar(
                     const SnackBar(
                       content: Text('Provvigione inserita correttamente.'),
                     ),

@@ -1,12 +1,9 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../core/date_month_utils.dart';
 import '../core/euro_format.dart';
-import '../core/firestore_user_scope.dart';
 import '../core/theme/app_card_theme.dart';
 import '../core/theme/app_form_fields.dart';
 import '../core/theme/project_colors.dart';
@@ -15,12 +12,14 @@ import '../nav/credit_calc_nav.dart';
 import '../section_lock/section_lock_scope.dart';
 import '../subscription/public_usage_guard.dart';
 import '../subscription/public_plan_limits.dart';
-import '../subscription/public_usage_limit_scope.dart';
 
 import 'backoffice_pending_plan.dart';
 import 'commission_export_dialog.dart';
-import 'developed_plan_session_cache.dart';
+import 'creditors_list_data_access.dart';
 import 'repayment_plan_commission_export.dart';
+import 'pdr_schedule_storage.dart';
+import 'repayment_plan_host_config.dart';
+import 'repayment_plan_session_storage.dart';
 
 const _maxPlanScheduleIterations = 2400;
 
@@ -33,6 +32,7 @@ class StandardRepaymentPlanPage extends StatefulWidget {
     this.skipInitialUsageGuard = false,
     this.autoOpenCommissionExport = false,
     this.initialCommissionDocIds = const [],
+    this.initialCompanyName,
   });
 
   final String? pendingPlanId;
@@ -40,6 +40,7 @@ class StandardRepaymentPlanPage extends StatefulWidget {
   final bool skipInitialUsageGuard;
   final bool autoOpenCommissionExport;
   final List<String> initialCommissionDocIds;
+  final String? initialCompanyName;
 
   @override
   State<StandardRepaymentPlanPage> createState() =>
@@ -1359,7 +1360,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   String? _creditorId;
   _CreditorOption? _creditor;
   List<_CreditorOption>? _cachedCreditorOptions;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _creditorsSub;
+  StreamSubscription<List<CreditorRecord>>? _creditorsSub;
   List<_PracticeDebt> _previewOrderedDebts = const [];
 
   final _importo1Ctrl = TextEditingController();
@@ -1418,21 +1419,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   bool _exportingCommissions = false;
   bool _savingBackofficePending = false;
   bool _pendingRestoreApplied = false;
-  bool _sessionRestoreApplied = false;
-  bool _discardSessionOnDispose = false;
   final List<String> _sessionCommissionDocIds = [];
-
-  static const _euroSnapshotKeys = {
-    'i1',
-    'i2',
-    'i3',
-    'acconto',
-    'rata',
-    'desiredRata',
-    'mod1a',
-    'mod2a',
-    'mod3a',
-  };
 
   final _mobileScrollController = ScrollController();
   final _simulationsKey = GlobalKey();
@@ -1457,22 +1444,28 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       _modPhase3AmountCtrl,
     ]);
     _creditorsSub =
-        FirestoreUserScope.creditorsOrdered().snapshots().listen(
-      _applyCreditorsSnapshot,
+        CreditorsListDataAccess.instance.watchCreditors().listen(
+      _applyCreditorsList,
     );
+    _sessionCommissionDocIds.addAll(RepaymentPlanSessionStorage.readIds());
     if (widget.initialCommissionDocIds.isNotEmpty) {
       _sessionCommissionDocIds.addAll(widget.initialCommissionDocIds);
     }
   }
 
+  void _syncSessionCommissionDocIds(Iterable<String> ids) {
+    final unique = ids.where((id) => id.isNotEmpty).toSet();
+    if (unique.isEmpty) return;
+    _sessionCommissionDocIds
+      ..clear()
+      ..addAll(unique);
+    RepaymentPlanSessionStorage.clear();
+    RepaymentPlanSessionStorage.appendIds(_sessionCommissionDocIds);
+  }
+
   @override
   void dispose() {
-    if (_calcolato && !_discardSessionOnDispose) {
-      DevelopedPlanSessionCache.save(
-        DevelopedPlanSessionCache.standardRepayment,
-        _collectDevelopedSessionState(),
-      );
-    }
+    RepaymentPlanSessionStorage.clear();
     _creditorsSub?.cancel();
     _accontoFocusNode.removeListener(_onAccontoFocusChange);
     _accontoFocusNode.dispose();
@@ -1496,7 +1489,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   void _resetCalcolo() {
     if (!_calcolato) return;
-    DevelopedPlanSessionCache.clear(DevelopedPlanSessionCache.standardRepayment);
     setState(() {
       _calcolato = false;
       _formSnapshotAtCalcolo = null;
@@ -1542,31 +1534,12 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     _formSnapshotAtCalcolo = _currentFormSnapshot();
   }
 
-  bool _snapshotValueChanged(String key, String current, String? saved) {
-    if (saved == null) return true;
-    if (_euroSnapshotKeys.contains(key)) {
-      final parsedCurrent = EuroFormat.parse(current);
-      final parsedSaved = EuroFormat.parse(saved);
-      if (parsedCurrent == null && parsedSaved == null) {
-        return current.trim() != saved.trim();
-      }
-      return parsedCurrent != parsedSaved;
-    }
-    return current != saved;
-  }
-
   bool _hasFormChangedSinceCalcolo() {
     if (!_calcolato || _formSnapshotAtCalcolo == null) return false;
     final current = _currentFormSnapshot();
     if (current.length != _formSnapshotAtCalcolo!.length) return true;
     for (final entry in current.entries) {
-      if (_snapshotValueChanged(
-        entry.key,
-        entry.value,
-        _formSnapshotAtCalcolo![entry.key],
-      )) {
-        return true;
-      }
+      if (_formSnapshotAtCalcolo![entry.key] != entry.value) return true;
     }
     return false;
   }
@@ -1576,11 +1549,9 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     _resetCalcolo();
   }
 
-  void _applyCreditorsSnapshot(
-    QuerySnapshot<Map<String, dynamic>> snap,
-  ) {
+  void _applyCreditorsList(List<CreditorRecord> records) {
     if (!mounted) return;
-    final options = _optionsFromSnapshot(snap);
+    final options = _optionsFromRecords(records);
 
     if (_creditorId != null) {
       _CreditorOption? match;
@@ -1607,7 +1578,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     if (_cachedCreditorOptions == null) {
       setState(() => _cachedCreditorOptions = options);
       _tryRestorePendingPlan(options);
-      unawaited(_tryRestoreDevelopedSession(options));
       return;
     }
 
@@ -1617,7 +1587,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       _cachedCreditorOptions = options;
     }
     _tryRestorePendingPlan(options);
-    unawaited(_tryRestoreDevelopedSession(options));
   }
 
   bool _creditorOptionsListEquals(
@@ -2184,7 +2153,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       options.isNotEmpty && _canDevelopPlan;
 
   void _resetForm() {
-    DevelopedPlanSessionCache.clear(DevelopedPlanSessionCache.standardRepayment);
     _isResettingForm = true;
     FocusManager.instance.primaryFocus?.unfocus();
     _accontoFocusNode.unfocus();
@@ -2238,6 +2206,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       _showBirthYearInfo = false;
       _previewOrderedDebts = const [];
       _sessionCommissionDocIds.clear();
+      RepaymentPlanSessionStorage.clear();
       });
       _isResettingForm = false;
       if (_mobileScrollController.hasClients) {
@@ -3232,16 +3201,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     }
   }
 
-  Map<String, dynamic> _collectDevelopedSessionState() {
-    return {
-      'developed': true,
-      ..._currentFormSnapshot(),
-      'modulatedVisiblePhaseCount': _modulatedVisiblePhaseCount,
-      'dataInizioIso': _dataInizio.toIso8601String(),
-      'sessionCommissionDocIds': List<String>.from(_sessionCommissionDocIds),
-    };
-  }
-
   Future<void> _tryRestorePendingPlan(List<_CreditorOption> options) async {
     if (_pendingRestoreApplied || widget.initialFormData == null) return;
     _pendingRestoreApplied = true;
@@ -3251,37 +3210,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     await _calcola(skipUsageGuard: widget.skipInitialUsageGuard);
     if (!mounted) return;
     await _maybeAutoOpenCommissionExport();
-  }
-
-  Future<void> _tryRestoreDevelopedSession(List<_CreditorOption> options) async {
-    if (_sessionRestoreApplied ||
-        _pendingRestoreApplied ||
-        widget.initialFormData != null ||
-        _calcolato) {
-      return;
-    }
-    final cached = DevelopedPlanSessionCache.read(
-      DevelopedPlanSessionCache.standardRepayment,
-    );
-    if (cached == null || cached['developed'] != true) return;
-
-    _sessionRestoreApplied = true;
-    _isResettingForm = true;
-    _applyBackofficeFormData(cached, options);
-    final ids = cached['sessionCommissionDocIds'];
-    if (ids is List) {
-      _sessionCommissionDocIds
-        ..clear()
-        ..addAll(ids.map((id) => id.toString()));
-    }
-    _isResettingForm = false;
-
-    if (!mounted || _creditor == null) return;
-    setState(() {
-      _showPdrFeedback = true;
-      if (_parseBirthYear() != null) _showBirthYearInfo = true;
-    });
-    await _calcola(skipUsageGuard: true);
   }
 
   Future<void> _maybeAutoOpenCommissionExport() async {
@@ -3419,7 +3347,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     _appendPdrSummary(rows);
     if (_installmentPlan?.cappedToMax == true) {
       rows.add(
-        BackofficeSummaryRow(
+        const BackofficeSummaryRow(
           label: '',
           value: '',
           note:
@@ -3507,17 +3435,12 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     final creditorId = _creditorId;
     if (!_calcolato || creditor == null || creditorId == null) return;
 
-    final existingCompanyName =
-        (widget.initialFormData?['companyName'] ?? '').toString().trim();
-    final companyName = await showDebtorCompanyNameDialog(
-      context: context,
-      title: 'Attendi esito',
-      description:
-          'Inserisci la ragione sociale del debitore per salvare il piano '
-          'in attesa di riscontro.',
-      initialValue: existingCompanyName.isEmpty ? null : existingCompanyName,
+    final companyName = await showBackofficeCompanyNameDialog(
+      context,
+      initialValue: widget.initialCompanyName,
     );
-    if (companyName == null || !mounted) return;
+    if (companyName == null || companyName.isEmpty) return;
+    if (!mounted) return;
 
     setState(() => _savingBackofficePending = true);
     BackofficePendingSaveResult result;
@@ -3527,12 +3450,10 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         type: BackofficePendingPlanType.repayment,
         creditorId: creditorId,
         creditorName: creditor.name,
-        formData: {
-          ..._captureBackofficeFormData(),
-          'companyName': companyName,
-        },
+        formData: _captureBackofficeFormData(),
         summaryRows: _captureBackofficeSummaryRows(),
         commissionDocIds: _sessionCommissionDocIds,
+        companyName: companyName,
       );
     } finally {
       if (mounted) {
@@ -3578,12 +3499,9 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     return bands;
   }
 
-  List<_CreditorOption> _optionsFromSnapshot(
-    QuerySnapshot<Map<String, dynamic>> snap,
-  ) {
-    final docs = FirestoreUserScope.sortCreditorsByCreatedAt(snap.docs);
-    return docs.map((doc) {
-      final data = doc.data();
+  List<_CreditorOption> _optionsFromRecords(List<CreditorRecord> records) {
+    return records.map((record) {
+      final data = record.data;
       final name = (data['name'] ?? 'Senza nome').toString().trim();
       final maxAgeRaw = data['maxAgePdr'] ?? data['maxAge'];
       final maxAgePdr = maxAgeRaw is int
@@ -3596,7 +3514,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       final methods =
           (data['paymentMethods'] as Map<String, dynamic>?) ?? {};
       return _CreditorOption(
-        id: doc.id,
+        id: record.id,
         name: name.isEmpty ? 'Senza nome' : name,
         maxAgePdr: maxAgePdr,
         minInstallmentAmount: minInstallment,
@@ -4497,11 +4415,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
             ],
             if (_calcolato) ...[
               const Divider(height: 24),
-              const Text(
-                'Piano sviluppato',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-              ),
-              const SizedBox(height: 8),
               if (_multiPracticePlan != null) ..._multiPracticeSummaryWidgets()
               else if (_modulatedPlan != null)
                 KeyedSubtree(
@@ -4727,112 +4640,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     return const [];
   }
 
-  String _shareBoldField(String label, String value) => '*$label:* $value';
-
-  String _shareBoldDetailLine(String line) {
-    final colonIndex = line.indexOf(':');
-    if (colonIndex <= 0) return line;
-    return _shareBoldField(
-      line.substring(0, colonIndex).trim(),
-      line.substring(colonIndex + 1).trim(),
-    );
-  }
-
-  String _sharePlanText() {
-    final creditor = _creditor;
-    final schedule = _commissionPaymentSchedule();
-    final totaleRateizzato =
-        schedule.fold<double>(0, (sum, payment) => sum + payment.amount);
-    final acconto = EuroFormat.parse(_accontoCtrl.text) ?? 0;
-    final lines = <String>[
-      '*Sviluppo piano di rientro:*',
-      if (creditor != null) _shareBoldField('Creditore', creditor.name),
-      _shareBoldField('Data inizio', _formatDate(_dataInizio)),
-      if (_dataFine != null)
-        _shareBoldField('Data fine', _formatDate(_dataFine!)),
-      if (totaleRateizzato > 0)
-        _shareBoldField(
-          'Totale rateizzato',
-          EuroFormat.format(totaleRateizzato),
-        ),
-      if (acconto > 0)
-        _shareBoldField('Acconto', EuroFormat.format(acconto)),
-      ..._shareDetailSection(schedule),
-    ];
-    return lines.join('\n');
-  }
-
-  List<String> _shareDetailSection(List<CommissionInstallmentPayment> schedule) {
-    final details = _shareDetailLines(schedule);
-    if (details.isEmpty) return const [];
-    return [
-      '',
-      '*Dettaglio:*',
-      for (final line in details) '• ${_shareBoldDetailLine(line)}',
-    ];
-  }
-
-  List<String> _shareDetailLines(List<CommissionInstallmentPayment> schedule) {
-    final details = <String>[];
-
-    if (_numeroRate > 0) {
-      details.add('Numero rate: $_numeroRate');
-    } else if (schedule.isNotEmpty) {
-      details.add('Numero rate: ${schedule.length}');
-    }
-
-    final mod = _modulatedPlan;
-    if (mod != null) {
-      details.addAll(mod.phaseSummaryLines(_metodo, _formatDate));
-    } else {
-      final multi = _multiPracticePlan;
-      if (multi != null) {
-        final rata = EuroFormat.parse(_rataMensileCondivisaCtrl.text);
-        if (rata != null && rata > 0) {
-          details.add('Rata mensile cliente: ${EuroFormat.format(rata)}');
-        }
-        details.add('Pagamenti in calendario: ${multi.calendar.length}');
-      } else {
-        final plan = _installmentPlan;
-        if (plan != null) {
-          details.addAll(plan.structureLines(_metodo));
-        } else if (schedule.isNotEmpty) {
-          final firstAmount = schedule.first.amount;
-          final allEqual = schedule.every(
-            (payment) => (payment.amount - firstAmount).abs() < 0.009,
-          );
-          details.add(
-            allEqual
-                ? 'Importo rata: ${EuroFormat.format(firstAmount)}'
-                : 'Importi rate: variabili',
-          );
-        }
-      }
-    }
-
-    if (_cadenza.isNotEmpty) {
-      details.add('Cadenza: $_cadenza');
-    }
-    if (_metodo.isNotEmpty) {
-      details.add('Modalità di pagamento: $_metodo');
-    }
-    if (schedule.isNotEmpty) {
-      details.add('Data prima rata: ${_formatDate(schedule.first.date)}');
-    }
-
-    return details;
-  }
-
-  Future<void> _condividiPiano() async {
-    if (!_calcolato) return;
-    await SharePlus.instance.share(
-      ShareParams(
-        text: _sharePlanText(),
-        subject: 'Piano di rientro',
-      ),
-    );
-  }
-
   List<RepaymentPlanCommissionSlice> _commissionExportSlices() {
     final multi = _multiPracticePlan;
     if (multi != null) {
@@ -4887,43 +4694,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   bool get _incassoGiaRegistrato => _sessionCommissionDocIds.isNotEmpty;
 
-  String? _savedDebtorCompanyName() {
-    final name = (widget.initialFormData?['companyName'] ?? '').toString().trim();
-    return name.isEmpty ? null : name;
-  }
-
-  String _pdrPaymentLabelForExport() {
-    return switch (_metodo) {
-      'Bollettino' => 'Pdr c/bollettini postali',
-      'Cambiali' => 'Pdr c/effetti cambiari',
-      _ => _metodo,
-    };
-  }
-
-  String _commissionExportDescription(
-    List<CommissionInstallmentPayment> schedule,
-  ) {
-    var rateizzato =
-        schedule.fold<double>(0, (sum, payment) => sum + payment.amount);
-    if (rateizzato <= 0) {
-      rateizzato = _commissionExportSlices()
-          .fold<double>(0, (sum, slice) => sum + slice.pdrAmount);
-    }
-    final acconto = EuroFormat.parse(_accontoCtrl.text) ?? 0;
-    final buffer = StringBuffer(
-      'Verranno registrati gli incassi per il piano di rientro '
-      '(${_pdrPaymentLabelForExport()})',
-    );
-    if (rateizzato > 0) {
-      buffer.write(', importo rateizzato ${EuroFormat.format(rateizzato)}');
-    }
-    if (acconto > 0.009) {
-      buffer.write(', acconto in contanti ${EuroFormat.format(acconto)}');
-    }
-    buffer.write('.');
-    return buffer.toString();
-  }
-
   Future<void> _aggiungiIncassoInProvvigioni() async {
     final creditor = _creditor;
     final creditorId = _creditorId;
@@ -4944,6 +4714,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     final dialogResult = await showCommissionExportDialog(
       context: context,
       hasPaymentsAfterCurrentMonth: _hasFuturePlanPayments(),
+      initialCompanyName: widget.initialCompanyName,
       scheduledPayments: [
         for (var i = 0; i < schedulePreview.length; i++)
           CommissionExportScheduleLine(
@@ -4952,11 +4723,10 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
             label: schedulePreview.length > 1 ? 'Rata ${i + 1}' : null,
           ),
       ],
-      description: _commissionExportDescription(schedulePreview),
-      initialCollectionDate: schedulePreview.isNotEmpty
-          ? schedulePreview.first.date
-          : _dataInizio,
-      initialCompanyName: _savedDebtorCompanyName(),
+      description:
+          'Verranno creati gli incassi con importo totale rateizzato '
+          '(${_metodo == 'Bollettino' ? 'Pdr c/bollettini postali' : 'Pdr c/effetti cambiari'}) '
+          'e, se presente, l\'acconto in contanti.',
     );
 
     if (dialogResult == null || !mounted) return;
@@ -5037,6 +4807,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       _exportingCommissions = false;
       if (result.savedDocIds.isNotEmpty) {
         _sessionCommissionDocIds.addAll(result.savedDocIds);
+        RepaymentPlanSessionStorage.appendIds(result.savedDocIds);
       }
     });
     if (widget.pendingPlanId != null && _sessionCommissionDocIds.isNotEmpty) {
@@ -5048,6 +4819,14 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     if (!mounted) return;
 
     if (result.savedCount > 0 && !result.hasErrors) {
+      await PdrScheduleStorage.saveAfterPlanExport(
+        companyName: companyName,
+        creditorId: creditorId,
+        creditorName: creditor.name,
+        planSource: 'standard_repayment',
+        installments: _commissionPaymentSchedule(),
+      );
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -5057,6 +4836,20 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
           ),
         ),
       );
+      final offer = RepaymentPlanHostConfig.offerFollowUpVisit;
+      if (offer != null) {
+        await offer(
+          context,
+          RepaymentPlanFollowUpRequest(
+            companyName: companyName,
+            creditorId: creditorId,
+            creditorName: creditor.name,
+            calculationId: result.savedDocIds.isNotEmpty
+                ? result.savedDocIds.first
+                : null,
+          ),
+        );
+      }
       return;
     }
 
@@ -5098,7 +4891,15 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     setState(() {
       _exportingCommissions = false;
       if (deleteResult.savedCount > 0) {
-        _sessionCommissionDocIds.clear();
+        _sessionCommissionDocIds.removeWhere(
+          deleteResult.savedDocIds.contains,
+        );
+        if (_sessionCommissionDocIds.isEmpty) {
+          RepaymentPlanSessionStorage.clear();
+        } else {
+          RepaymentPlanSessionStorage.clear();
+          RepaymentPlanSessionStorage.appendIds(_sessionCommissionDocIds);
+        }
       }
     });
 
@@ -5124,8 +4925,13 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   }
 
   Future<void> _annullaPiano() async {
+    _syncSessionCommissionDocIds([
+      ..._sessionCommissionDocIds,
+      ...RepaymentPlanSessionStorage.readIds(),
+    ]);
+
     if (_sessionCommissionDocIds.isEmpty) {
-      _exitPlanScreen(discardDevelopedSession: true);
+      _exitPlanScreen();
       return;
     }
 
@@ -5143,23 +4949,18 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         await _deleteSessionCommissions();
         return;
       case PlanCancelWithCommissionsAction.exitKeepCommissions:
-        _exitPlanScreen(discardDevelopedSession: true);
+        _exitPlanScreen();
         return;
       case PlanCancelWithCommissionsAction.exitDeleteCommissions:
         if (await _deleteSessionCommissions()) {
-          _exitPlanScreen(discardDevelopedSession: true);
+          _exitPlanScreen();
         }
         return;
     }
   }
 
-  void _exitPlanScreen({bool discardDevelopedSession = false}) {
-    if (discardDevelopedSession) {
-      DevelopedPlanSessionCache.clear(
-        DevelopedPlanSessionCache.standardRepayment,
-      );
-      _discardSessionOnDispose = true;
-    }
+  void _exitPlanScreen() {
+    RepaymentPlanSessionStorage.clear();
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
       navigator.pop();
@@ -5202,18 +5003,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
             label: Text(_calcolato ? 'Piano sviluppato' : 'Sviluppa piano'),
           ),
         ),
-        if (_calcolato) ...[
-          const SizedBox(width: 12),
-          OutlinedButton(
-            onPressed: _condividiPiano,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: ProjectColors.calc,
-              side: BorderSide(color: ProjectColors.calc.withValues(alpha: 0.55)),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
-            child: const Icon(Icons.share_outlined),
-          ),
-        ],
       ],
     );
       },
@@ -5273,15 +5062,18 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   @override
   Widget build(BuildContext context) {
-    return wrapCreditCalcPage(
-      secondary: true,
-      pageTitle: 'Sviluppo piano di rientro',
-      current: CreditCalcNavItem.develop,
-      body: SectionLockScope(
-        sectionKey: 'repayment_plan',
-        child: PublicUsageLimitScope(
-          metric: PublicUsageMetric.repaymentPlan,
-          title: 'Piano di rientro',
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          RepaymentPlanSessionStorage.clear();
+        }
+      },
+      child: wrapCreditCalcPage(
+        secondary: true,
+        pageTitle: 'Sviluppo piano di rientro',
+        current: CreditCalcNavItem.develop,
+        body: SectionLockScope(
+          sectionKey: 'repayment_plan',
           child: _cachedCreditorOptions == null
               ? const Center(child: CircularProgressIndicator())
               : _buildContent(_cachedCreditorOptions!),
@@ -5728,37 +5520,11 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
           '${EuroFormat.format(band.to.toDouble())} · $rateLabel.';
     }
 
-    final monthsNote = _monthsBelowPdrSheetInstallments &&
-            band != null &&
-            _availablePlanMonths() != null
-        ? ' I ${_availablePlanMonths()} mesi disponibili sono inferiori alle '
-            '${band.installments} dilazioni della scheda: il piano mensile '
-            'verrà calcolato al massimo su ${_availablePlanMonths()} dilazioni.'
-        : '';
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            message,
-            style: TextStyle(fontSize: 13, height: 1.4, color: tone),
-          ),
-          if (monthsNote.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                monthsNote.trim(),
-                style: TextStyle(
-                  fontSize: 12,
-                  height: 1.45,
-                  color: Colors.red.shade700,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-        ],
+      child: Text(
+        message,
+        style: TextStyle(fontSize: 13, height: 1.4, color: tone),
       ),
     );
   }

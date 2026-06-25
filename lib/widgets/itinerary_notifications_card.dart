@@ -100,3 +100,55 @@ class _ItineraryNotificationsCardState extends State<ItineraryNotificationsCard>
     );
   }
 }
+
+/// Messaggio informativo se le notifiche itinerario non sono ancora attivate.
+class ItineraryNotificationsConsentHint extends StatefulWidget {
+  const ItineraryNotificationsConsentHint({super.key});
+
+  @override
+  State<ItineraryNotificationsConsentHint> createState() =>
+      _ItineraryNotificationsConsentHintState();
+}
+
+class _ItineraryNotificationsConsentHintState
+    extends State<ItineraryNotificationsConsentHint> {
+  bool _loading = true;
+  bool _enabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+
+    final enabled = await ItineraryNotificationsService.loadEnabled(uid);
+    if (!mounted) return;
+    setState(() {
+      _enabled = enabled;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _enabled) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Text(
+          'Attiva le notifiche itinerario da Area personale → Notifiche '
+          'per ricevere promemoria programmati e avvisi 30 min prima delle visite.',
+          style: TextStyle(color: Colors.black.withValues(alpha: 0.54)),
+        ),
+      ),
+    );
+  }
+}

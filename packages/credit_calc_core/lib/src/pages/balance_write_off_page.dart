@@ -1,12 +1,9 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../core/date_month_utils.dart';
 import '../core/euro_format.dart';
-import '../core/firestore_user_scope.dart';
 import '../core/theme/app_card_theme.dart';
 import '../core/theme/app_form_fields.dart';
 import '../core/theme/project_colors.dart';
@@ -15,13 +12,15 @@ import '../nav/credit_calc_nav.dart';
 import '../section_lock/section_lock_scope.dart';
 import '../subscription/public_usage_guard.dart';
 import '../subscription/public_plan_limits.dart';
-import '../subscription/public_usage_limit_scope.dart';
 
 import 'backoffice_pending_plan.dart';
+import 'commission_creditor_data_access.dart';
 import 'commission_export_dialog.dart';
 import 'commission_payment_resolver.dart';
-import 'developed_plan_session_cache.dart';
+import 'creditors_list_data_access.dart';
 import 'repayment_plan_commission_export.dart';
+import 'pdr_schedule_storage.dart';
+import 'repayment_plan_session_storage.dart';
 
 class _CreditorOption {
   final String id;
@@ -47,6 +46,7 @@ class BalanceWriteOffPage extends StatefulWidget {
     this.skipInitialUsageGuard = false,
     this.autoOpenCommissionExport = false,
     this.initialCommissionDocIds = const [],
+    this.initialCompanyName,
   });
 
   final String? pendingPlanId;
@@ -54,6 +54,7 @@ class BalanceWriteOffPage extends StatefulWidget {
   final bool skipInitialUsageGuard;
   final bool autoOpenCommissionExport;
   final List<String> initialCommissionDocIds;
+  final String? initialCompanyName;
 
   @override
   State<BalanceWriteOffPage> createState() => _BalanceWriteOffPageState();
@@ -64,7 +65,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
 
   String? _creditorId;
   List<_CreditorOption>? _creditorOptions;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _creditorsSub;
+  StreamSubscription<List<CreditorRecord>>? _creditorsSub;
 
   final _debitoCtrl = TextEditingController();
   final _percentCtrl = TextEditingController();
@@ -82,8 +83,6 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   bool _exporting = false;
   bool _savingBackofficePending = false;
   bool _pendingRestoreApplied = false;
-  bool _sessionRestoreApplied = false;
-  bool _discardSessionOnDispose = false;
   final List<String> _sessionCommissionDocIds = [];
   List<_InstallmentLine> _installments = const [];
   String? _calcError;
@@ -93,14 +92,14 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   void initState() {
     super.initState();
     _creditorsSub =
-        FirestoreUserScope.creditorsOrdered().snapshots().listen((snap) {
+        CreditorsListDataAccess.instance.watchCreditors().listen((records) {
       if (!mounted) return;
-      final docs = FirestoreUserScope.sortCreditorsByCreatedAt(snap.docs);
-      final options = docs
-          .map((doc) {
-            final name = (doc.data()['name'] ?? 'Senza nome').toString().trim();
+      final options = records
+          .map((record) {
+            final name =
+                (record.data['name'] ?? 'Senza nome').toString().trim();
             return _CreditorOption(
-              id: doc.id,
+              id: record.id,
               name: name.isEmpty ? 'Senza nome' : name,
             );
           })
@@ -115,21 +114,26 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
         }
       });
       _tryRestorePendingPlan(options);
-      unawaited(_tryRestoreDevelopedSession(options));
     });
+    _sessionCommissionDocIds.addAll(RepaymentPlanSessionStorage.readIds());
     if (widget.initialCommissionDocIds.isNotEmpty) {
       _sessionCommissionDocIds.addAll(widget.initialCommissionDocIds);
     }
   }
 
+  void _syncSessionCommissionDocIds(Iterable<String> ids) {
+    final unique = ids.where((id) => id.isNotEmpty).toSet();
+    if (unique.isEmpty) return;
+    _sessionCommissionDocIds
+      ..clear()
+      ..addAll(unique);
+    RepaymentPlanSessionStorage.clear();
+    RepaymentPlanSessionStorage.appendIds(_sessionCommissionDocIds);
+  }
+
   @override
   void dispose() {
-    if (_calcolato && !_discardSessionOnDispose) {
-      DevelopedPlanSessionCache.save(
-        DevelopedPlanSessionCache.balanceWriteOff,
-        _collectDevelopedSessionState(),
-      );
-    }
+    RepaymentPlanSessionStorage.clear();
     _creditorsSub?.cancel();
     _debitoCtrl.dispose();
     _percentCtrl.dispose();
@@ -140,7 +144,6 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
 
   void _resetCalcolo() {
     if (!_calcolato) return;
-    DevelopedPlanSessionCache.clear(DevelopedPlanSessionCache.balanceWriteOff);
     setState(() {
       _calcolato = false;
       _installments = const [];
@@ -267,13 +270,11 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   }
 
   Future<void> _loadPaymentOptions(String creditorId) async {
-    final doc = await FirebaseFirestore.instance
-        .collection('creditors')
-        .doc(creditorId)
-        .get();
+    final data = await CommissionCreditorDataAccess.instance.loadCreditor(
+      creditorId,
+    );
     if (!mounted) return;
-    final options =
-        CommissionPaymentResolver.entryOptions(doc.data() ?? {});
+    final options = CommissionPaymentResolver.entryOptions(data ?? {});
     setState(() {
       _paymentOptions = options;
       if (_paymentMethodKey != null &&
@@ -301,7 +302,6 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   }
 
   void _resetForm() {
-    DevelopedPlanSessionCache.clear(DevelopedPlanSessionCache.balanceWriteOff);
     _isResetting = true;
     setState(() {
       _creditorId = null;
@@ -312,6 +312,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
       _calcolato = false;
       _installments = const [];
       _sessionCommissionDocIds.clear();
+      RepaymentPlanSessionStorage.clear();
       _calcError = null;
       _showValidationErrors = false;
       _debitoCtrl.clear();
@@ -407,11 +408,6 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
 
   bool get _incassoGiaRegistrato => _sessionCommissionDocIds.isNotEmpty;
 
-  String? _savedDebtorCompanyName() {
-    final name = (widget.initialFormData?['companyName'] ?? '').toString().trim();
-    return name.isEmpty ? null : name;
-  }
-
   Future<void> _aggiungiIncasso() async {
     if (!_calcolato || _creditorId == null || _paymentMethodKey == null) {
       return;
@@ -442,6 +438,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     final dialogResult = await showCommissionExportDialog(
       context: context,
       hasPaymentsAfterCurrentMonth: hasFuture,
+      initialCompanyName: widget.initialCompanyName,
       scheduledPayments: [
         for (var i = 0; i < _installments.length; i++)
           CommissionExportScheduleLine(
@@ -454,8 +451,6 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
           'Verranno registrati gli incassi per il saldo e stralcio '
           '($paymentLabel), importo residuo '
           '${EuroFormat.format(_installments.fold<double>(0, (s, i) => s + i.amount))}.',
-      initialCollectionDate: _firstPaymentDate,
-      initialCompanyName: _savedDebtorCompanyName(),
     );
 
     if (dialogResult == null || !mounted) return;
@@ -482,6 +477,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
       _exporting = false;
       if (result.savedDocIds.isNotEmpty) {
         _sessionCommissionDocIds.addAll(result.savedDocIds);
+        RepaymentPlanSessionStorage.appendIds(result.savedDocIds);
       }
     });
     if (widget.pendingPlanId != null && _sessionCommissionDocIds.isNotEmpty) {
@@ -493,6 +489,20 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     if (!mounted) return;
 
     if (result.savedCount > 0 && !result.hasErrors) {
+      await PdrScheduleStorage.saveAfterPlanExport(
+        companyName: dialogResult.companyName,
+        creditorId: _creditorId!,
+        creditorName: creditorName,
+        planSource: 'balance_write_off',
+        installments: [
+          for (final line in _installments)
+            CommissionInstallmentPayment(
+              date: line.date,
+              amount: line.amount,
+            ),
+        ],
+      );
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -530,7 +540,15 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     setState(() {
       _exporting = false;
       if (deleteResult.savedCount > 0) {
-        _sessionCommissionDocIds.clear();
+        _sessionCommissionDocIds.removeWhere(
+          deleteResult.savedDocIds.contains,
+        );
+        if (_sessionCommissionDocIds.isEmpty) {
+          RepaymentPlanSessionStorage.clear();
+        } else {
+          RepaymentPlanSessionStorage.clear();
+          RepaymentPlanSessionStorage.appendIds(_sessionCommissionDocIds);
+        }
       }
     });
 
@@ -556,8 +574,13 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   }
 
   Future<void> _annullaPiano() async {
+    _syncSessionCommissionDocIds([
+      ..._sessionCommissionDocIds,
+      ...RepaymentPlanSessionStorage.readIds(),
+    ]);
+
     if (_sessionCommissionDocIds.isEmpty) {
-      _exitPlanScreen(discardDevelopedSession: true);
+      _exitPlanScreen();
       return;
     }
 
@@ -575,21 +598,18 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
         await _deleteSessionCommissions();
         return;
       case PlanCancelWithCommissionsAction.exitKeepCommissions:
-        _exitPlanScreen(discardDevelopedSession: true);
+        _exitPlanScreen();
         return;
       case PlanCancelWithCommissionsAction.exitDeleteCommissions:
         if (await _deleteSessionCommissions()) {
-          _exitPlanScreen(discardDevelopedSession: true);
+          _exitPlanScreen();
         }
         return;
     }
   }
 
-  void _exitPlanScreen({bool discardDevelopedSession = false}) {
-    if (discardDevelopedSession) {
-      DevelopedPlanSessionCache.clear(DevelopedPlanSessionCache.balanceWriteOff);
-      _discardSessionOnDispose = true;
-    }
+  void _exitPlanScreen() {
+    RepaymentPlanSessionStorage.clear();
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
       return;
@@ -598,96 +618,6 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   }
 
   String _formatDate(DateTime date) => formatCommissionExportDate(date);
-
-  String _shareBoldField(String label, String value) => '*$label:* $value';
-
-  String _shareBoldDetailLine(String line) {
-    final colonIndex = line.indexOf(':');
-    if (colonIndex <= 0) return line;
-    return _shareBoldField(
-      line.substring(0, colonIndex).trim(),
-      line.substring(colonIndex + 1).trim(),
-    );
-  }
-
-  String _sharePlanText() {
-    final lines = <String>[
-      '*Sviluppo saldo e stralcio:*',
-      if (_creditorName != null)
-        _shareBoldField('Creditore', _creditorName!),
-      _shareBoldField('Debito totale', _labelEuro(_debito)),
-      _shareBoldField('Percentuale stralcio', _labelPercent()),
-      _shareBoldField(
-        'Importo da stralciare',
-        _labelEuro(EuroFormat.parse(_stralciatoCtrl.text)),
-      ),
-      _shareBoldField(
-        'Residuo da pagare',
-        _labelEuro(EuroFormat.parse(_residuoCtrl.text)),
-      ),
-      ..._shareDetailSection(),
-    ];
-    return lines.join('\n');
-  }
-
-  List<String> _shareDetailSection() {
-    final details = _shareDetailLines();
-    if (details.isEmpty) return const [];
-    return [
-      '',
-      '*Dettaglio:*',
-      for (final line in details) '• ${_shareBoldDetailLine(line)}',
-    ];
-  }
-
-  List<String> _shareDetailLines() {
-    if (_installments.isEmpty) return const [];
-
-    final details = <String>[
-      'Numero rate: ${_installments.length}',
-    ];
-
-    final firstAmount = _installments.first.amount;
-    final allEqual = _installments.every(
-      (line) => (line.amount - firstAmount).abs() < 0.009,
-    );
-    if (allEqual) {
-      details.add('Importo rata: ${EuroFormat.format(firstAmount)}');
-    } else {
-      final total = _installments.fold<double>(
-        0,
-        (runningTotal, line) => runningTotal + line.amount,
-      );
-      details.add('Totale rate: ${EuroFormat.format(total)}');
-      details.add('Importi rate: variabili');
-    }
-
-    details.add('Data prima rata: ${_formatDate(_installments.first.date)}');
-
-    final dataFine = _dataFineFromInstallments;
-    if (dataFine != null) {
-      details.add('Data fine piano: ${_formatDate(dataFine)}');
-    }
-
-    if (_paymentMethodKey != null) {
-      details.add(
-        'Modalità di pagamento: '
-        '${CommissionPaymentResolver.labelForKey(_paymentMethodKey!)}',
-      );
-    }
-
-    return details;
-  }
-
-  Future<void> _condividiSaldo() async {
-    if (!_calcolato || _installments.isEmpty) return;
-    await SharePlus.instance.share(
-      ShareParams(
-        text: _sharePlanText(),
-        subject: 'Saldo e stralcio',
-      ),
-    );
-  }
 
   Map<String, dynamic> _captureBackofficeFormData() {
     return {
@@ -738,7 +668,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     if (_calcolato && _installments.isNotEmpty) {
       final total = _installments.fold<double>(
         0,
-        (runningTotal, line) => runningTotal + line.amount,
+        (totalSoFar, line) => totalSoFar + line.amount,
       );
       final firstAmount = _installments.first.amount;
       final allEqual = _installments.every(
@@ -794,106 +724,6 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     }
   }
 
-  Map<String, dynamic> _collectDevelopedSessionState() {
-    return {
-      'developed': true,
-      'creditorId': _creditorId ?? '',
-      'debito': _debitoCtrl.text,
-      'percent': _percentCtrl.text,
-      'stralciato': _stralciatoCtrl.text,
-      'residuo': _residuoCtrl.text,
-      'installmentCount': _installmentCount,
-      'firstPaymentDateIso': _firstPaymentDate.toIso8601String(),
-      'paymentMethodKey': _paymentMethodKey ?? '',
-      'installments': [
-        for (final line in _installments)
-          {
-            'dateIso': line.date.toIso8601String(),
-            'amount': line.amount,
-          },
-      ],
-      'sessionCommissionDocIds': List<String>.from(_sessionCommissionDocIds),
-    };
-  }
-
-  Future<void> _applyDevelopedSessionState(Map<String, dynamic> state) async {
-    final creditorId = (state['creditorId'] ?? '').toString();
-    _creditorId = creditorId.isEmpty ? null : creditorId;
-    _debitoCtrl.text = (state['debito'] ?? '').toString();
-    _percentCtrl.text = (state['percent'] ?? '').toString();
-    _stralciatoCtrl.text = (state['stralciato'] ?? '').toString();
-    _residuoCtrl.text = (state['residuo'] ?? '').toString();
-    _installmentCount = int.tryParse('${state['installmentCount']}') ?? 1;
-    final firstIso = state['firstPaymentDateIso']?.toString();
-    if (firstIso != null && firstIso.isNotEmpty) {
-      _firstPaymentDate =
-          DateTime.tryParse(firstIso) ?? _firstPaymentDate;
-    }
-    final paymentKey = (state['paymentMethodKey'] ?? '').toString();
-    _paymentMethodKey = paymentKey.isEmpty ? null : paymentKey;
-    if (_creditorId != null) {
-      await _loadPaymentOptions(_creditorId!);
-    }
-
-    final rawInstallments = state['installments'];
-    final restored = <_InstallmentLine>[];
-    if (rawInstallments is List) {
-      for (final item in rawInstallments) {
-        if (item is! Map) continue;
-        final date = DateTime.tryParse('${item['dateIso']}');
-        final amount = (item['amount'] as num?)?.toDouble();
-        if (date == null || amount == null) continue;
-        restored.add(_InstallmentLine(date: date, amount: amount));
-      }
-    }
-
-    final ids = state['sessionCommissionDocIds'];
-    if (ids is List) {
-      _sessionCommissionDocIds
-        ..clear()
-        ..addAll(ids.map((id) => id.toString()));
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _installments = restored;
-      _calcolato = state['developed'] == true && restored.isNotEmpty;
-      _calcError = null;
-      _showValidationErrors = false;
-    });
-  }
-
-  Future<void> _tryRestoreDevelopedSession(List<_CreditorOption> options) async {
-    if (_sessionRestoreApplied ||
-        _pendingRestoreApplied ||
-        widget.initialFormData != null ||
-        _calcolato) {
-      return;
-    }
-    final cached = DevelopedPlanSessionCache.read(
-      DevelopedPlanSessionCache.balanceWriteOff,
-    );
-    if (cached == null || cached['developed'] != true) return;
-
-    _sessionRestoreApplied = true;
-    _isResetting = true;
-    await _applyDevelopedSessionState(cached);
-    _isResetting = false;
-
-    if (!mounted) return;
-    if (_creditorId != null &&
-        !options.any((option) => option.id == _creditorId)) {
-      setState(() {
-        _creditorId = null;
-        _paymentMethodKey = null;
-        _paymentOptions = [];
-        _calcolato = false;
-        _installments = const [];
-      });
-      DevelopedPlanSessionCache.clear(DevelopedPlanSessionCache.balanceWriteOff);
-    }
-  }
-
   Future<void> _tryRestorePendingPlan(List<_CreditorOption> options) async {
     if (_pendingRestoreApplied || widget.initialFormData == null) return;
     _pendingRestoreApplied = true;
@@ -917,17 +747,12 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     final creditorName = _creditorName;
     if (!_calcolato || creditorId == null || creditorName == null) return;
 
-    final existingCompanyName =
-        (widget.initialFormData?['companyName'] ?? '').toString().trim();
-    final companyName = await showDebtorCompanyNameDialog(
-      context: context,
-      title: 'Attendi esito',
-      description:
-          'Inserisci la ragione sociale del debitore per salvare il piano '
-          'in attesa di riscontro.',
-      initialValue: existingCompanyName.isEmpty ? null : existingCompanyName,
+    final companyName = await showBackofficeCompanyNameDialog(
+      context,
+      initialValue: widget.initialCompanyName,
     );
-    if (companyName == null || !mounted) return;
+    if (companyName == null || companyName.isEmpty) return;
+    if (!mounted) return;
 
     setState(() => _savingBackofficePending = true);
     BackofficePendingSaveResult result;
@@ -937,12 +762,10 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
         type: BackofficePendingPlanType.balanceWriteOff,
         creditorId: creditorId,
         creditorName: creditorName,
-        formData: {
-          ..._captureBackofficeFormData(),
-          'companyName': companyName,
-        },
+        formData: _captureBackofficeFormData(),
         summaryRows: _captureBackofficeSummaryRows(),
         commissionDocIds: _sessionCommissionDocIds,
+        companyName: companyName,
       );
     } finally {
       if (mounted) {
@@ -1487,18 +1310,6 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
             ),
           ),
         ),
-        if (_calcolato) ...[
-          const SizedBox(width: 12),
-          OutlinedButton(
-            onPressed: _condividiSaldo,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: ProjectColors.calc,
-              side: BorderSide(color: ProjectColors.calc.withValues(alpha: 0.55)),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
-            child: const Icon(Icons.share_outlined),
-          ),
-        ],
       ],
     );
   }
@@ -1553,15 +1364,18 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   Widget build(BuildContext context) {
     final options = _creditorOptions;
 
-    return wrapCreditCalcPage(
-      secondary: true,
-      pageTitle: 'Saldo e stralcio',
-      current: CreditCalcNavItem.develop,
-      body: SectionLockScope(
-        sectionKey: 'balance_write_off',
-        child: PublicUsageLimitScope(
-          metric: PublicUsageMetric.balanceWriteOff,
-          title: 'Saldo e stralcio',
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          RepaymentPlanSessionStorage.clear();
+        }
+      },
+      child: wrapCreditCalcPage(
+        secondary: true,
+        pageTitle: 'Saldo e stralcio',
+        current: CreditCalcNavItem.develop,
+        body: SectionLockScope(
+          sectionKey: 'balance_write_off',
           child: options == null
               ? const Center(child: CircularProgressIndicator())
               : _buildContent(options),

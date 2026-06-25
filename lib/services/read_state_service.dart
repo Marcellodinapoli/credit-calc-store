@@ -262,4 +262,31 @@ class ReadStateService {
   }
 
   static void clearCache() => _cache = null;
+
+  // ---------------------------------------------------------------------------
+  // GESTIONE — badge menu impegni di oggi (allineato a Planet)
+  // ---------------------------------------------------------------------------
+
+  static Future<Map<String, String>> getGestioneMenuViewedDays() async {
+    final state = await _load();
+    final raw = state['gestioneMenuViewedDays'];
+    if (raw is! Map) return {};
+
+    return raw.map(
+      (key, value) => MapEntry(key.toString(), value.toString()),
+    );
+  }
+
+  static Future<void> setGestioneMenuViewedDay(
+    String menuKey,
+    String dayKey,
+  ) async {
+    final state = await _load();
+    final days = Map<String, dynamic>.from(
+      (state['gestioneMenuViewedDays'] as Map<String, dynamic>?) ?? {},
+    );
+    days[menuKey] = dayKey;
+    state['gestioneMenuViewedDays'] = days;
+    await _persist(state);
+  }
 }

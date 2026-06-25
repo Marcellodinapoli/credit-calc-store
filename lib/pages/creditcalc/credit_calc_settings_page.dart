@@ -362,6 +362,12 @@ class _CreditCalcSettingsPageState extends State<CreditCalcSettingsPage> {
 
                 ),
 
+                if (widget.syncEngine.developSyncEnabled)
+                  const _InfoTile(
+                    label: 'Modalità sync',
+                    value: 'Multi-dispositivo (web + app)',
+                  ),
+
                 _InfoTile(
 
                   label: 'Ultima sincronizzazione',

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
 
 import '../credit_calc_runtime.dart';
+import '../develop_sync/develop_sync_coordinator.dart';
 import '../models/credit_calc_mode.dart';
 import '../models/sync_record_status.dart';
 import '../services/connectivity_service.dart';
@@ -71,6 +72,7 @@ class CreditCalcRepository {
   Future<void> _assertCanWrite() async {}
 
   Future<void> _maybeSync() async {
+    if (DevelopSyncCoordinator.isActive) return;
     if (!await ConnectivityService.isOnline()) return;
     unawaited(_syncEngine?.syncPendingChanges());
   }
@@ -190,6 +192,7 @@ class CreditCalcRepository {
       origin: 'local',
     );
     notifyCreditorsChanged();
+    DevelopSyncCoordinator.notifyLocalMutation('creditors', id, deleted: false);
     await _maybeSync();
   }
 
@@ -220,6 +223,7 @@ class CreditCalcRepository {
       origin: 'local',
     );
     notifyCreditorsChanged();
+    DevelopSyncCoordinator.notifyLocalMutation('creditors', id, deleted: true);
     await _maybeSync();
   }
 
@@ -330,6 +334,7 @@ class CreditCalcRepository {
       origin: 'local',
     );
     notifyCalculationsChanged();
+    DevelopSyncCoordinator.notifyLocalMutation('calculations', id, deleted: false);
     await _maybeSync();
   }
 
@@ -360,6 +365,7 @@ class CreditCalcRepository {
       origin: 'local',
     );
     notifyCalculationsChanged();
+    DevelopSyncCoordinator.notifyLocalMutation('calculations', id, deleted: true);
     await _maybeSync();
   }
 
@@ -404,6 +410,7 @@ class CreditCalcRepository {
         origin: 'local',
       );
       await Future<void>.delayed(const Duration(microseconds: 2));
+      DevelopSyncCoordinator.notifyLocalMutation('calculations', id, deleted: false);
     }
     notifyCalculationsChanged();
     await _maybeSync();
@@ -436,6 +443,7 @@ class CreditCalcRepository {
   }
 
   Future<int> pendingCount() async {
+    if (DevelopSyncCoordinator.isActive) return 0;
     final pending =
         await LocalDatabaseService.instance.pendingRecords(_userId);
     return pending

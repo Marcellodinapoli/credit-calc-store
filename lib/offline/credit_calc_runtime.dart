@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'credit_calc_repository_setup.dart';
+import 'develop_sync/develop_sync_coordinator.dart';
 import 'repository/credit_calc_repository.dart';
 import 'services/connectivity_service.dart';
 import 'services/mode_preferences_service.dart';
@@ -53,6 +54,7 @@ abstract final class CreditCalcRuntime {
   static void clear() {
     realtimeSync?.dispose();
     realtimeSync = null;
+    unawaited(DevelopSyncCoordinator.stop());
     modePrefs = null;
     sessionService = null;
     syncEngine = null;

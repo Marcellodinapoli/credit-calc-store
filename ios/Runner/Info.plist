@@ -59,5 +59,9 @@
 	<string>CreditCalc usa la fotocamera per importare i nominativi da visitare da una foto.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>CreditCalc accede alle foto per importare i nominativi da visitare.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+	</array>
 </dict>
 </plist>

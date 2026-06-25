@@ -4,21 +4,6 @@ import '../core/euro_format.dart';
 import '../core/theme/app_action_styles.dart';
 import '../core/theme/app_form_fields.dart';
 
-const _dialogPrimaryBlue = Color(0xFF0A66C2);
-
-ShapeBorder get _commissionExportDialogShape => RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(28),
-    );
-
-ButtonStyle get _commissionExportConfirmStyle => FilledButton.styleFrom(
-      backgroundColor: _dialogPrimaryBlue,
-      foregroundColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-    );
-
 /// Come registrare gli incassi quando ci sono rate in mesi successivi a quello corrente.
 enum CommissionExportDateMode {
   /// Un unico incasso nella data scelta nel calendario.
@@ -75,7 +60,6 @@ Future<CommissionExportDialogResult?> showCommissionExportDialog({
 }) {
   return showDialog<CommissionExportDialogResult>(
     context: context,
-    useRootNavigator: true,
     builder: (dialogContext) => _CommissionExportDialog(
       description: description,
       hasPaymentsAfterCurrentMonth: hasPaymentsAfterCurrentMonth,
@@ -117,9 +101,8 @@ class _CommissionExportDialogState extends State<_CommissionExportDialog> {
   @override
   void initState() {
     super.initState();
-    final initialName = widget.initialCompanyName?.trim();
     _companyCtrl = TextEditingController(
-      text: initialName == null || initialName.isEmpty ? '' : initialName,
+      text: (widget.initialCompanyName ?? '').trim(),
     );
     final initial = widget.initialCollectionDate ?? DateTime.now();
     _collectionDate = DateTime(initial.year, initial.month, initial.day);
@@ -153,16 +136,7 @@ class _CommissionExportDialogState extends State<_CommissionExportDialog> {
         _showScheduleChoice && _dateMode == CommissionExportDateMode.respectSchedule;
 
     return AlertDialog(
-      shape: _commissionExportDialogShape,
-      actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-      title: const Text(
-        'Registra incassi in provvigioni',
-        style: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF212121),
-        ),
-      ),
+      title: const Text('Registra incassi in provvigioni'),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -292,7 +266,8 @@ class _CommissionExportDialogState extends State<_CommissionExportDialog> {
                 ).copyWith(
                   hintText: 'Nome committente / debitore',
                 ),
-                autofocus: !useScheduleList,
+                autofocus:
+                    !useScheduleList && _companyCtrl.text.trim().isEmpty,
                 onSubmitted: (_) => _confirm(),
               ),
             ],
@@ -307,7 +282,6 @@ class _CommissionExportDialogState extends State<_CommissionExportDialog> {
         ),
         FilledButton(
           onPressed: _confirm,
-          style: _commissionExportConfirmStyle,
           child: const Text('Conferma'),
         ),
       ],
@@ -422,108 +396,4 @@ Widget _scheduledPaymentsList(List<CommissionExportScheduleLine> lines) {
       ),
     ],
   );
-}
-
-/// Popup minimo: solo ragione sociale del debitore (es. «Attendi esito»).
-Future<String?> showDebtorCompanyNameDialog({
-  required BuildContext context,
-  String title = 'Ragione sociale debitore',
-  String? description,
-  String? initialValue,
-}) {
-  return showDialog<String>(
-    context: context,
-    builder: (dialogContext) => _DebtorCompanyNameDialog(
-      title: title,
-      description: description,
-      initialValue: initialValue,
-    ),
-  );
-}
-
-class _DebtorCompanyNameDialog extends StatefulWidget {
-  const _DebtorCompanyNameDialog({
-    required this.title,
-    this.description,
-    this.initialValue,
-  });
-
-  final String title;
-  final String? description;
-  final String? initialValue;
-
-  @override
-  State<_DebtorCompanyNameDialog> createState() =>
-      _DebtorCompanyNameDialogState();
-}
-
-class _DebtorCompanyNameDialogState extends State<_DebtorCompanyNameDialog> {
-  late final TextEditingController _companyCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _companyCtrl = TextEditingController(text: widget.initialValue ?? '');
-  }
-
-  @override
-  void dispose() {
-    _companyCtrl.dispose();
-    super.dispose();
-  }
-
-  void _confirm() {
-    final name = _companyCtrl.text.trim();
-    if (name.isEmpty) return;
-    Navigator.pop(context, name);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (widget.description != null) ...[
-              Text(
-                widget.description!,
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.45,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-            TextField(
-              controller: _companyCtrl,
-              textCapitalization: TextCapitalization.words,
-              decoration: appFormFieldDecoration(
-                'Ragione sociale debitore',
-              ).copyWith(
-                hintText: 'Nome committente / debitore',
-              ),
-              autofocus: true,
-              onSubmitted: (_) => _confirm(),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          style: AppActionStyles.cancelText,
-          child: const Text('Annulla'),
-        ),
-        FilledButton(
-          onPressed: _confirm,
-          child: const Text('Conferma'),
-        ),
-      ],
-    );
-  }
 }

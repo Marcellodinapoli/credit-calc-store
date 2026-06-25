@@ -1,6 +1,8 @@
-import 'repayment_plan_session_storage_native.dart' as impl;
+import 'repayment_plan_session_storage_stub.dart'
+    if (dart.library.html) 'repayment_plan_session_storage_web.dart'
+    if (dart.library.io) 'repayment_plan_session_storage_io.dart' as impl;
 
-/// Mantiene gli ID incassi registrati in sessione (persistenza locale).
+/// ID incassi registrati in sessione piano (sessionStorage web / prefs native).
 abstract final class RepaymentPlanSessionStorage {
   RepaymentPlanSessionStorage._();
 

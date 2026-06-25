@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/credit_calc_mode.dart';
+import '../develop_sync/develop_sync_coordinator.dart';
 import 'connectivity_service.dart';
 import 'mode_preferences_service.dart';
 import 'sync_engine.dart';
@@ -30,6 +31,10 @@ class RealtimeSyncService {
   bool get isRunning => _running;
 
   Future<void> refresh() async {
+    if (DevelopSyncCoordinator.isActive) {
+      stop();
+      return;
+    }
     final mode = await modePrefs.localMode();
     if (mode != CreditCalcMode.offlineSync) {
       stop();

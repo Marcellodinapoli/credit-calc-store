@@ -1,9 +1,5 @@
+/// Configurazione host per i blocchi sezione (Planet web vs CreditCalc app).
 abstract final class SectionLockConfig {
-  static String? titleFor(String sectionKey) => switch (sectionKey) {
-        'repayment_plan' => 'Piano di rientro',
-        'balance_write_off' => 'Estinzione saldo',
-        _ => null,
-      };
-
-  static bool isSupported(String sectionKey) => titleFor(sectionKey) != null;
+  /// Es. `planet_web`, `calc_store`, `calc_desktop`.
+  static String platformChannel = 'unknown';
 }

@@ -89,6 +89,21 @@ class LocalDatabaseService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> listAllRecordsForUser(String userId) async {
+    final db = await database;
+    final rows = await db.query(
+      'local_records',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at ASC',
+    );
+    final out = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      out.add(await _rowToRecord(row));
+    }
+    return out;
+  }
+
   Future<List<Map<String, dynamic>>> recordsForUser({
     required String userId,
     required String collection,

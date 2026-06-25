@@ -128,7 +128,7 @@ abstract final class FieldVisitNotificationService {
         await ItineraryNotificationsService.loadEnabled(uid);
     if (!productEnabled || !itineraryEnabled) return;
 
-    final visits = await FieldVisitService.fetchAllForUser(uid);
+    final visits = await FieldVisitService.fetchAllForUserId(uid);
     for (final visit in visits) {
       if (visit.status != FieldVisitStatus.planned) {
         await cancelForVisit(visit.id);

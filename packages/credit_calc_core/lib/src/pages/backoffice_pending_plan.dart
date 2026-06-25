@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+import '../core/theme/app_form_fields.dart';
+import 'backoffice_pending_plan_storage.dart';
 
 enum BackofficePendingPlanType {
   repayment('repayment', 'Piano di rientro'),
@@ -88,6 +91,7 @@ class BackofficePendingPlan {
   final DateTime? acceptedAt;
   final BackofficeAcceptedVia? acceptedVia;
   final DateTime? modifiedAt;
+  final String? companyName;
 
   const BackofficePendingPlan({
     required this.id,
@@ -102,6 +106,7 @@ class BackofficePendingPlan {
     this.acceptedAt,
     this.acceptedVia,
     this.modifiedAt,
+    this.companyName,
   });
 
   bool get isAccepted => acceptedAt != null;
@@ -115,23 +120,38 @@ class BackofficePendingPlan {
 
   bool get hasCommissionExport => commissionDocIds.isNotEmpty;
 
-  Map<String, dynamic> toFirestore({bool isCreate = false}) {
+  Map<String, dynamic> toStoredMap({
+    bool isCreate = false,
+    DateTime? now,
+  }) {
+    final timestamp = now ?? DateTime.now();
     return {
       'type': type.storageKey,
       'creditorId': creditorId,
       'creditorName': creditorName,
-      if (isCreate) 'submittedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+      if (isCreate) 'submittedAt': Timestamp.fromDate(timestamp),
+      'updatedAt': Timestamp.fromDate(timestamp),
       'formData': formData,
       'summaryRows': summaryRows.map((row) => row.toMap()).toList(),
       'commissionDocIds': commissionDocIds,
+      if (companyName != null && companyName!.isNotEmpty)
+        'companyName': companyName,
+      if (acceptedAt != null) 'acceptedAt': Timestamp.fromDate(acceptedAt!),
+      if (acceptedVia != null) 'acceptedVia': acceptedVia!.storageKey,
+      if (modifiedAt != null) 'modifiedAt': Timestamp.fromDate(modifiedAt!),
     };
   }
 
   factory BackofficePendingPlan.fromDoc(
     DocumentSnapshot<Map<String, dynamic>> doc,
   ) {
-    final data = doc.data() ?? {};
+    return BackofficePendingPlan.fromStored(doc.id, doc.data() ?? {});
+  }
+
+  factory BackofficePendingPlan.fromStored(
+    String id,
+    Map<String, dynamic> data,
+  ) {
     final summaryRaw = data['summaryRows'];
     final rows = <BackofficeSummaryRow>[];
     if (summaryRaw is List) {
@@ -154,7 +174,7 @@ class BackofficePendingPlan {
     }
 
     return BackofficePendingPlan(
-      id: doc.id,
+      id: id,
       type: BackofficePendingPlanType.fromStorageKey(data['type']?.toString()) ??
           BackofficePendingPlanType.repayment,
       creditorId: (data['creditorId'] ?? '').toString(),
@@ -171,6 +191,9 @@ class BackofficePendingPlan {
         data['acceptedVia']?.toString(),
       ),
       modifiedAt: _readTimestamp(data['modifiedAt']),
+      companyName: (data['companyName'] ?? '').toString().trim().isEmpty
+          ? null
+          : (data['companyName'] ?? '').toString().trim(),
     );
   }
 
@@ -190,32 +213,11 @@ class BackofficePendingSaveResult {
 }
 
 abstract final class BackofficePendingPlanService {
-  static CollectionReference<Map<String, dynamic>>? _collection() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return null;
-    return FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('backoffice_pending_plans');
-  }
+  static BackofficePendingPlanStorage get _storage =>
+      BackofficePendingPlanStorage.instance;
 
-  static Stream<List<BackofficePendingPlan>> watchAll() {
-    return FirebaseAuth.instance.authStateChanges().asyncExpand((user) {
-      if (user == null) {
-        return Stream.value(const <BackofficePendingPlan>[]);
-      }
-
-      return FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('backoffice_pending_plans')
-          .orderBy('submittedAt', descending: true)
-          .snapshots()
-          .map(
-            (snap) => snap.docs.map(BackofficePendingPlan.fromDoc).toList(),
-          );
-    });
-  }
+  static Stream<List<BackofficePendingPlan>> watchAll() =>
+      _storage.watchAll();
 
   static Future<BackofficePendingSaveResult> save({
     String? existingId,
@@ -225,89 +227,77 @@ abstract final class BackofficePendingPlanService {
     required Map<String, dynamic> formData,
     required List<BackofficeSummaryRow> summaryRows,
     List<String> commissionDocIds = const [],
-  }) async {
-    final collection = _collection();
-    if (collection == null) {
-      return const BackofficePendingSaveResult(
-        errorMessage: 'Devi essere autenticato per salvare il piano.',
-      );
-    }
-
-    final docRef = existingId != null && existingId.isNotEmpty
-        ? collection.doc(existingId)
-        : collection.doc();
-
-    final payload = {
-      'type': type.storageKey,
-      'creditorId': creditorId,
-      'creditorName': creditorName,
-      'updatedAt': FieldValue.serverTimestamp(),
-      'formData': formData,
-      'summaryRows': summaryRows.map((row) => row.toMap()).toList(),
-      'commissionDocIds': commissionDocIds,
-    };
-
-    if (existingId == null || existingId.isEmpty) {
-      payload['submittedAt'] = FieldValue.serverTimestamp();
-    } else {
-      payload['modifiedAt'] = FieldValue.serverTimestamp();
-    }
-
-    try {
-      await docRef.set(payload, SetOptions(merge: true));
-      return BackofficePendingSaveResult(id: docRef.id);
-    } on FirebaseException catch (error) {
-      return BackofficePendingSaveResult(
-        errorMessage: _friendlyFirestoreError(error),
-      );
-    } catch (error) {
-      return BackofficePendingSaveResult(
-        errorMessage: 'Errore durante il salvataggio: $error',
-      );
-    }
+    String? companyName,
+  }) {
+    return _storage.save(
+      existingId: existingId,
+      type: type,
+      creditorId: creditorId,
+      creditorName: creditorName,
+      formData: formData,
+      summaryRows: summaryRows,
+      commissionDocIds: commissionDocIds,
+      companyName: companyName,
+    );
   }
 
-  static String _friendlyFirestoreError(FirebaseException error) {
-    if (error.code == 'permission-denied') {
-      return 'Permesso negato su Firestore. '
-          'Le regole devono essere aggiornate sul progetto Firebase.';
-    }
-    return error.message ?? 'Errore Firestore (${error.code}).';
-  }
-
-  static Future<void> delete(String id) async {
-    final collection = _collection();
-    if (collection == null) return;
-    await collection.doc(id).delete();
-  }
+  static Future<void> delete(String id) => _storage.delete(id);
 
   static Future<void> updateCommissionDocIds(
     String id,
     List<String> docIds,
-  ) async {
-    final collection = _collection();
-    if (collection == null) return;
-    await collection.doc(id).set(
-      {
-        'commissionDocIds': docIds,
-        'updatedAt': FieldValue.serverTimestamp(),
-        'acceptedAt': FieldValue.serverTimestamp(),
-        'acceptedVia': BackofficeAcceptedVia.commission.storageKey,
-      },
-      SetOptions(merge: true),
-    );
-  }
+  ) =>
+      _storage.updateCommissionDocIds(id, docIds);
 
-  static Future<void> markAcceptedManual(String id) async {
-    final collection = _collection();
-    if (collection == null) return;
-    await collection.doc(id).set(
-      {
-        'acceptedAt': FieldValue.serverTimestamp(),
-        'acceptedVia': BackofficeAcceptedVia.manual.storageKey,
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
-  }
+  static Future<void> markAcceptedManual(String id) =>
+      _storage.markAcceptedManual(id);
+}
+
+/// Richiede la ragione sociale debitore prima di salvare in Riscontro backoffice.
+Future<String?> showBackofficeCompanyNameDialog(
+  BuildContext context, {
+  String? initialValue,
+}) async {
+  final controller = TextEditingController(text: initialValue ?? '');
+
+  final result = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Ragione sociale'),
+        content: TextField(
+          controller: controller,
+          textCapitalization: TextCapitalization.words,
+          autofocus: true,
+          decoration: appFormFieldDecoration(
+            'Ragione sociale debitore',
+          ).copyWith(
+            hintText: 'Nome committente / debitore',
+          ),
+          onSubmitted: (value) {
+            final name = value.trim();
+            if (name.isEmpty) return;
+            Navigator.pop(dialogContext, name);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(dialogContext, name);
+            },
+            child: const Text('Conferma'),
+          ),
+        ],
+      );
+    },
+  );
+
+  controller.dispose();
+  return result?.trim().isEmpty == true ? null : result?.trim();
 }

@@ -154,10 +154,9 @@ class _NotificationPreferencesPageState
                         ),
                         const Divider(height: 1),
                         SwitchListTile(
-                          title: const Text('Itinerario sul territorio'),
+                          title: const Text('Notifiche itinerario'),
                           subtitle: const Text(
-                            'Promemoria programmati, avviso 30 min prima delle '
-                            'visite e uso della posizione per i percorsi.',
+                            'Promemoria programmati e avviso 30 min prima delle visite.',
                           ),
                           value: _itineraryEnabled,
                           onChanged: _uid == null ||

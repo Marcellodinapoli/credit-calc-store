@@ -514,6 +514,24 @@ class _MyDataPageState extends State<MyDataPage> {
                   ),
                 ],
 
+                if (userType == 'public') ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    'Coupon limiti',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Inserisci un coupon creato dal backoffice per azzerare '
+                    'i contatori mensili del tuo piano.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  const LimitsResetCouponSection(),
+                ],
+
                 const SizedBox(height: 24),
 
                 if (isMobile)

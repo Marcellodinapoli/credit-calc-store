@@ -40,6 +40,9 @@ abstract final class RegistrationCouponService {
       final data = snap.data() ?? {};
       if (data['enabled'] != true) return RegistrationCouponValidation.invalid;
 
+      final type = (data['type'] ?? '').toString().trim().toLowerCase();
+      if (type == 'reset_limits') return RegistrationCouponValidation.invalid;
+
       final expiresAt = data['expiresAt'];
       if (expiresAt is Timestamp && expiresAt.toDate().isBefore(DateTime.now())) {
         return RegistrationCouponValidation.invalid;

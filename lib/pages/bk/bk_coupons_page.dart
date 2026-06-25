@@ -23,6 +23,7 @@ class _BkCouponsPageState extends State<BkCouponsPage> {
   final _maxUsesCtrl = TextEditingController();
   DateTime? _expiresAt;
   String? _restrictedPlan;
+  CouponAdminType _couponType = CouponAdminType.registration;
   bool _saving = false;
   String? _formError;
 
@@ -87,6 +88,7 @@ class _BkCouponsPageState extends State<BkCouponsPage> {
     try {
       await CouponAdminService.createCoupon(
         code: code,
+        type: _couponType,
         label: _labelCtrl.text.trim(),
         maxUses: maxUses,
         expiresAt: _expiresAt,
@@ -143,9 +145,9 @@ class _BkCouponsPageState extends State<BkCouponsPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'I coupon creati qui possono essere inseriti dagli utenti '
-                        'nel form di registrazione. Con accesso gratuito per sempre '
-                        'attivano il piano scelto senza abbonamento.',
+                        'I coupon creati qui possono essere usati in registrazione '
+                        '(accesso lifetime) oppure in I miei dati per azzerare '
+                        'i limiti mensili del piano.',
                         style: TextStyle(
                           fontSize: 15,
                           color: Colors.grey.shade700,
@@ -192,6 +194,33 @@ class _BkCouponsPageState extends State<BkCouponsPage> {
               ),
             ),
             const SizedBox(height: 12),
+            DropdownButtonFormField<CouponAdminType>(
+              value: _couponType,
+              decoration: const InputDecoration(
+                labelText: 'Tipo coupon *',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: CouponAdminType.registration,
+                  child: Text('Registrazione (accesso lifetime)'),
+                ),
+                DropdownMenuItem(
+                  value: CouponAdminType.resetLimits,
+                  child: Text('Azzera limiti mensili'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() {
+                  _couponType = value;
+                  if (value == CouponAdminType.resetLimits) {
+                    _restrictedPlan = null;
+                  }
+                });
+              },
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: _labelCtrl,
               decoration: const InputDecoration(
@@ -208,24 +237,26 @@ class _BkCouponsPageState extends State<BkCouponsPage> {
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String?>(
-              value: _restrictedPlan,
-              decoration: const InputDecoration(
-                labelText: 'Piano vincolato (vuoto = tutti i piani)',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem(value: null, child: Text('Qualsiasi piano')),
-                DropdownMenuItem(value: 'free', child: Text('Solo Gratis')),
-                DropdownMenuItem(value: 'plus', child: Text('Solo Plus')),
-                DropdownMenuItem(
-                  value: 'enterprise',
-                  child: Text('Solo Enterprise'),
+            if (_couponType == CouponAdminType.registration) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                value: _restrictedPlan,
+                decoration: const InputDecoration(
+                  labelText: 'Piano vincolato (vuoto = tutti i piani)',
+                  border: OutlineInputBorder(),
                 ),
-              ],
-              onChanged: (v) => setState(() => _restrictedPlan = v),
-            ),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('Qualsiasi piano')),
+                  DropdownMenuItem(value: 'free', child: Text('Solo Gratis')),
+                  DropdownMenuItem(value: 'plus', child: Text('Solo Plus')),
+                  DropdownMenuItem(
+                    value: 'enterprise',
+                    child: Text('Solo Enterprise'),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _restrictedPlan = v),
+              ),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
@@ -363,6 +394,11 @@ class _CouponTile extends StatelessWidget {
             Text(
               status,
               style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
+            ),
+            Text(
+              record.isResetLimits
+                  ? 'Tipo: azzera limiti mensili'
+                  : 'Tipo: registrazione (lifetime)',
             ),
             if (record.label != null) Text('Nota: ${record.label}'),
             Text(

@@ -91,7 +91,7 @@ class _NormativeSearchPageState extends State<NormativeSearchPage> {
   @override
   Widget build(BuildContext context) {
     return SecondaryPageScaffold(
-      pageTitle: 'Ricerca normativa semplificata',
+      pageTitle: 'Strumenti',
       project: BrandedPageProject.calc,
       body: MaintenanceSectionGate(
         sectionName: MaintenanceService.creditCalc,

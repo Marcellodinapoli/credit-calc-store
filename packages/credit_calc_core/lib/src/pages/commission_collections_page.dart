@@ -1,15 +1,17 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../core/firestore_server_reads.dart';
-import '../core/firestore_user_scope.dart';
 import '../core/theme/app_action_styles.dart';
 import '../core/theme/app_card_theme.dart';
 import '../core/theme/app_form_fields.dart';
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
+import '../section_lock/section_lock_scope.dart';
+import '../subscription/public_usage_service.dart';
 
+import 'commission_collections_host_config.dart';
 import 'commission_collections_shared.dart';
+import 'commission_entries_data_access.dart';
+import 'commission_entry_data_access.dart';
 import 'commission_entry_page.dart';
 
 class CommissionCollectionsPage extends StatefulWidget {
@@ -270,7 +272,7 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
 
   Widget _summaryCard({
     required CommissionMonthKey? month,
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> filtered,
+    required List<CommissionEntryRecord> filtered,
     required double totalCollected,
     required double totalCommission,
     required List<CommissionPaymentTypeTotals> byPaymentType,
@@ -367,10 +369,7 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
     if (confirm != true || !mounted) return;
 
     try {
-      await FirebaseFirestore.instance
-          .collection('calculations')
-          .doc(docId)
-          .delete();
+      await CommissionEntryDataAccess.instance.deleteEntry(docId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Incasso eliminato.')),
@@ -383,9 +382,9 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
     }
   }
 
-  Widget _entryTile(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
-    final docId = doc.id;
+  Widget _entryTile(CommissionEntryRecord entry) {
+    final data = entry.data;
+    final docId = entry.id;
     final date = CommissionCollectionsHelper.entryDate(data);
     final company = CommissionCollectionsHelper.companyName(data);
     final creditor = (data['creditorName'] ?? '—').toString().trim();
@@ -445,6 +444,23 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              if (CommissionCollectionsHostConfig.scheduleFieldVisit != null)
+                TextButton.icon(
+                  onPressed: () {
+                    final entryDate =
+                        CommissionCollectionsHelper.entryDate(data);
+                    CommissionCollectionsHostConfig.scheduleFieldVisit!(
+                      context,
+                      CommissionCollectionVisitRequest(
+                        entryData: data,
+                        entryId: docId,
+                        initialDay: entryDate ?? DateTime.now(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.event_available_outlined, size: 18),
+                  label: const Text('Programma visita'),
+                ),
               TextButton.icon(
                 onPressed: () => _editEntry(docId),
                 icon: const Icon(Icons.edit_outlined, size: 18),
@@ -471,10 +487,39 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
       secondary: true,
       pageTitle: 'Elenco incassi',
       current: CreditCalcNavItem.commissions,
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirestoreServerReads.watchQuery(
-          FirestoreUserScope.userCalculations(),
-        ),
+      body: FutureBuilder<PublicUsageCheckResult>(
+        future: PublicUsageService.checkCommissionHistoryAccess(),
+        builder: (context, accessSnap) {
+          if (accessSnap.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final access = accessSnap.data;
+          if (access != null && !access.allowed) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.lock_outline, size: 48, color: Colors.grey.shade600),
+                    const SizedBox(height: 16),
+                    Text(
+                      access.message ??
+                          'Lo storico provvigioni non è disponibile con il '
+                          'tuo piano attuale.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(height: 1.45),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          return SectionLockScope(
+        sectionKey: 'commission_collections',
+        child: StreamBuilder<List<CommissionEntryRecord>>(
+        stream: CommissionEntriesDataAccess.instance.watchCommissionEntries(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -489,8 +534,7 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
             );
           }
 
-          final allDocs =
-              CommissionCollectionsHelper.commissionDocs(snapshot.data);
+          final allDocs = snapshot.data ?? const [];
           final monthOptions =
               CommissionCollectionsHelper.monthsForDropdown(allDocs);
 
@@ -594,6 +638,9 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
               ),
             ],
           );
+        },
+      ),
+    );
         },
       ),
     );

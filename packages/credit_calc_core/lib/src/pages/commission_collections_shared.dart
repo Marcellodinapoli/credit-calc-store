@@ -2,6 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/euro_format.dart';
 
+class CommissionEntryRecord {
+  final String id;
+  final Map<String, dynamic> data;
+
+  const CommissionEntryRecord({required this.id, required this.data});
+}
+
 class CommissionMonthKey {
   final int year;
   final int month;
@@ -76,20 +83,20 @@ abstract final class CommissionCollectionsHelper {
   static String creditorName(Map<String, dynamic> data) =>
       (data['creditorName'] ?? '').toString().trim();
 
-  static List<QueryDocumentSnapshot<Map<String, dynamic>>> commissionDocs(
-    QuerySnapshot<Map<String, dynamic>>? snapshot,
+  static List<CommissionEntryRecord> commissionEntries(
+    List<CommissionEntryRecord> records,
   ) {
-    return (snapshot?.docs ?? [])
-        .where((doc) => (doc.data()['type'] ?? '') == 'commission_entry')
+    return records
+        .where((record) => (record.data['type'] ?? '') == 'commission_entry')
         .toList();
   }
 
   static Set<CommissionMonthKey> availableMonths(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    List<CommissionEntryRecord> entries,
   ) {
     final months = <CommissionMonthKey>{};
-    for (final doc in docs) {
-      final date = entryDate(doc.data());
+    for (final entry in entries) {
+      final date = entryDate(entry.data);
       if (date != null) months.add(CommissionMonthKey.fromDate(date));
     }
     return months;
@@ -103,9 +110,9 @@ abstract final class CommissionCollectionsHelper {
 
   /// Mesi con almeno un incasso, dal più recente al più vecchio.
   static List<CommissionMonthKey> monthsForFilter(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    List<CommissionEntryRecord> entries,
   ) {
-    return availableMonths(docs).toList()
+    return availableMonths(entries).toList()
       ..sort((a, b) {
         if (a.year != b.year) return b.year.compareTo(a.year);
         return b.month.compareTo(a.month);
@@ -114,10 +121,10 @@ abstract final class CommissionCollectionsHelper {
 
   /// Opzioni del filtro mese: mesi con incassi + mese corrente se ancora senza dati.
   static List<CommissionMonthKey> monthsForDropdown(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {
+    List<CommissionEntryRecord> entries, {
     DateTime? reference,
   }) {
-    final months = monthsForFilter(docs);
+    final months = monthsForFilter(entries);
     final current = defaultFilterMonth(reference);
     if (months.contains(current)) return months;
     return [current, ...months];
@@ -129,12 +136,12 @@ abstract final class CommissionCollectionsHelper {
   }
 
   static List<String> companyNamesInMonth(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    List<CommissionEntryRecord> entries,
     CommissionMonthKey? month,
   ) {
     final names = <String>{};
-    for (final doc in docs) {
-      final data = doc.data();
+    for (final entry in entries) {
+      final data = entry.data;
       final date = entryDate(data);
       if (date == null) continue;
       if (!_matchesMonthFilter(date, month)) continue;
@@ -146,15 +153,15 @@ abstract final class CommissionCollectionsHelper {
     return sorted;
   }
 
-  static List<QueryDocumentSnapshot<Map<String, dynamic>>> filterDocs(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {
+  static List<CommissionEntryRecord> filterDocs(
+    List<CommissionEntryRecord> entries, {
     CommissionMonthKey? month,
     String? selectedCompanyName,
     String? paymentLabelFilter,
     String? selectedCreditorName,
   }) {
-    return docs.where((doc) {
-      final data = doc.data();
+    return entries.where((entry) {
+      final data = entry.data;
       final date = entryDate(data);
       if (date == null) return false;
       if (!_matchesMonthFilter(date, month)) return false;
@@ -180,20 +187,20 @@ abstract final class CommissionCollectionsHelper {
       return true;
     }).toList()
       ..sort((a, b) {
-        final da = entryDate(a.data());
-        final db = entryDate(b.data());
+        final da = entryDate(a.data);
+        final db = entryDate(b.data);
         if (da == null || db == null) return 0;
         return db.compareTo(da);
       });
   }
 
   static List<String> paymentLabelsInMonth(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    List<CommissionEntryRecord> entries,
     CommissionMonthKey? month,
   ) {
     final labels = <String>{};
-    for (final doc in docs) {
-      final data = doc.data();
+    for (final entry in entries) {
+      final data = entry.data;
       final date = entryDate(data);
       if (date == null) continue;
       if (!_matchesMonthFilter(date, month)) continue;
@@ -205,12 +212,12 @@ abstract final class CommissionCollectionsHelper {
   }
 
   static List<String> creditorNamesInMonth(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    List<CommissionEntryRecord> entries,
     CommissionMonthKey? month,
   ) {
     final names = <String>{};
-    for (final doc in docs) {
-      final data = doc.data();
+    for (final entry in entries) {
+      final data = entry.data;
       final date = entryDate(data);
       if (date == null) continue;
       if (!_matchesMonthFilter(date, month)) continue;
@@ -223,21 +230,24 @@ abstract final class CommissionCollectionsHelper {
   }
 
   static int countLinkedIncassi(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    List<CommissionEntryRecord> entries,
     String creditorId,
   ) =>
-      docs
+      entries
           .where(
-            (doc) =>
-                (doc.data()['type'] ?? '') == 'commission_entry' &&
-                (doc.data()['creditorId'] ?? '').toString() == creditorId,
+            (entry) =>
+                (entry.data['type'] ?? '') == 'commission_entry' &&
+                (entry.data['creditorId'] ?? '').toString() == creditorId,
           )
           .length;
 
   static double totalCollected(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    List<CommissionEntryRecord> entries,
   ) =>
-      docs.fold(0, (total, doc) => total + numField(doc.data(), 'amountCollected'));
+      entries.fold(
+        0,
+        (total, entry) => total + numField(entry.data, 'amountCollected'),
+      );
 
   static double entryCommissionTotal(Map<String, dynamic> data) {
     final total = data['totalCommissionAmount'];
@@ -249,20 +259,20 @@ abstract final class CommissionCollectionsHelper {
   }
 
   static double totalCommission(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    List<CommissionEntryRecord> entries,
   ) =>
-      docs.fold(
+      entries.fold(
         0,
-        (total, doc) => total + entryCommissionTotal(doc.data()),
+        (total, entry) => total + entryCommissionTotal(entry.data),
       );
 
   static List<CommissionPaymentTypeTotals> totalsByPaymentType(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    List<CommissionEntryRecord> entries,
   ) {
     final grouped = <String, CommissionPaymentTypeTotals>{};
 
-    for (final doc in docs) {
-      final data = doc.data();
+    for (final entry in entries) {
+      final data = entry.data;
       final label = paymentLabel(data);
       final key = label.isEmpty ? 'Non specificata' : label;
 

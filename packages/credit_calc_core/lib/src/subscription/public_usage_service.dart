@@ -1,9 +1,11 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 
-import '../core/firestore_server_reads.dart';
 import 'public_plan_limits.dart';
+import 'platform_admin.dart';
+import 'public_usage_counts_data_access.dart';
 
 class PublicUsageCheckResult {
   const PublicUsageCheckResult({
@@ -55,9 +57,6 @@ class PlanUsageItem {
 }
 
 /// Conteggio utilizzo e limiti per utenti `public` (work/azienda esclusi).
-///
-/// Tutti i controlli leggono **sempre da Firestore server** (mai cache locale),
-/// così web, mobile e desktop vedono gli stessi consumi e limiti.
 abstract final class PublicUsageService {
   static const _softWarningRatio = 0.8;
 
@@ -80,15 +79,20 @@ abstract final class PublicUsageService {
         _ => '',
       };
 
+  static DocumentReference<Map<String, dynamic>> _totalsRef(String uid) =>
+      _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('public_usage')
+          .doc('totals');
+
   static DocumentReference<Map<String, dynamic>> _monthlyRef(String uid) =>
       _firestore.collection('users').doc(uid).collection('public_usage').doc('monthly');
 
   static Future<({String type, String planId})?> _userContext() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return null;
-    final snap = await FirestoreServerReads.get(
-      _firestore.collection('users').doc(uid),
-    );
+    final snap = await _firestore.collection('users').doc(uid).get();
     final data = snap.data() ?? {};
     final type = (data['type'] ?? 'public').toString().trim().toLowerCase();
     final planId = (data['subscriptionPlan'] ?? 'free').toString();
@@ -104,77 +108,71 @@ abstract final class PublicUsageService {
     PublicUsageMetric metric, {
     int consumeAmount = 1,
   }) async {
-    try {
-      final ctx = await _userContext();
-      if (ctx == null) {
-        return const PublicUsageCheckResult(
-          allowed: false,
-          message: 'Sessione scaduta. Effettua di nuovo l\'accesso.',
-        );
-      }
-      if (!shouldEnforceForUserType(ctx.type)) {
-        return PublicUsageCheckResult.skipped;
-      }
+    if (await PlatformAdmin.isCurrentUser()) {
+      return PublicUsageCheckResult.skipped;
+    }
+    final ctx = await _userContext();
+    if (ctx == null) {
+      return const PublicUsageCheckResult(
+        allowed: false,
+        message: 'Sessione scaduta. Effettua di nuovo l\'accesso.',
+      );
+    }
+    if (!shouldEnforceForUserType(ctx.type)) {
+      return PublicUsageCheckResult.skipped;
+    }
 
-      final limits = publicPlanLimitsForPlan(ctx.planId);
-      if (limits.enforcement == PublicPlanEnforcement.fairUse) {
-        return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
-      }
+    final limits = publicPlanLimitsForPlan(ctx.planId);
+    if (limits.enforcement == PublicPlanEnforcement.fairUse) {
+      return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
+    }
 
-      final limit = limits.limitFor(metric);
-      if (limit == null) {
-        return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
-      }
+    final limit = limits.limitFor(metric);
+    if (limit == null) {
+      return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
+    }
 
-      final used = await _readUsage(metric, limits);
-      final projected = used + consumeAmount;
-      final label = publicUsageMetricLabel(metric);
+    final used = await _readUsage(metric, limits);
+    final projected = used + consumeAmount;
+    final label = publicUsageMetricLabel(metric);
 
-      if (projected > limit) {
-        return PublicUsageCheckResult(
-          allowed: false,
-          used: used,
-          limit: limit,
-          planId: ctx.planId,
-          message:
-              'Hai raggiunto il limite del piano '
-              '${_planLabel(ctx.planId)} per $label '
-              '($used/$limit). Passa a un piano superiore per continuare.',
-        );
-      }
-
-      if (limits.enforcement == PublicPlanEnforcement.soft &&
-          projected >= (limit * _softWarningRatio).ceil()) {
-        return PublicUsageCheckResult(
-          allowed: true,
-          warning: true,
-          used: projected,
-          limit: limit,
-          planId: ctx.planId,
-          message:
-              'Stai per raggiungere il limite $label del piano '
-              '${_planLabel(ctx.planId)} ($projected/$limit).',
-        );
-      }
-
+    if (projected > limit) {
       return PublicUsageCheckResult(
-        allowed: true,
+        allowed: false,
         used: used,
         limit: limit,
         planId: ctx.planId,
-      );
-    } on FirebaseException catch (e) {
-      if (kDebugMode) debugPrint('PublicUsageService.check: $e');
-      return const PublicUsageCheckResult(
-        allowed: false,
         message:
-            'Impossibile verificare i limiti del piano. '
-            'Controlla la connessione e riprova.',
+            'Hai raggiunto il limite del piano '
+            '${_planLabel(ctx.planId)} per $label '
+            '($used/$limit). Passa a un piano superiore per continuare.',
       );
     }
+
+    if (limits.enforcement == PublicPlanEnforcement.soft &&
+        projected >= (limit * _softWarningRatio).ceil()) {
+      return PublicUsageCheckResult(
+        allowed: true,
+        warning: true,
+        used: projected,
+        limit: limit,
+        planId: ctx.planId,
+        message:
+            'Stai per raggiungere il limite $label del piano '
+            '${_planLabel(ctx.planId)} ($projected/$limit).',
+      );
+    }
+
+    return PublicUsageCheckResult(
+      allowed: true,
+      used: used,
+      limit: limit,
+      planId: ctx.planId,
+    );
   }
 
   static Future<void> consume(PublicUsageMetric metric, {int amount = 1}) async {
+    if (await PlatformAdmin.isCurrentUser()) return;
     final ctx = await _userContext();
     if (ctx == null || !shouldEnforceForUserType(ctx.type)) return;
 
@@ -189,29 +187,39 @@ abstract final class PublicUsageService {
     final field = _metricField(metric);
     if (field.isEmpty) return;
 
-    try {
-      await _firestore.runTransaction((tx) async {
-        final snap = await tx.get(ref);
-        final data = snap.data() ?? {};
-        final monthKey = _monthKey();
-        var counts = Map<String, dynamic>.from(
-          (data['counts'] as Map?)?.cast<String, dynamic>() ?? {},
-        );
-        if (data['monthKey'] != monthKey) {
-          counts = {};
-        }
-        final current = _readInt(counts[field]);
-        counts[field] = current + amount;
-        tx.set(ref, {
-          'monthKey': monthKey,
-          'counts': counts,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      });
-    } on FirebaseException catch (e) {
-      if (kDebugMode) debugPrint('PublicUsageService.consume: $e');
-      rethrow;
-    }
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final data = snap.data() ?? {};
+      final monthKey = _monthKey();
+      var counts = Map<String, dynamic>.from(
+        (data['counts'] as Map?)?.cast<String, dynamic>() ?? {},
+      );
+      if (data['monthKey'] != monthKey) {
+        counts = {};
+      }
+      final current = _readInt(counts[field]);
+      counts[field] = current + amount;
+      tx.set(ref, {
+        'monthKey': monthKey,
+        'counts': counts,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
+
+  /// Azzera i contatori mensili del piano (coupon limiti da backoffice).
+  static Future<void> resetMonthlyUsage() async {
+    if (await PlatformAdmin.isCurrentUser()) return;
+    final ctx = await _userContext();
+    if (ctx == null || !shouldEnforceForUserType(ctx.type)) return;
+
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    await _monthlyRef(uid).set({
+      'monthKey': _monthKey(),
+      'counts': <String, int>{},
+      'resetAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   static Future<int> _readUsage(
@@ -221,52 +229,37 @@ abstract final class PublicUsageService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return 0;
 
-    return switch (metric) {
-      PublicUsageMetric.creditorTotal => await _countCreditors(uid),
-      PublicUsageMetric.commissionSchema => await _countCommissionSchemas(uid),
-      PublicUsageMetric.activeCourse => await _countActiveCourses(uid),
-      _ when limits.isMonthly(metric) => await _readMonthlyCount(uid, metric),
-      _ => 0,
-    };
+    if (metric == PublicUsageMetric.creditorTotal) {
+      return PublicUsageCountsDataAccess.instance.countCreditors(uid);
+    }
+    if (metric == PublicUsageMetric.commissionSchema) {
+      return PublicUsageCountsDataAccess.instance.countCommissionSchemas(uid);
+    }
+    if (metric == PublicUsageMetric.activeCourse) {
+      return _countActiveCourses(uid);
+    }
+    if (limits.isMonthly(metric)) {
+      return _readMonthlyCount(uid, metric);
+    }
+    return 0;
   }
 
   static Future<int> _readMonthlyCount(String uid, PublicUsageMetric metric) async {
     final field = _metricField(metric);
     if (field.isEmpty) return 0;
-    final snap = await FirestoreServerReads.get(_monthlyRef(uid));
+    final snap = await _monthlyRef(uid).get();
     final data = snap.data() ?? {};
     if (data['monthKey'] != _monthKey()) return 0;
     final counts = data['counts'] as Map<String, dynamic>? ?? {};
     return _readInt(counts[field]);
   }
 
-  static Future<int> _countCreditors(String uid) async {
-    final query = _firestore
-        .collection('creditors')
-        .where('userId', isEqualTo: uid);
-    final snap = await FirestoreServerReads.getQuery(query);
-    return snap.docs.where((d) => d.data()['_deleted'] != true).length;
-  }
-
-  static Future<int> _countCommissionSchemas(String uid) async {
-    final query = _firestore
-        .collection('creditors')
-        .where('userId', isEqualTo: uid);
-    final snap = await FirestoreServerReads.getQuery(query);
-    var n = 0;
-    for (final doc in snap.docs) {
-      final settings = doc.data()['commissionSettings'];
-      if (settings is Map && settings.isNotEmpty) n++;
-    }
-    return n;
-  }
-
   static Future<int> _countActiveCourses(String uid) async {
-    final query = _firestore
+    final snap = await _firestore
         .collection('userProgress')
         .doc(uid)
-        .collection('courses');
-    final snap = await FirestoreServerReads.getQuery(query);
+        .collection('courses')
+        .get();
     var active = 0;
     for (final doc in snap.docs) {
       final progress = doc.data()['progress'];
@@ -294,95 +287,170 @@ abstract final class PublicUsageService {
   }
 
   static Future<PublicUsageCheckResult> checkCommissionHistoryAccess() async {
-    try {
-      final ctx = await _userContext();
-      if (ctx == null) {
-        return const PublicUsageCheckResult(
-          allowed: false,
-          message: 'Sessione scaduta. Effettua di nuovo l\'accesso.',
-        );
-      }
-      if (!shouldEnforceForUserType(ctx.type)) {
-        return PublicUsageCheckResult.skipped;
-      }
-      return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
-    } on FirebaseException catch (e) {
-      if (kDebugMode) {
-        debugPrint('PublicUsageService.checkCommissionHistoryAccess: $e');
-      }
+    if (await PlatformAdmin.isCurrentUser()) {
+      return PublicUsageCheckResult.skipped;
+    }
+    final ctx = await _userContext();
+    if (ctx == null) {
       return const PublicUsageCheckResult(
         allowed: false,
-        message:
-            'Impossibile verificare l\'accesso alle provvigioni. '
-            'Controlla la connessione e riprova.',
+        message: 'Sessione scaduta. Effettua di nuovo l\'accesso.',
       );
     }
+    if (!shouldEnforceForUserType(ctx.type)) {
+      return PublicUsageCheckResult.skipped;
+    }
+    final limits = publicPlanLimitsForPlan(ctx.planId);
+    if (limits.unlimitedCommissionHistory) {
+      return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
+    }
+    return PublicUsageCheckResult(
+      allowed: false,
+      planId: ctx.planId,
+      message:
+          'Lo storico provvigioni è disponibile dal piano Plus. '
+          'Con il piano Gratis puoi configurare un solo schema base.',
+    );
   }
 
   static Future<PublicUsageCheckResult> checkCommissionAnalyticsAccess() async {
-    try {
-      final ctx = await _userContext();
-      if (ctx == null) {
-        return const PublicUsageCheckResult(
-          allowed: false,
-          message: 'Sessione scaduta. Effettua di nuovo l\'accesso.',
-        );
-      }
-      if (!shouldEnforceForUserType(ctx.type)) {
-        return PublicUsageCheckResult.skipped;
-      }
-      final limits = publicPlanLimitsForPlan(ctx.planId);
-      if (limits.advancedCommissionAnalytics) {
-        return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
-      }
-      return PublicUsageCheckResult(
-        allowed: false,
-        planId: ctx.planId,
-        message:
-            'Le analytics avanzate provvigioni sono incluse nel piano Enterprise.',
-      );
-    } on FirebaseException catch (e) {
-      if (kDebugMode) {
-        debugPrint('PublicUsageService.checkCommissionAnalyticsAccess: $e');
-      }
+    if (await PlatformAdmin.isCurrentUser()) {
+      return PublicUsageCheckResult.skipped;
+    }
+    final ctx = await _userContext();
+    if (ctx == null) {
       return const PublicUsageCheckResult(
         allowed: false,
-        message:
-            'Impossibile verificare l\'accesso alle statistiche. '
-            'Controlla la connessione e riprova.',
+        message: 'Sessione scaduta. Effettua di nuovo l\'accesso.',
       );
     }
+    if (!shouldEnforceForUserType(ctx.type)) {
+      return PublicUsageCheckResult.skipped;
+    }
+    final limits = publicPlanLimitsForPlan(ctx.planId);
+    if (limits.advancedCommissionAnalytics) {
+      return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
+    }
+    return PublicUsageCheckResult(
+      allowed: false,
+      planId: ctx.planId,
+      message:
+          'Le analytics avanzate provvigioni sono incluse nel piano Enterprise.',
+    );
   }
 
   static Future<List<PlanUsageItem>> loadUsageItems() async {
+    if (await PlatformAdmin.isCurrentUser()) return const [];
     final ctx = await _userContext();
     if (ctx == null || !shouldEnforceForUserType(ctx.type)) {
       return const [];
     }
-    return _buildUsageItems(ctx.planId);
+    return loadUsageItemsForPlan(ctx.planId);
   }
 
-  /// Aggiorna i consumi dal server (mai cache locale).
-  static Stream<List<PlanUsageItem>> watchUsageItems() async* {
+  static Future<List<PlanUsageItem>> loadUsageItemsForPlan(String planId) async {
+    try {
+      return await _buildUsageItems(planId);
+    } catch (_) {
+      return fallbackUsageItems(planId);
+    }
+  }
+
+  /// Limiti del piano con conteggio a zero (fallback se Firestore non risponde).
+  static List<PlanUsageItem> fallbackUsageItems(String planId) {
+    final limits = publicPlanLimitsForPlan(planId);
+    if (limits.enforcement == PublicPlanEnforcement.fairUse) {
+      return const [
+        PlanUsageItem(
+          label: 'Utilizzo piano',
+          used: 0,
+          unlimited: true,
+          periodHint: 'Fair use — senza limiti operativi',
+        ),
+      ];
+    }
+
+    const metrics = <(PublicUsageMetric metric, String? period)>[
+      (PublicUsageMetric.activeCourse, null),
+      (PublicUsageMetric.quiz, 'questo mese'),
+      (PublicUsageMetric.warmup, 'questo mese'),
+      (PublicUsageMetric.roleplay, 'questo mese'),
+      (PublicUsageMetric.contestation, 'questo mese'),
+      (PublicUsageMetric.repaymentPlan, 'questo mese'),
+      (PublicUsageMetric.balanceWriteOff, 'questo mese'),
+      (PublicUsageMetric.itinerary, 'questo mese'),
+      (PublicUsageMetric.creditorTotal, 'totali'),
+      (PublicUsageMetric.commissionSchema, 'totali'),
+      (PublicUsageMetric.jobApplication, 'questo mese'),
+    ];
+
+    final items = <PlanUsageItem>[];
+    for (final entry in metrics) {
+      final limit = limits.limitFor(entry.$1);
+      if (limit == null) continue;
+      items.add(
+        PlanUsageItem(
+          label: publicUsageMetricLabel(entry.$1),
+          used: 0,
+          limit: limit,
+          periodHint: entry.$2,
+        ),
+      );
+    }
+    return items;
+  }
+
+  /// Aggiorna i consumi al cambio piano o al consumo mensile.
+  static Stream<List<PlanUsageItem>> watchUsageItems() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      yield const [];
-      return;
-    }
+    if (uid == null) return Stream.value(const []);
 
-    Future<List<PlanUsageItem>> refresh() async {
-      final ctx = await _userContext();
-      if (ctx == null || !shouldEnforceForUserType(ctx.type)) {
-        return const [];
+    final userRef = _firestore.collection('users').doc(uid);
+
+    return userRef.snapshots().asyncExpand((userSnap) async* {
+      if (await PlatformAdmin.isCurrentUser()) {
+        yield const <PlanUsageItem>[];
+        return;
       }
-      return _buildUsageItems(ctx.planId);
-    }
+      final data = userSnap.data() ?? {};
+      final type = (data['type'] ?? 'public').toString().trim().toLowerCase();
+      if (!shouldEnforceForUserType(type)) {
+        yield const <PlanUsageItem>[];
+        return;
+      }
+      final planId = (data['subscriptionPlan'] ?? 'free').toString();
+      yield* watchUsageForPlan(planId);
+    });
+  }
 
-    yield await refresh();
+  /// Consumi per un piano specifico (si aggiorna al cambio contatori mensili).
+  static Stream<List<PlanUsageItem>> watchUsageForPlan(String planId) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return Stream.value(const []);
 
-    await for (final _ in Stream.periodic(const Duration(seconds: 6))) {
-      yield await refresh();
-    }
+    final monthlyRef = _monthlyRef(uid);
+    final totalsRef = _totalsRef(uid);
+
+    return Stream.multi((controller) async {
+      Future<void> emit() async {
+        if (controller.isClosed) return;
+        try {
+          controller.add(await _buildUsageItems(planId));
+        } catch (_) {
+          if (!controller.isClosed) {
+            controller.add(fallbackUsageItems(planId));
+          }
+        }
+      }
+
+      await emit();
+      final subMonthly = monthlyRef.snapshots().listen((_) => emit());
+      final subTotals = totalsRef.snapshots().listen((_) => emit());
+      controller.onCancel = () {
+        subMonthly.cancel();
+        subTotals.cancel();
+      };
+    });
   }
 
   static Future<List<PlanUsageItem>> _buildUsageItems(String planId) async {
@@ -433,90 +501,83 @@ abstract final class PublicUsageService {
   static Future<PublicUsageCheckResult> checkCourseAccess(
     String courseId,
   ) async {
-    try {
-      final ctx = await _userContext();
-      if (ctx == null) {
-        return const PublicUsageCheckResult(
-          allowed: false,
-          message: 'Sessione scaduta. Effettua di nuovo l\'accesso.',
-        );
-      }
-      if (!shouldEnforceForUserType(ctx.type)) {
-        return PublicUsageCheckResult.skipped;
-      }
+    if (await PlatformAdmin.isCurrentUser()) {
+      return PublicUsageCheckResult.skipped;
+    }
+    final ctx = await _userContext();
+    if (ctx == null) {
+      return const PublicUsageCheckResult(
+        allowed: false,
+        message: 'Sessione scaduta. Effettua di nuovo l\'accesso.',
+      );
+    }
+    if (!shouldEnforceForUserType(ctx.type)) {
+      return PublicUsageCheckResult.skipped;
+    }
 
-      final limits = publicPlanLimitsForPlan(ctx.planId);
-      if (limits.enforcement == PublicPlanEnforcement.fairUse) {
-        return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
-      }
+    final limits = publicPlanLimitsForPlan(ctx.planId);
+    if (limits.enforcement == PublicPlanEnforcement.fairUse) {
+      return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
+    }
 
-      final limit = limits.activeCourses;
-      if (limit == null) {
-        return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
-      }
+    final limit = limits.activeCourses;
+    if (limit == null) {
+      return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
+    }
 
-      final uid = FirebaseAuth.instance.currentUser!.uid;
-      final courseRef = _firestore
-          .collection('userProgress')
-          .doc(uid)
-          .collection('courses')
-          .doc(courseId);
-      final courseSnap = await FirestoreServerReads.get(courseRef);
-      if (courseSnap.exists) {
-        final progress = courseSnap.data()?['progress'];
-        final p = progress is num ? progress.toInt() : 0;
-        if (p < 100) {
-          return PublicUsageCheckResult(
-            allowed: true,
-            used: await _countActiveCourses(uid),
-            limit: limit,
-            planId: ctx.planId,
-          );
-        }
-      }
-
-      final active = await _countActiveCourses(uid);
-      if (active >= limit) {
-        return PublicUsageCheckResult(
-          allowed: false,
-          used: active,
-          limit: limit,
-          planId: ctx.planId,
-          message:
-              'Hai raggiunto il limite di $limit corsi attivi del piano '
-              '${_planLabel(ctx.planId)}. Completa un corso o passa a un '
-              'piano superiore.',
-        );
-      }
-
-      if (limits.enforcement == PublicPlanEnforcement.soft &&
-          active + 1 >= (limit * _softWarningRatio).ceil()) {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final courseSnap = await _firestore
+        .collection('userProgress')
+        .doc(uid)
+        .collection('courses')
+        .doc(courseId)
+        .get();
+    if (courseSnap.exists) {
+      final progress = courseSnap.data()?['progress'];
+      final p = progress is num ? progress.toInt() : 0;
+      if (p < 100) {
         return PublicUsageCheckResult(
           allowed: true,
-          warning: true,
-          used: active + 1,
+          used: await _countActiveCourses(uid),
           limit: limit,
           planId: ctx.planId,
-          message:
-              'Stai per raggiungere il limite corsi attivi del piano '
-              '${_planLabel(ctx.planId)} (${active + 1}/$limit).',
         );
       }
+    }
 
+    final active = await _countActiveCourses(uid);
+    if (active >= limit) {
       return PublicUsageCheckResult(
-        allowed: true,
+        allowed: false,
         used: active,
         limit: limit,
         planId: ctx.planId,
-      );
-    } on FirebaseException catch (e) {
-      if (kDebugMode) debugPrint('PublicUsageService.checkCourseAccess: $e');
-      return const PublicUsageCheckResult(
-        allowed: false,
         message:
-            'Impossibile verificare i limiti del piano. '
-            'Controlla la connessione e riprova.',
+            'Hai raggiunto il limite di $limit corsi attivi del piano '
+            '${_planLabel(ctx.planId)}. Completa un corso o passa a un '
+            'piano superiore.',
       );
     }
+
+    if (limits.enforcement == PublicPlanEnforcement.soft &&
+        active + 1 >= (limit * _softWarningRatio).ceil()) {
+      return PublicUsageCheckResult(
+        allowed: true,
+        warning: true,
+        used: active + 1,
+        limit: limit,
+        planId: ctx.planId,
+        message:
+            'Stai per raggiungere il limite corsi attivi del piano '
+            '${_planLabel(ctx.planId)} (${active + 1}/$limit).',
+      );
+    }
+
+    return PublicUsageCheckResult(
+      allowed: true,
+      used: active,
+      limit: limit,
+      planId: ctx.planId,
+    );
   }
 }

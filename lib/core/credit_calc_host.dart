@@ -4,9 +4,29 @@ import 'package:flutter/material.dart';
 
 import '../core/maintenance_service.dart';
 import '../ui/layout/page_shell.dart';
+import '../services/gestione_menu_badge_service.dart';
+import '../widgets/gestione_menu_badge_marker.dart';
 import '../widgets/maintenance_blocked_view.dart';
 
 /// Integra le pagine CreditCalc con la shell responsive dell'app store.
+String _displayPageTitle(CreditCalcNavItem? current, String pageTitle) {
+  switch (current) {
+    case CreditCalcNavItem.management:
+      return 'Gestione';
+    case CreditCalcNavItem.tools:
+      return 'Strumenti';
+    default:
+      return pageTitle;
+  }
+}
+
+GestioneMenuBadgeKey? _gestioneBadgeKey(CreditCalcNavItem? current) {
+  return switch (current) {
+    CreditCalcNavItem.management => GestioneMenuBadgeKey.oggi,
+    _ => null,
+  };
+}
+
 void registerCreditCalcHost() {
   creditCalcPageWrapper = (params) {
     if (params.secondary) {
@@ -18,7 +38,7 @@ void registerCreditCalcHost() {
     }
 
     return CreditCalcPrimaryLayout(
-      pageTitle: params.pageTitle,
+      pageTitle: _displayPageTitle(params.current, params.pageTitle),
       current: params.current,
       body: params.body,
     );
@@ -51,11 +71,14 @@ class CreditCalcPrimaryLayout extends StatelessWidget {
         return PageShellBody(
           pageTitle: pageTitle,
           project: BrandedPageProject.calc,
-          child: blocked
-              ? const MaintenanceBlockedView(
-                  sectionName: MaintenanceService.creditCalc,
-                )
-              : body,
+          child: GestioneMenuBadgeMarker(
+            badgeKey: _gestioneBadgeKey(current),
+            child: blocked
+                ? const MaintenanceBlockedView(
+                    sectionName: MaintenanceService.creditCalc,
+                  )
+                : body,
+          ),
         );
       },
     );

@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-import 'section_lock_config.dart';
+import '../core/theme/app_card_theme.dart';
+import '../core/theme/project_colors.dart';
 import 'section_lock_service.dart';
-import 'section_occupancy_result.dart';
 
-/// Mostra un messaggio se la sezione è in uso su un altro dispositivo.
-/// Il resto dell'app resta accessibile.
+/// Acquisisce il blocco sezione all'apertura e lo rilascia in uscita.
 class SectionLockScope extends StatefulWidget {
   const SectionLockScope({
     super.key,
@@ -23,85 +23,108 @@ class SectionLockScope extends StatefulWidget {
 }
 
 class _SectionLockScopeState extends State<SectionLockScope> {
-  SectionOccupancyResult? _result;
   bool _loading = true;
-  bool _ownsSection = false;
+  bool _blocked = false;
+  DateTime? _lockedAt;
   Timer? _heartbeat;
-  StreamSubscription<SectionOccupancyResult>? _watchSub;
+  StreamSubscription<SectionLockState?>? _watchSub;
 
   @override
   void initState() {
     super.initState();
-    _load();
-    _watchSub = SectionLockService.watch(widget.sectionKey).listen(
-      _onRemoteChange,
-      onError: (_) {},
-    );
+    unawaited(_acquire());
   }
 
   @override
   void dispose() {
     _heartbeat?.cancel();
     _watchSub?.cancel();
-    if (_ownsSection) {
-      unawaited(SectionLockService.release(widget.sectionKey));
-    }
+    unawaited(SectionLockService.release(widget.sectionKey));
     super.dispose();
   }
 
-  void _onRemoteChange(SectionOccupancyResult remote) {
-    if (!mounted || _loading) return;
+  Future<void> _acquire() async {
+    try {
+      final result = await SectionLockService.acquire(widget.sectionKey)
+          .timeout(const Duration(seconds: 12));
+      if (!mounted) return;
 
-    if (!remote.allowed) {
-      if (_ownsSection) {
-        _ownsSection = false;
-        _heartbeat?.cancel();
+      switch (result) {
+        case SectionLockAcquireResult.acquired:
+          _startHeartbeat();
+          _watchRemoteLock();
+          setState(() {
+            _loading = false;
+            _blocked = false;
+          });
+        case SectionLockAcquireResult.blocked:
+          await _loadBlockedAt();
+          if (!mounted) return;
+          _watchRemoteLock();
+          setState(() {
+            _loading = false;
+            _blocked = true;
+          });
+        case SectionLockAcquireResult.unauthenticated:
+          setState(() {
+            _loading = false;
+            _blocked = false;
+          });
       }
-      setState(() => _result = remote);
-      return;
-    }
-
-    if (!_ownsSection && _result != null && !_result!.allowed) {
-      setState(() => _result = remote);
+    } catch (_) {
+      // Fail-open: il blocco sezione non deve impedire l'uso dell'app
+      // (es. regole Firestore non deployate o rete instabile).
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _blocked = false;
+      });
     }
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
-
-    SectionOccupancyResult result;
+  Future<void> _loadBlockedAt() async {
     try {
-      result = await SectionLockService.tryAcquire(widget.sectionKey);
-    } catch (_) {
-      result = SectionOccupancyResult.allowedFree;
-    }
+      await for (final state in SectionLockService.watch(widget.sectionKey)) {
+        if (state != null && state.isBlocked) {
+          _lockedAt = state.lockedAt;
+        }
+        break;
+      }
+    } catch (_) {}
+  }
 
-    if (!mounted) return;
-
-    if (result.allowed) {
-      _ownsSection = true;
-      _startHeartbeat();
-    } else {
-      _ownsSection = false;
-      _heartbeat?.cancel();
-    }
-
-    setState(() {
-      _result = result;
-      _loading = false;
+  void _watchRemoteLock() {
+    _watchSub?.cancel();
+    _watchSub = SectionLockService.watch(widget.sectionKey).listen((state) {
+      if (!mounted || state == null) return;
+      if (state.ownedByThisDevice && _blocked) {
+        setState(() {
+          _blocked = false;
+          _loading = false;
+        });
+        _startHeartbeat();
+      } else if (state.isBlocked && !_blocked) {
+        setState(() {
+          _blocked = true;
+          _lockedAt = state.lockedAt;
+        });
+        _heartbeat?.cancel();
+      }
     });
   }
 
   void _startHeartbeat() {
     _heartbeat?.cancel();
-    _heartbeat = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => SectionLockService.touch(widget.sectionKey),
-    );
+    _heartbeat = Timer.periodic(const Duration(seconds: 45), (_) {
+      unawaited(SectionLockService.touch(widget.sectionKey));
+    });
   }
 
-  Future<void> _retry() async {
-    await _load();
+  String _formatLockedAt(DateTime? dt) {
+    if (dt == null) return '';
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '$h:$m';
   }
 
   @override
@@ -110,52 +133,97 @@ class _SectionLockScopeState extends State<SectionLockScope> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final result = _result!;
-    if (!result.allowed) {
-      final title =
-          SectionLockConfig.titleFor(widget.sectionKey) ?? 'Sezione in uso';
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
+    if (_blocked) {
+      return _SectionLockedView(
+        lockedAtLabel: _formatLockedAt(_lockedAt),
+        onRetry: () {
+          setState(() => _loading = true);
+          unawaited(_acquire());
+        },
+      );
+    }
+
+    return widget.child;
+  }
+}
+
+class _SectionLockedView extends StatelessWidget {
+  const _SectionLockedView({
+    required this.lockedAtLabel,
+    required this.onRetry,
+  });
+
+  final String lockedAtLabel;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Card(
+          color: const Color(0xFFFFF7ED),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppCardTheme.radius),
+            side: const BorderSide(color: Color(0xFFFDBA74)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.lock_clock, size: 48, color: Colors.grey.shade600),
-                const SizedBox(height: 16),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+                Icon(Icons.edit_off_outlined, color: Colors.orange.shade800, size: 36),
                 const SizedBox(height: 12),
                 Text(
-                  result.message ??
-                      'Questa sezione è in uso su un altro dispositivo.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    height: 1.45,
-                    color: Colors.grey.shade800,
+                  'Sezione in modifica',
+                  style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
                   ),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 20),
-                OutlinedButton.icon(
-                  onPressed: _retry,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Riprova'),
+                const SizedBox(height: 10),
+                Text(
+                  'Questa sezione è attualmente in modifica da un altro '
+                  'tuo account/device.',
+                  style: TextStyle(
+                    color: Colors.grey.shade800,
+                    height: 1.45,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                if (lockedAtLabel.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Blocco attivo dalle $lockedAtLabel.',
+                    style: TextStyle(
+                      color: Colors.grey.shade700,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                const SizedBox(height: 16),
+                OutlinedButton(
+                  onPressed: () => Navigator.maybePop(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: ProjectColors.area,
+                    side: BorderSide(color: ProjectColors.area.withValues(alpha: 0.5)),
+                  ),
+                  child: const Text('Torna indietro'),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: onRetry,
+                  child: const Text('Riprova'),
                 ),
               ],
             ),
           ),
         ),
-      );
-    }
-
-    return widget.child;
+      ),
+    );
   }
 }

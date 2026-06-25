@@ -67,16 +67,21 @@ class FieldVisit {
   bool get isActiveForItinerary => status == FieldVisitStatus.planned;
 
   factory FieldVisit.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data() ?? {};
+    return FieldVisit.fromMap(doc.id, doc.data() ?? {});
+  }
+
+  factory FieldVisit.fromMap(String id, Map<String, dynamic> data) {
     final scheduled = data['scheduledAt'];
     return FieldVisit(
-      id: doc.id,
+      id: id,
       userId: (data['userId'] ?? '').toString(),
       companyName: (data['companyName'] ?? '').toString().trim(),
       address: (data['address'] ?? '').toString().trim(),
       scheduledAt: scheduled is Timestamp
           ? scheduled.toDate()
-          : DateTime.now(),
+          : scheduled is DateTime
+              ? scheduled
+              : DateTime.now(),
       status: fieldVisitStatusFrom(data['status'] as String?),
       latitude: _asDouble(data['latitude']),
       longitude: _asDouble(data['longitude']),
@@ -86,6 +91,27 @@ class FieldVisit {
       notes: data['notes']?.toString(),
       routeOrder: data['routeOrder'] is int ? data['routeOrder'] as int : null,
     );
+  }
+
+  Map<String, dynamic> toStoredMap({DateTime? updatedAt}) {
+    final now = updatedAt ?? DateTime.now();
+    return {
+      'userId': userId,
+      'companyName': companyName,
+      'address': address,
+      'scheduledAt': Timestamp.fromDate(scheduledAt),
+      'status': status.name,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (creditorId != null && creditorId!.isNotEmpty) 'creditorId': creditorId,
+      if (creditorName != null && creditorName!.isNotEmpty)
+        'creditorName': creditorName,
+      if (calculationId != null && calculationId!.isNotEmpty)
+        'calculationId': calculationId,
+      if (notes != null && notes!.isNotEmpty) 'notes': notes,
+      if (routeOrder != null) 'routeOrder': routeOrder,
+      'updatedAt': Timestamp.fromDate(now),
+    };
   }
 
   Map<String, dynamic> toFirestore() {

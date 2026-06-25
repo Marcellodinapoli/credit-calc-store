@@ -8,6 +8,8 @@ import '../core/theme/app_card_theme.dart';
 import '../core/theme/app_form_fields.dart';
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
+import '../section_lock/section_lock_scope.dart';
+import '../subscription/public_usage_guard.dart';
 
 import 'commission_collections_shared.dart';
 import 'commission_payment_resolver.dart';
@@ -295,6 +297,15 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
       );
       return;
     }
+
+    if (!_isEditing) {
+      final allowed = await PublicUsageGuard.ensureCommissionHistoryAllowed(
+        context,
+      );
+      if (!allowed) return;
+    }
+
+    if (!mounted) return;
 
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) {
@@ -661,7 +672,10 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
       secondary: true,
       pageTitle: _isEditing ? 'Modifica incasso' : 'Inserisci provvigioni',
         current: CreditCalcNavItem.commissions,
-        body: const Center(child: CircularProgressIndicator()),
+        body: SectionLockScope(
+          sectionKey: 'commission_entry:${widget.entryId ?? 'new'}',
+          child: const Center(child: CircularProgressIndicator()),
+        ),
       );
     }
 
@@ -669,7 +683,9 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
       secondary: true,
       pageTitle: _isEditing ? 'Modifica incasso' : 'Inserisci provvigioni',
       current: CreditCalcNavItem.commissions,
-      body: ColoredBox(
+      body: SectionLockScope(
+        sectionKey: 'commission_entry:${widget.entryId ?? 'new'}',
+        child: ColoredBox(
         color: const Color(0xFFE8E8E8),
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -700,6 +716,7 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
               ],
             );
           },
+        ),
         ),
       ),
     );

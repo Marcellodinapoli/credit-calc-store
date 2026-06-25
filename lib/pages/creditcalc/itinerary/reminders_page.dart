@@ -5,7 +5,18 @@ import '../../../widgets/field_visit_day_picker.dart';
 import '../../../widgets/field_visit_link_picker.dart';
 import '../../../models/field_reminder.dart';
 import '../../../services/field_reminder_service.dart';
+import '../../../services/gestione_menu_badge_service.dart';
+import '../../../widgets/itinerary_notifications_card.dart';
 import 'itinerary_page_shell.dart';
+
+enum _ReminderMonthFilter {
+  currentMonth('Mese in corso'),
+  upcomingMonths('Prossimi mesi'),
+  all('Tutti');
+
+  const _ReminderMonthFilter(this.label);
+  final String label;
+}
 
 class RemindersPage extends StatefulWidget {
   const RemindersPage({super.key, this.personalArea = false});
@@ -18,9 +29,171 @@ class RemindersPage extends StatefulWidget {
 
 class _RemindersPageState extends State<RemindersPage> {
   bool _busy = false;
+  _ReminderMonthFilter _monthFilter = _ReminderMonthFilter.currentMonth;
 
   ItineraryPageShell get _shell =>
       ItineraryPageShell(personalArea: widget.personalArea);
+
+  bool _isCurrentMonth(DateTime date) {
+    final now = DateTime.now();
+    return date.year == now.year && date.month == now.month;
+  }
+
+  bool _isFutureMonth(DateTime date) {
+    final now = DateTime.now();
+    return date.year > now.year ||
+        (date.year == now.year && date.month > now.month);
+  }
+
+  ({List<FieldReminder> current, List<FieldReminder> upcoming})
+      _partitionByMonth(List<FieldReminder> items) {
+    final current = <FieldReminder>[];
+    final upcoming = <FieldReminder>[];
+    for (final item in items) {
+      if (_isCurrentMonth(item.remindAt)) {
+        current.add(item);
+      } else if (_isFutureMonth(item.remindAt)) {
+        upcoming.add(item);
+      }
+    }
+    return (current: current, upcoming: upcoming);
+  }
+
+  Widget _sectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: Colors.grey.shade700,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+
+  Widget _reminderCard(FieldReminder item, DateTime now) {
+    final isPast = item.remindAt.isBefore(now);
+    return Card(
+      color: AppCardTheme.surface,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: (isPast ? Colors.orange : Colors.blue)
+              .withValues(alpha: 0.15),
+          child: Icon(
+            isPast ? Icons.notifications_active : Icons.alarm,
+            color: isPast ? Colors.orange : Colors.blue,
+          ),
+        ),
+        title: Text(
+          item.title,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_formatDateTime(item.remindAt)),
+            if (item.notes != null && item.notes!.isNotEmpty) Text(item.notes!),
+            if (item.pushSent)
+              const Text(
+                'Notifica inviata',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.green,
+                ),
+              ),
+          ],
+        ),
+        isThreeLine: true,
+        onTap: () => _openEditor(reminder: item),
+        trailing: PopupMenuButton<String>(
+          onSelected: (action) async {
+            if (action == 'edit') {
+              await _openEditor(reminder: item);
+            } else if (action == 'delete') {
+              await FieldReminderService.delete(item.id);
+            }
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(
+              value: 'edit',
+              child: Text('Modifica'),
+            ),
+            PopupMenuItem(
+              value: 'delete',
+              child: Text('Elimina'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilteredList(List<FieldReminder> items) {
+    final now = DateTime.now();
+    final parts = _partitionByMonth(items);
+
+    List<FieldReminder> visible;
+    switch (_monthFilter) {
+      case _ReminderMonthFilter.currentMonth:
+        visible = parts.current;
+      case _ReminderMonthFilter.upcomingMonths:
+        visible = parts.upcoming;
+      case _ReminderMonthFilter.all:
+        visible = [...parts.current, ...parts.upcoming];
+    }
+
+    if (visible.isEmpty) {
+      final message = switch (_monthFilter) {
+        _ReminderMonthFilter.currentMonth =>
+          'Nessun promemoria per il mese in corso.',
+        _ReminderMonthFilter.upcomingMonths =>
+          'Nessun promemoria nei prossimi mesi.',
+        _ReminderMonthFilter.all =>
+          'Nessun promemoria. Programmane uno per non dimenticare le scadenze.',
+      };
+      return Center(
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.black54),
+        ),
+      );
+    }
+
+    if (_monthFilter != _ReminderMonthFilter.all) {
+      return ListView.separated(
+        padding: ItineraryPageShell.listPadding(context),
+        itemCount: visible.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        itemBuilder: (context, index) =>
+            _reminderCard(visible[index], now),
+      );
+    }
+
+    return ListView(
+      padding: ItineraryPageShell.listPadding(context),
+      children: [
+        if (parts.current.isNotEmpty) ...[
+          _sectionHeader('Mese in corso'),
+          for (var i = 0; i < parts.current.length; i++) ...[
+            if (i > 0) const SizedBox(height: 10),
+            _reminderCard(parts.current[i], now),
+          ],
+        ],
+        if (parts.upcoming.isNotEmpty) ...[
+          if (parts.current.isNotEmpty) const SizedBox(height: 20),
+          _sectionHeader('Prossimi mesi'),
+          for (var i = 0; i < parts.upcoming.length; i++) ...[
+            if (i > 0) const SizedBox(height: 10),
+            _reminderCard(parts.upcoming[i], now),
+          ],
+        ],
+      ],
+    );
+  }
 
   String _formatDateTime(DateTime value) {
     final d = value.day.toString().padLeft(2, '0');
@@ -167,11 +340,18 @@ class _RemindersPageState extends State<RemindersPage> {
   Widget build(BuildContext context) {
     return _shell.secondary(
       pageTitle: 'Promemoria',
+      badgeKey: widget.personalArea ? GestioneMenuBadgeKey.reminders : null,
       body: Stack(
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (widget.personalArea) ...[
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: ItineraryNotificationsConsentHint(),
+                ),
+              ],
               Padding(
                 padding: ItineraryPageShell.headerPadding(context),
                 child: Column(
@@ -182,6 +362,22 @@ class _RemindersPageState extends State<RemindersPage> {
                       'Con le notifiche itinerario attive ricevi anche un push '
                       'all\'orario impostato.',
                       style: TextStyle(color: Colors.black.withValues(alpha: 0.54)),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final filter in _ReminderMonthFilter.values)
+                          FilterChip(
+                            label: Text(filter.label),
+                            selected: _monthFilter == filter,
+                            onSelected: (selected) {
+                              if (!selected) return;
+                              setState(() => _monthFilter = filter);
+                            },
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -216,70 +412,7 @@ class _RemindersPageState extends State<RemindersPage> {
                       );
                     }
 
-                    final now = DateTime.now();
-                    return ListView.separated(
-                      padding: ItineraryPageShell.listPadding(context),
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        final isPast = item.remindAt.isBefore(now);
-                        return Card(
-                          color: AppCardTheme.surface,
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: (isPast ? Colors.orange : Colors.blue)
-                                  .withValues(alpha: 0.15),
-                              child: Icon(
-                                isPast ? Icons.notifications_active : Icons.alarm,
-                                color: isPast ? Colors.orange : Colors.blue,
-                              ),
-                            ),
-                            title: Text(
-                              item.title,
-                              style: const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(_formatDateTime(item.remindAt)),
-                                if (item.notes != null && item.notes!.isNotEmpty)
-                                  Text(item.notes!),
-                                if (item.pushSent)
-                                  const Text(
-                                    'Notifica inviata',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.green,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            isThreeLine: true,
-                            onTap: () => _openEditor(reminder: item),
-                            trailing: PopupMenuButton<String>(
-                              onSelected: (action) async {
-                                if (action == 'edit') {
-                                  await _openEditor(reminder: item);
-                                } else if (action == 'delete') {
-                                  await FieldReminderService.delete(item.id);
-                                }
-                              },
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(
-                                  value: 'edit',
-                                  child: Text('Modifica'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('Elimina'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
+                    return _buildFilteredList(items);
                   },
                 ),
               ),

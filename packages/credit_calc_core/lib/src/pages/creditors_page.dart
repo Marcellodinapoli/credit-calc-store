@@ -1,11 +1,11 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-import '../core/firestore_user_scope.dart';
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
 
+import 'commission_creditor_data_access.dart';
 import 'creditor_detail_page.dart';
+import 'creditors_list_data_access.dart';
 
 class CreditorsPage extends StatelessWidget {
   const CreditorsPage({super.key});
@@ -57,8 +57,7 @@ class CreditorsPage extends StatelessWidget {
 
   Future<void> _addCreditor(BuildContext context, int currentCount) async {
     final label = 'Creditore ${currentCount + 1}';
-    final docId =
-        FirebaseFirestore.instance.collection('creditors').doc().id;
+    final docId = CreditorsListDataAccess.instance.newCreditorId();
 
     if (!context.mounted) return;
 
@@ -80,20 +79,13 @@ class CreditorsPage extends StatelessWidget {
     }
   }
 
-  String _listLabel(int index, String name) {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return 'Creditore ${index + 1}';
-    if (trimmed.toLowerCase().startsWith('creditore')) return trimmed;
-    return 'Creditore ${index + 1}: $trimmed';
-  }
-
   @override
   Widget build(BuildContext context) {
     return wrapCreditCalcPage(
       pageTitle: 'Lista creditori',
       current: CreditCalcNavItem.creditors,
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirestoreUserScope.creditorsOrdered().snapshots(),
+      body: StreamBuilder<List<CreditorRecord>>(
+        stream: CreditorsListDataAccess.instance.watchCreditors(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -108,9 +100,7 @@ class CreditorsPage extends StatelessWidget {
             );
           }
 
-          final docs = FirestoreUserScope.sortCreditorsByCreatedAt(
-            snapshot.data?.docs ?? const [],
-          );
+          final records = snapshot.data ?? const [];
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -120,9 +110,9 @@ class CreditorsPage extends StatelessWidget {
                 runSpacing: 10,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Chip(label: Text('Totale creditori: ${docs.length}')),
+                  Chip(label: Text('Totale creditori: ${records.length}')),
                   ElevatedButton.icon(
-                    onPressed: () => _addCreditor(context, docs.length),
+                    onPressed: () => _addCreditor(context, records.length),
                     icon: const Icon(Icons.add),
                     label: const Text('Aggiungi'),
                   ),
@@ -131,7 +121,7 @@ class CreditorsPage extends StatelessWidget {
               const SizedBox(height: 16),
               Expanded(
                 child: Card(
-                  child: docs.isEmpty
+                  child: records.isEmpty
                       ? const Center(
                           child: Text(
                             'Nessun creditore presente.\n'
@@ -140,12 +130,12 @@ class CreditorsPage extends StatelessWidget {
                           ),
                         )
                       : ListView.separated(
-                          itemCount: docs.length,
+                          itemCount: records.length,
                           separatorBuilder: (_, __) =>
                               const Divider(height: 1),
                           itemBuilder: (context, index) {
-                            final doc = docs[index];
-                            final data = doc.data();
+                            final record = records[index];
+                            final data = record.data;
                             final name = (data['name'] ?? '').toString();
                             final notes = (data['notes'] ?? '').toString();
                             final maxAgeRaw = data['maxAge'];
@@ -154,7 +144,7 @@ class CreditorsPage extends StatelessWidget {
                                 : int.tryParse(
                                         maxAgeRaw?.toString() ?? '') ??
                                     80;
-                            final label = _listLabel(index, name);
+                            final label = creditorDisplayLabel(index, data);
 
                             return ListTile(
                               title: Text(label),
@@ -163,7 +153,7 @@ class CreditorsPage extends StatelessWidget {
                               onTap: () async {
                                 final result = await _openCreditorForm(
                                   context,
-                                  creditorId: doc.id,
+                                  creditorId: record.id,
                                   name: label,
                                   notes: notes,
                                   maxAge: maxAge,

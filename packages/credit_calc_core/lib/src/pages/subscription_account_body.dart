@@ -21,31 +21,6 @@ class SubscriptionAccountBody extends StatefulWidget {
 
 class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
   bool _busy = false;
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  Widget _planScrollView({required List<Widget> children}) {
-    return AbsorbPointer(
-      absorbing: _busy,
-      child: SingleChildScrollView(
-        controller: _scrollController,
-        primary: false,
-        padding: const EdgeInsets.all(16),
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: ClampingScrollPhysics(),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: children,
-        ),
-      ),
-    );
-  }
 
   Future<void> _runAction(
     Future<void> Function() action, {
@@ -196,95 +171,15 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
         final sub = snapshot.data!;
         final isCompany = isCompanySubscriptionAudience(sub.registerType);
 
-        if (!sub.canManage) {
-          return _planScrollView(
-            children: [
-              Text(
-                'Il tuo piano',
-                style: GoogleFonts.inter(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Il piano è gestito dalla tua azienda.',
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                  height: 1.45,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Card(
-                color: ProjectColors.area.withValues(alpha: 0.06),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppCardTheme.radius),
-                  side: BorderSide(
-                    color: ProjectColors.area.withValues(alpha: 0.35),
-                  ),
-                ),
-                child: const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Piano attuale',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          color: ProjectColors.area,
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        'Gratis',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 28),
-              Text(
-                'I miei consumi',
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppCardTheme.radius),
-                  side: BorderSide(color: Colors.grey.shade200),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    'Utilizzo gestito dall\'azienda.',
-                    style: TextStyle(
-                      color: Colors.grey.shade800,
-                      fontSize: 14,
-                      height: 1.45,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        }
-
         if (isCompany) {
           final plans = companySubscriptionPlans();
           final current = companySubscriptionPlanForId(sub.planId);
 
-          return _planScrollView(
-            children: [
+          return AbsorbPointer(
+            absorbing: _busy,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
                 Text(
                   'Il tuo piano',
                   style: GoogleFonts.inter(
@@ -357,21 +252,22 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                   style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
-                for (var i = 0; i < plans.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 10),
-                  _PlanCard(
-                    plan: plans[i],
+                _PlanCardsLayout(
+                  plans: plans,
+                  sideBySideBreakpoint: 640,
+                  builder: (plan) => _PlanCard(
+                    plan: plan,
                     currentPlanId: normalizeCompanyPlanId(sub.planId),
-                    isCurrent: _isSameCompanyPlan(plans[i].id, sub.planId),
+                    isCurrent: _isSameCompanyPlan(plan.id, sub.planId),
                     canChange: sub.canChangePlan,
                     isCompanyAudience: true,
-                    tierLabelOverride: plans[i].name,
+                    tierLabelOverride: plan.name,
                     onSelect: sub.canChangePlan &&
-                            !_isSameCompanyPlan(plans[i].id, sub.planId)
-                        ? () => _onChangePlan(sub, plans[i], isCompany: true)
+                            !_isSameCompanyPlan(plan.id, sub.planId)
+                        ? () => _onChangePlan(sub, plan, isCompany: true)
                         : null,
                   ),
-                ],
+                ),
                 const SizedBox(height: 28),
                 StreamBuilder<CompanyCollaboratorUsage?>(
                   stream: CompanyCollaboratorLimitService
@@ -382,7 +278,17 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                       return const _MyConsumptionSection.loading();
                     }
                     final usage = usageSnap.data;
-                    if (usage == null) return const SizedBox.shrink();
+                    if (usage == null) {
+                      return _MyConsumptionSection(
+                        items: [
+                          PlanUsageItem(
+                            label: 'Collaboratori attivi',
+                            used: 0,
+                            limit: companyCollaboratorLimitForPlan(sub.planId),
+                          ),
+                        ],
+                      );
+                    }
                     return _MyConsumptionSection(
                       items: [
                         PlanUsageItem(
@@ -411,14 +317,18 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                   const Center(child: CircularProgressIndicator()),
                 ],
               ],
+            ),
           );
         }
 
         final plans = subscriptionPlansForType(sub.registerType);
         final current = sub.planOption(plans);
 
-        return _planScrollView(
-          children: [
+        return AbsorbPointer(
+          absorbing: _busy,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
               Text(
                 'Il tuo piano',
                 style: GoogleFonts.inter(
@@ -477,70 +387,39 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                 style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
               ),
               const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final sideBySide = constraints.maxWidth >= 640;
-                  if (!sideBySide) {
-                    return Column(
-                      children: [
-                        for (var i = 0; i < plans.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 10),
-                          _PlanCard(
-                            plan: plans[i],
-                            currentPlanId: sub.planId,
-                            isCurrent: plans[i].id == sub.planId,
-                            canChange: sub.canChangePlan,
-                            onSelect: sub.canChangePlan &&
-                                    plans[i].id != sub.planId
-                                ? () =>
-                                    _onChangePlan(sub, plans[i], isCompany: false)
-                                : null,
-                          ),
-                        ],
-                      ],
-                    );
-                  }
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (var i = 0; i < plans.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 12),
-                        Expanded(
-                          child: _PlanCard(
-                            plan: plans[i],
-                            currentPlanId: sub.planId,
-                            isCurrent: plans[i].id == sub.planId,
-                            canChange: sub.canChangePlan,
-                            onSelect: sub.canChangePlan &&
-                                    plans[i].id != sub.planId
-                                ? () => _onChangePlan(
-                                      sub,
-                                      plans[i],
-                                      isCompany: false,
-                                    )
-                                : null,
-                          ),
-                        ),
-                      ],
-                    ],
-                  );
-                },
+              _PlanCardsLayout(
+                plans: plans,
+                sideBySideBreakpoint: 640,
+                builder: (plan) => _PlanCard(
+                  plan: plan,
+                  currentPlanId: sub.planId,
+                  isCurrent: plan.id == sub.planId,
+                  canChange: sub.canChangePlan,
+                  onSelect: sub.canChangePlan && plan.id != sub.planId
+                      ? () => _onChangePlan(sub, plan, isCompany: false)
+                      : null,
+                  stretch: true,
+                ),
               ),
               const SizedBox(height: 28),
-              StreamBuilder<List<PlanUsageItem>>(
-                stream: PublicUsageService.watchUsageItems(),
-                builder: (context, usageSnap) {
-                  if (usageSnap.connectionState == ConnectionState.waiting &&
-                      !usageSnap.hasData) {
-                    return const _MyConsumptionSection.loading();
-                  }
-                  final items = usageSnap.data;
-                  if (items == null || items.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
-                  return _MyConsumptionSection(items: items);
-                },
-              ),
+              if (PublicUsageService.shouldEnforceForUserType(sub.registerType))
+                StreamBuilder<List<PlanUsageItem>>(
+                  key: ValueKey(sub.planId),
+                  stream: PublicUsageService.watchUsageForPlan(sub.planId),
+                  builder: (context, usageSnap) {
+                    if (usageSnap.connectionState == ConnectionState.waiting &&
+                        !usageSnap.hasData) {
+                      return const _MyConsumptionSection.loading();
+                    }
+                    final items = usageSnap.data;
+                    if (items == null || items.isEmpty) {
+                      return _MyConsumptionSection(
+                        items: PublicUsageService.fallbackUsageItems(sub.planId),
+                      );
+                    }
+                    return _MyConsumptionSection(items: items);
+                  },
+                ),
               if (sub.lifetimeAccess) ...[
                 const SizedBox(height: 16),
                 Text(
@@ -558,6 +437,49 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                 const Center(child: CircularProgressIndicator()),
               ],
             ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PlanCardsLayout extends StatelessWidget {
+  const _PlanCardsLayout({
+    required this.plans,
+    required this.builder,
+    this.sideBySideBreakpoint = 640,
+  });
+
+  final List<SubscriptionPlanOption> plans;
+  final Widget Function(SubscriptionPlanOption plan) builder;
+  final double sideBySideBreakpoint;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final sideBySide = constraints.maxWidth >= sideBySideBreakpoint;
+        if (!sideBySide) {
+          return Column(
+            children: [
+              for (var i = 0; i < plans.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                builder(plans[i]),
+              ],
+            ],
+          );
+        }
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < plans.length; i++) ...[
+                if (i > 0) const SizedBox(width: 12),
+                Expanded(child: builder(plans[i])),
+              ],
+            ],
+          ),
         );
       },
     );
@@ -618,9 +540,13 @@ class _CurrentPlanCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              _PlanDescriptionList(
-                description: plan!.description,
-                fontSize: 14,
+              Text(
+                plan!.description,
+                style: TextStyle(
+                  color: Colors.grey.shade800,
+                  height: 1.45,
+                  fontSize: 14,
+                ),
               ),
             ],
             if (snapshot.cancelledAt != null) ...[
@@ -1000,6 +926,7 @@ class _PlanCard extends StatelessWidget {
     required this.isCurrent,
     required this.canChange,
     this.onSelect,
+    this.stretch = false,
     this.tierLabelOverride,
     this.isCompanyAudience = false,
   });
@@ -1009,6 +936,7 @@ class _PlanCard extends StatelessWidget {
   final bool isCurrent;
   final bool canChange;
   final VoidCallback? onSelect;
+  final bool stretch;
   final String? tierLabelOverride;
   final bool isCompanyAudience;
 
@@ -1021,21 +949,24 @@ class _PlanCard extends StatelessWidget {
           _ => 'FREE',
         };
 
-    return Card(
-      color: isCurrent ? Colors.white : AppCardTheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppCardTheme.radius),
-        side: BorderSide(
-          color: isCurrent ? ProjectColors.area : const Color(0xFFE5E7EB),
-          width: isCurrent ? 2 : 1,
+    return SizedBox(
+      width: double.infinity,
+      height: stretch ? double.infinity : null,
+      child: Card(
+        color: isCurrent ? Colors.white : AppCardTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppCardTheme.radius),
+          side: BorderSide(
+            color: isCurrent ? ProjectColors.area : const Color(0xFFE5E7EB),
+            width: isCurrent ? 2 : 1,
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: stretch ? MainAxisSize.max : MainAxisSize.min,
+            children: [
             Row(
               children: [
                 Text(
@@ -1065,9 +996,13 @@ class _PlanCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            _PlanDescriptionList(
-              description: plan.description,
-              fontSize: 13,
+            Text(
+              plan.description,
+              style: TextStyle(
+                color: Colors.grey.shade800,
+                height: 1.45,
+                fontSize: 13,
+              ),
             ),
             if (!plan.availableNow && plan.id != 'free') ...[
               const SizedBox(height: 8),
@@ -1092,6 +1027,7 @@ class _PlanCard extends StatelessWidget {
                 ),
               ),
             ],
+            if (stretch) const Spacer(),
             if (isCurrent) ...[
               const SizedBox(height: 10),
               Align(
@@ -1128,7 +1064,8 @@ class _PlanCard extends StatelessWidget {
                 ),
               ),
             ],
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1173,69 +1110,6 @@ class _StatusChip extends StatelessWidget {
         label,
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       ),
-    );
-  }
-}
-
-class _PlanDescriptionList extends StatelessWidget {
-  const _PlanDescriptionList({
-    required this.description,
-    required this.fontSize,
-  });
-
-  final String description;
-  final double fontSize;
-
-  @override
-  Widget build(BuildContext context) {
-    final textStyle = TextStyle(
-      color: Colors.grey.shade800,
-      height: 1.45,
-      fontSize: fontSize,
-    );
-    final blocks = description
-        .split('\n\n')
-        .map((block) => block.trim())
-        .where((block) => block.isNotEmpty)
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < blocks.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _buildBlock(blocks[i], textStyle),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildBlock(String block, TextStyle textStyle) {
-    if (!block.contains(' · ')) {
-      return Text(block, style: textStyle);
-    }
-
-    final items = block
-        .split(' · ')
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < items.length; i++)
-          Padding(
-            padding: EdgeInsets.only(bottom: i < items.length - 1 ? 4 : 0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('• ', style: textStyle),
-                Expanded(child: Text(items[i], style: textStyle)),
-              ],
-            ),
-          ),
-      ],
     );
   }
 }

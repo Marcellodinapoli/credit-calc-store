@@ -15,6 +15,7 @@ import '../../../widgets/schedule_field_visit_dialog.dart';
 import '../../../widgets/visit_practice_links.dart';
 import '../../../widgets/voice_note_field.dart';
 import '../commission_collections_shared.dart';
+import '../../../services/gestione_menu_badge_service.dart';
 import 'itinerary_page_shell.dart';
 import 'territory_map_page.dart';
 
@@ -348,6 +349,8 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
   Widget build(BuildContext context) {
     return _shell.secondary(
       pageTitle: widget.pageTitle,
+      badgeKey:
+          widget.personalArea ? GestioneMenuBadgeKey.appointments : null,
       body: Stack(
         children: [
           Column(

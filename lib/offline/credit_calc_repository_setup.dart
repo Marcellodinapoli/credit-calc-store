@@ -4,7 +4,9 @@ import 'package:credit_calc_core/credit_calc_core.dart';
 
 import 'credit_calc_runtime.dart';
 import 'adapters/repository_commission_creditor_data_access.dart';
+import 'adapters/repository_commission_entries_data_access.dart';
 import 'adapters/repository_commission_entry_data_access.dart';
+import 'adapters/repository_creditors_list_data_access.dart';
 import 'models/credit_calc_mode.dart';
 import 'repository/credit_calc_repository.dart';
 import 'services/mode_preferences_service.dart';
@@ -31,6 +33,9 @@ abstract final class CreditCalcRepositorySetup {
         RepositoryCommissionEntryDataAccess();
     CommissionCreditorDataAccess.instance =
         RepositoryCommissionCreditorDataAccess();
+    CommissionEntriesDataAccess.instance =
+        RepositoryCommissionEntriesDataAccess();
+    CreditorsListDataAccess.instance = RepositoryCreditorsListDataAccess();
   }
 
   static void notifyDataChanged() {

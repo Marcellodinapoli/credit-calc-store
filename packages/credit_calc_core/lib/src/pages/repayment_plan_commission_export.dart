@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_action_styles.dart';
+import 'commission_creditor_data_access.dart';
+import 'commission_entry_data_access.dart';
 import 'commission_export_dialog.dart';
 import 'commission_payment_resolver.dart';
 
@@ -157,18 +159,16 @@ abstract final class RepaymentPlanCommissionExporter {
       );
     }
 
-    final creditorDoc = await FirebaseFirestore.instance
-        .collection('creditors')
-        .doc(request.creditorId)
-        .get();
-    if (!creditorDoc.exists) {
+    final creditorData = await CommissionCreditorDataAccess.instance.loadCreditor(
+      request.creditorId,
+    );
+    if (creditorData == null) {
       return const RepaymentPlanCommissionExportResult(
         savedCount: 0,
         errors: ['Creditore non trovato.'],
       );
     }
 
-    final creditorData = creditorDoc.data() ?? {};
     final options = CommissionPaymentResolver.entryOptions(creditorData);
 
     final pdrKey = pdrCommissionKeyForPlanMethod(request.planPaymentMethod);
@@ -272,28 +272,32 @@ abstract final class RepaymentPlanCommissionExporter {
       );
     }
 
-    final batch = FirebaseFirestore.instance.batch();
-    final collection = FirebaseFirestore.instance.collection('calculations');
+    final access = CommissionEntryDataAccess.instance;
     var deleted = 0;
+    final errors = <String>[];
+    final deletedIds = <String>[];
 
     for (final id in uniqueIds) {
-      batch.delete(collection.doc(id));
-      deleted++;
+      try {
+        await access.deleteEntry(id);
+        deleted++;
+        deletedIds.add(id);
+      } catch (_) {
+        errors.add('Impossibile eliminare l\'incasso $id.');
+      }
     }
 
-    try {
-      await batch.commit();
-    } catch (_) {
-      return const RepaymentPlanCommissionExportResult(
+    if (errors.isNotEmpty && deleted == 0) {
+      return RepaymentPlanCommissionExportResult(
         savedCount: 0,
-        errors: ['Errore durante l\'eliminazione degli incassi.'],
+        errors: errors,
       );
     }
 
     return RepaymentPlanCommissionExportResult(
       savedCount: deleted,
-      errors: const [],
-      savedDocIds: uniqueIds,
+      errors: errors,
+      savedDocIds: deletedIds,
     );
   }
 
@@ -308,28 +312,23 @@ abstract final class RepaymentPlanCommissionExporter {
       );
     }
 
-    final batch = FirebaseFirestore.instance.batch();
-    final collection = FirebaseFirestore.instance.collection('calculations');
-    final now = FieldValue.serverTimestamp();
+    final access = CommissionEntryDataAccess.instance;
     final docIds = <String>[];
 
     for (final payload in payloads) {
-      final ref = collection.doc();
-      payload['createdAt'] = now;
-      batch.set(ref, payload);
-      docIds.add(ref.id);
-    }
-
-    try {
-      await batch.commit();
-    } catch (_) {
-      return RepaymentPlanCommissionExportResult(
-        savedCount: 0,
-        errors: [
-          ...errors,
-          'Errore durante il salvataggio degli incassi.',
-        ],
-      );
+      try {
+        final id = await access.saveEntry(payload: payload);
+        docIds.add(id);
+      } catch (_) {
+        return RepaymentPlanCommissionExportResult(
+          savedCount: docIds.length,
+          errors: [
+            ...errors,
+            'Errore durante il salvataggio degli incassi.',
+          ],
+          savedDocIds: docIds,
+        );
+      }
     }
 
     return RepaymentPlanCommissionExportResult(
@@ -364,19 +363,17 @@ abstract final class RepaymentPlanCommissionExporter {
       );
     }
 
-    final creditorDoc = await FirebaseFirestore.instance
-        .collection('creditors')
-        .doc(creditorId)
-        .get();
-    if (!creditorDoc.exists) {
+    final creditorData = await CommissionCreditorDataAccess.instance.loadCreditor(
+      creditorId,
+    );
+    if (creditorData == null) {
       return const RepaymentPlanCommissionExportResult(
         savedCount: 0,
         errors: ['Creditore non trovato.'],
       );
     }
 
-    final options =
-        CommissionPaymentResolver.entryOptions(creditorDoc.data() ?? {});
+    final options = CommissionPaymentResolver.entryOptions(creditorData);
     final payment = _optionForKey(options, paymentMethodKey);
     if (payment == null) {
       return RepaymentPlanCommissionExportResult(
@@ -453,7 +450,6 @@ abstract final class RepaymentPlanCommissionExporter {
       'commissionAmount': commissionAmount,
       'incentiveAmount': 0,
       'totalCommissionAmount': commissionAmount,
-      'updatedAt': FieldValue.serverTimestamp(),
     };
   }
 }

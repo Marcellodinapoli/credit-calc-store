@@ -4,6 +4,7 @@ import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
 
 import 'backoffice_pending_plan.dart';
+import 'backoffice_pending_plan_host_config.dart';
 import 'balance_write_off_page.dart';
 import 'standard_repayment_plan_page.dart';
 
@@ -17,15 +18,23 @@ class BackofficePendingPlansPage extends StatelessWidget {
     return 'In attesa di riscontro · $days giorni';
   }
 
-  String _acceptedLabel(BackofficePendingPlan plan) {
-    final date = plan.acceptedAt!;
-    final time =
-        '${date.hour.toString().padLeft(2, '0')}:'
-        '${date.minute.toString().padLeft(2, '0')}';
-    return 'Accettato il ${_formatDate(date)} alle $time';
+  String _acceptedLabel(
+    BackofficePendingPlan plan, {
+    bool includeVia = true,
+  }) {
+    final date = 'Accettato il ${_formatDate(plan.acceptedAt!)}';
+    if (!includeVia) return date;
+    final via = plan.acceptedVia == BackofficeAcceptedVia.commission
+        ? 'tramite incasso in provvigioni'
+        : 'manualmente';
+    return '$date · $via';
   }
 
-  List<Widget> _planMetaLines(BackofficePendingPlan plan) {
+  List<Widget> _planMetaLines(
+    BackofficePendingPlan plan, {
+    bool includeAcceptedVia = true,
+    bool showIncassoInserito = false,
+  }) {
     return [
       Text(
         'Inviato il ${_formatDate(plan.submittedAt)}',
@@ -34,7 +43,7 @@ class BackofficePendingPlansPage extends StatelessWidget {
       const SizedBox(height: 4),
       if (plan.isAccepted)
         Text(
-          _acceptedLabel(plan),
+          _acceptedLabel(plan, includeVia: includeAcceptedVia),
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -50,6 +59,19 @@ class BackofficePendingPlansPage extends StatelessWidget {
             color: Colors.orange.shade900,
           ),
         ),
+      if (showIncassoInserito &&
+          plan.isAccepted &&
+          plan.hasCommissionExport) ...[
+        const SizedBox(height: 4),
+        Text(
+          'Incasso inserito',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Colors.green.shade800,
+          ),
+        ),
+      ],
       if (plan.modifiedAt != null) ...[
         const SizedBox(height: 4),
         Text(
@@ -82,21 +104,36 @@ class BackofficePendingPlansPage extends StatelessWidget {
     BackofficePendingPlan plan, {
     bool autoOpenCommissionExport = false,
   }) async {
+    await BackofficePendingPlanHostConfig.ensureDataReady?.call();
+
+    final request = BackofficePlanEditorRequest(
+      pendingPlanId: plan.id,
+      initialFormData: plan.formData,
+      skipInitialUsageGuard: true,
+      autoOpenCommissionExport: autoOpenCommissionExport,
+      initialCommissionDocIds: plan.commissionDocIds,
+      initialCompanyName: plan.companyName,
+    );
+
     final page = plan.type == BackofficePendingPlanType.repayment
-        ? StandardRepaymentPlanPage(
-            pendingPlanId: plan.id,
-            initialFormData: plan.formData,
-            skipInitialUsageGuard: true,
-            autoOpenCommissionExport: autoOpenCommissionExport,
-            initialCommissionDocIds: plan.commissionDocIds,
-          )
-        : BalanceWriteOffPage(
-            pendingPlanId: plan.id,
-            initialFormData: plan.formData,
-            skipInitialUsageGuard: true,
-            autoOpenCommissionExport: autoOpenCommissionExport,
-            initialCommissionDocIds: plan.commissionDocIds,
-          );
+        ? BackofficePendingPlanHostConfig.buildRepaymentPlanPage?.call(request) ??
+            StandardRepaymentPlanPage(
+              pendingPlanId: request.pendingPlanId,
+              initialFormData: request.initialFormData,
+              skipInitialUsageGuard: request.skipInitialUsageGuard,
+              autoOpenCommissionExport: request.autoOpenCommissionExport,
+              initialCommissionDocIds: request.initialCommissionDocIds,
+              initialCompanyName: request.initialCompanyName,
+            )
+        : BackofficePendingPlanHostConfig.buildBalanceWriteOffPage?.call(request) ??
+            BalanceWriteOffPage(
+              pendingPlanId: request.pendingPlanId,
+              initialFormData: request.initialFormData,
+              skipInitialUsageGuard: request.skipInitialUsageGuard,
+              autoOpenCommissionExport: request.autoOpenCommissionExport,
+              initialCommissionDocIds: request.initialCommissionDocIds,
+              initialCompanyName: request.initialCompanyName,
+            );
 
     await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(builder: (_) => page),
@@ -239,47 +276,12 @@ class BackofficePendingPlansPage extends StatelessWidget {
     return wrapCreditCalcPage(
       secondary: true,
       pageTitle: 'Riscontro backoffice',
-      current: CreditCalcNavItem.develop,
+      current: CreditCalcNavItem.management,
       body: StreamBuilder<List<BackofficePendingPlan>>(
         stream: BackofficePendingPlanService.watchAll(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData &&
-              !snapshot.hasError) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.error_outline, size: 40, color: Colors.red.shade700),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Impossibile caricare i piani in attesa di riscontro.',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade900,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${snapshot.error}',
-                      style: TextStyle(
-                        color: Colors.grey.shade700,
-                        height: 1.45,
-                        fontSize: 13,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            );
           }
 
           final plans = snapshot.data ?? const [];
@@ -302,8 +304,6 @@ class BackofficePendingPlansPage extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final plan = plans[index];
-              final companyName =
-                  (plan.formData['companyName'] ?? '').toString().trim();
               return Card(
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
@@ -326,9 +326,6 @@ class BackofficePendingPlansPage extends StatelessWidget {
                             ),
                             if (plan.isAccepted)
                               Container(
-                                margin: EdgeInsets.only(
-                                  left: plan.hasCommissionExport ? 6 : 0,
-                                ),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
                                   vertical: 4,
@@ -345,10 +342,9 @@ class BackofficePendingPlansPage extends StatelessWidget {
                                     color: Colors.green.shade800,
                                   ),
                                 ),
-                              ),
-                            if (plan.hasCommissionExport)
+                              )
+                            else if (plan.hasCommissionExport)
                               Container(
-                                margin: const EdgeInsets.only(left: 6),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
                                   vertical: 4,
@@ -369,22 +365,26 @@ class BackofficePendingPlansPage extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 6),
+                        if (plan.companyName?.isNotEmpty == true) ...[
+                          Text(
+                            plan.companyName!,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                        ],
                         Text(
                           plan.creditorName,
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        if (companyName.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            'Ragione sociale: $companyName',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey.shade800,
-                            ),
-                          ),
-                        ],
                         const SizedBox(height: 8),
-                        ..._planMetaLines(plan),
+                        ..._planMetaLines(
+                          plan,
+                          includeAcceptedVia: false,
+                          showIncassoInserito: true,
+                        ),
                       ],
                     ),
                   ),

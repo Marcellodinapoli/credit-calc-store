@@ -34,7 +34,8 @@ Future<void> _persistIds() async {
   await prefs.setString(_storageKey, jsonEncode(_cachedIds));
 }
 
-List<String> readRepaymentPlanCommissionDocIds() => List.unmodifiable(_cachedIds);
+List<String> readRepaymentPlanCommissionDocIds() =>
+    List.unmodifiable(_cachedIds);
 
 void appendRepaymentPlanCommissionDocIds(List<String> ids) {
   if (ids.isEmpty) return;

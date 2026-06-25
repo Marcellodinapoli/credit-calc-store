@@ -40,6 +40,11 @@ class ItineraryDaySummaryCard extends StatelessWidget {
                           d.day == today.day;
                     }).length;
 
+                    const summaryStyle = TextStyle(
+                      color: Color(0xFF1565C0),
+                      height: 1.4,
+                    );
+
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -52,11 +57,18 @@ class ItineraryDaySummaryCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _summaryLine(visits, activities, reminders),
-                          style: const TextStyle(
-                            color: Color(0xFF1565C0),
-                            height: 1.4,
-                          ),
+                          '$visits ${visits == 1 ? 'appuntamento' : 'appuntamenti'}',
+                          style: summaryStyle,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$activities ${activities == 1 ? 'attività aperta' : 'attività aperte'}',
+                          style: summaryStyle,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$reminders promemoria',
+                          style: summaryStyle,
                         ),
                       ],
                     );
@@ -68,14 +80,5 @@ class ItineraryDaySummaryCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _summaryLine(int visits, int activities, int reminders) {
-    final parts = <String>[
-      '$visits ${visits == 1 ? 'appuntamento' : 'appuntamenti'}',
-      '$activities ${activities == 1 ? 'attività aperta' : 'attività aperte'}',
-      '$reminders ${reminders == 1 ? 'promemoria' : 'promemoria'}',
-    ];
-    return parts.join(' · ');
   }
 }

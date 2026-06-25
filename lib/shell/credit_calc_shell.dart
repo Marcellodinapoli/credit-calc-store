@@ -13,6 +13,8 @@ import '../pages/creditcalc/commissions_page.dart';
 import '../pages/creditcalc/credit_calc_settings_page.dart';
 import '../pages/creditcalc/creditors_page.dart';
 import '../pages/creditcalc/develop_page.dart';
+import '../pages/creditcalc/management_hub_page.dart';
+import '../pages/creditcalc/tools_page.dart';
 import '../ui/layout/page_shell.dart';
 import '../widgets/desktop_app_update_button.dart';
 import 'credit_core_account_menu_sheet.dart';
@@ -24,6 +26,14 @@ class CreditCalcShell extends StatefulWidget {
   @override
   State<CreditCalcShell> createState() => _CreditCalcShellState();
 }
+
+/// Sezioni nella barra inferiore CreditCalc.
+const creditCalcBottomNavItems = <CreditCalcNavItem>[
+  CreditCalcNavItem.creditors,
+  CreditCalcNavItem.develop,
+  CreditCalcNavItem.commissions,
+  CreditCalcNavItem.tools,
+];
 
 class _CreditCalcShellState extends State<CreditCalcShell> {
   CreditCalcNavItem _section = CreditCalcNavItem.creditors;
@@ -116,7 +126,6 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     } catch (_) {}
 
     CreditCalcRuntime.clear();
-    // AuthGate (home) reagisce ad authStateChanges e mostra di nuovo LoginPage.
   }
 
   String _logoutDialogMessage({
@@ -138,19 +147,21 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     return '${pendingText}Vuoi uscire dall\'account CreditCore?';
   }
 
+  void _openAnnouncements() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const AnnouncementsPage(),
+      ),
+    );
+  }
+
   void _showAccountMenu() {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (ctx) => CreditCoreAccountMenuSheet(
-        onAnnouncements: () {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const AnnouncementsPage(),
-            ),
-          );
-        },
+        onAnnouncements: _openAnnouncements,
         onLogout: _logout,
       ),
     );
@@ -164,6 +175,10 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
         return const DevelopPage();
       case CreditCalcNavItem.commissions:
         return const CommissionsPage();
+      case CreditCalcNavItem.tools:
+        return const ToolsPage();
+      case CreditCalcNavItem.management:
+        return const ManagementHubPage();
       case CreditCalcNavItem.subscription:
         return const SubscriptionAccountPage();
     }
@@ -177,8 +192,9 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
       return _MobileShell(
         section: _section,
         onSectionChanged: (item) => setState(() => _section = item),
-        onMenu: _showAccountMenu,
+        onAnnouncements: _openAnnouncements,
         onSettings: _openSettings,
+        onMenu: _showAccountMenu,
         child: _sectionPage(_section),
       );
     }
@@ -186,6 +202,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     return _DesktopShell(
       section: _section,
       onSectionChanged: (item) => setState(() => _section = item),
+      onAnnouncements: _openAnnouncements,
       onLogout: _logout,
       onSettings: _openSettings,
       child: _sectionPage(_section),
@@ -196,20 +213,24 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
 class _MobileShell extends StatelessWidget {
   final CreditCalcNavItem section;
   final ValueChanged<CreditCalcNavItem> onSectionChanged;
-  final VoidCallback onMenu;
+  final VoidCallback onAnnouncements;
   final Future<void> Function() onSettings;
+  final VoidCallback onMenu;
   final Widget child;
 
   const _MobileShell({
     required this.section,
     required this.onSectionChanged,
-    required this.onMenu,
+    required this.onAnnouncements,
     required this.onSettings,
+    required this.onMenu,
     required this.child,
   });
 
   @override
   Widget build(BuildContext context) {
+    final navIndex = creditCalcBottomNavItems.indexOf(section);
+
     return Scaffold(
       backgroundColor: PageShellTheme.scaffoldBackground,
       appBar: AppBar(
@@ -228,9 +249,10 @@ class _MobileShell extends StatelessWidget {
       ),
       body: child,
       bottomNavigationBar: NavigationBar(
-        selectedIndex: section.index,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        selectedIndex: navIndex >= 0 ? navIndex : 0,
         onDestinationSelected: (index) =>
-            onSectionChanged(CreditCalcNavItem.values[index]),
+            onSectionChanged(creditCalcBottomNavItems[index]),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.account_balance_outlined),
@@ -248,9 +270,9 @@ class _MobileShell extends StatelessWidget {
             label: 'Provvigioni',
           ),
           NavigationDestination(
-            icon: Icon(Icons.card_membership_outlined),
-            selectedIcon: Icon(Icons.card_membership),
-            label: 'Il mio piano',
+            icon: Icon(Icons.build_outlined),
+            selectedIcon: Icon(Icons.build),
+            label: 'Strumenti',
           ),
         ],
       ),
@@ -261,6 +283,7 @@ class _MobileShell extends StatelessWidget {
 class _DesktopShell extends StatelessWidget {
   final CreditCalcNavItem section;
   final ValueChanged<CreditCalcNavItem> onSectionChanged;
+  final VoidCallback onAnnouncements;
   final Future<void> Function() onLogout;
   final Future<void> Function() onSettings;
   final Widget child;
@@ -268,6 +291,7 @@ class _DesktopShell extends StatelessWidget {
   const _DesktopShell({
     required this.section,
     required this.onSectionChanged,
+    required this.onAnnouncements,
     required this.onLogout,
     required this.onSettings,
     required this.child,
@@ -295,12 +319,14 @@ class _DesktopShell extends StatelessWidget {
                     child: SizedBox(
                       height: 56,
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Row(
                           children: [
                             const _BrandTitle(),
                             const Spacer(),
-                            const AnnouncementsBellButton(iconColor: Colors.black87),
+                            const AnnouncementsBellButton(
+                              iconColor: Colors.black87,
+                            ),
                             const DesktopAppUpdateButton(compact: true),
                             const CreditCoreSiteIconButton(),
                             _SettingsIconButton(onPressed: onSettings),
@@ -379,10 +405,10 @@ class _SideNav extends StatelessWidget {
                 onTap: () => onSectionChanged(CreditCalcNavItem.commissions),
               ),
               _NavTile(
-                icon: Icons.card_membership,
-                label: 'Il mio piano',
-                selected: section == CreditCalcNavItem.subscription,
-                onTap: () => onSectionChanged(CreditCalcNavItem.subscription),
+                icon: Icons.build,
+                label: 'Strumenti',
+                selected: section == CreditCalcNavItem.tools,
+                onTap: () => onSectionChanged(CreditCalcNavItem.tools),
               ),
               const Spacer(),
               const CreditCoreSiteListTile(dense: true),

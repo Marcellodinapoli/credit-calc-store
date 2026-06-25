@@ -5,6 +5,9 @@ import '../core/theme/app_action_styles.dart';
 import '../core/theme/app_card_theme.dart';
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
+import '../section_lock/section_lock_scope.dart';
+import '../subscription/public_usage_guard.dart';
+import '../subscription/public_plan_limits.dart';
 
 import 'commission_payment_resolver.dart';
 
@@ -268,6 +271,22 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
+      final creditorSnap = await CommissionCreditorDataAccess.instance
+          .loadCreditor(_creditorId);
+      final existingSettings = creditorSnap?['commissionSettings'];
+      final hasSchema = existingSettings is Map && existingSettings.isNotEmpty;
+      if (!hasSchema) {
+        if (!mounted) return;
+        final allowed = await PublicUsageGuard.checkAndConsume(
+          context,
+          PublicUsageMetric.commissionSchema,
+        );
+        if (!allowed) {
+          if (mounted) setState(() => _saving = false);
+          return;
+        }
+      }
+
       final payload = {
         for (final mode in _modes)
           mode.key: {
@@ -371,80 +390,32 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
 
   Widget _tableHeader() {
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.grey.shade100,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
       ),
-      child: const Text(
-        'Modalità di pagamento e provvigione %',
-        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+      child: const Row(
+        children: [
+          SizedBox(width: 36),
+          Expanded(
+            flex: 5,
+            child: Text(
+              'Modalità di pagamento',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              'Provvigione %',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+          ),
+          SizedBox(width: 40),
+        ],
       ),
-    );
-  }
-
-  Widget _rateInputRow({
-    required bool allowed,
-    required _CommissionModeState row,
-    required VoidCallback? onClear,
-  }) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 72,
-          child: TextField(
-            controller: row.rateCtrl,
-            enabled: allowed,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            textAlign: TextAlign.center,
-            onChanged: allowed ? (_) => setState(() {}) : null,
-            style: TextStyle(
-              color: allowed ? Colors.black87 : Colors.black38,
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              filled: true,
-              fillColor: allowed ? Colors.white : Colors.grey.shade100,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 10,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              disabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade200),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          '%',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: allowed ? Colors.black87 : Colors.black38,
-          ),
-        ),
-        if (allowed)
-          IconButton(
-            onPressed: onClear,
-            icon: const Icon(Icons.delete_outline, size: 20),
-            color: Colors.red.shade700,
-            tooltip: 'Azzera provvigione',
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-          ),
-      ],
     );
   }
 
@@ -463,18 +434,16 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
         ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(
-              allowed ? Icons.check_circle_rounded : Icons.cancel_rounded,
-              color: allowed ? Colors.green.shade600 : Colors.red.shade400,
-              size: 22,
-            ),
+          Icon(
+            allowed ? Icons.check_circle_rounded : Icons.cancel_rounded,
+            color: allowed ? Colors.green.shade600 : Colors.red.shade400,
+            size: 22,
           ),
           const SizedBox(width: 12),
           Expanded(
+            flex: 5,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -493,14 +462,74 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ],
-                const SizedBox(height: 10),
-                _rateInputRow(
-                  allowed: allowed,
-                  row: row,
-                  onClear: allowed && row.rateCtrl.text.trim().isNotEmpty
-                      ? () => _clearRow(mode.key)
-                      : null,
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 72,
+                  child: TextField(
+                    controller: row.rateCtrl,
+                    enabled: allowed,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    textAlign: TextAlign.center,
+                    onChanged: allowed ? (_) => setState(() {}) : null,
+                    style: TextStyle(
+                      color: allowed ? Colors.black87 : Colors.black38,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      filled: true,
+                      fillColor: allowed ? Colors.white : Colors.grey.shade100,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      disabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade200),
+                      ),
+                    ),
+                  ),
                 ),
+                const SizedBox(width: 4),
+                Text(
+                  '%',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: allowed ? Colors.black87 : Colors.black38,
+                  ),
+                ),
+                if (allowed)
+                  IconButton(
+                    onPressed: row.rateCtrl.text.trim().isEmpty
+                        ? null
+                        : () => _clearRow(mode.key),
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                    color: Colors.red.shade700,
+                    tooltip: 'Azzera provvigione',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                  )
+                else
+                  const SizedBox(width: 36),
               ],
             ),
           ),
@@ -529,75 +558,57 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
   }
 
   Widget _actionBar() {
-    final cancelButton = OutlinedButton.icon(
-      onPressed: _saving ? null : _cancelChanges,
-      icon: const Icon(
-        Icons.refresh,
-        color: AppActionStyles.cancelForeground,
-      ),
-      label: const Text(
-        'Annulla modifiche',
-        style: TextStyle(fontWeight: FontWeight.w600),
-      ),
-      style: AppActionStyles.cancelOutlined.copyWith(
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
-      ),
-    );
-
-    final saveButton = FilledButton.icon(
-      onPressed: _canSave ? _save : null,
-      icon: _saving
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            )
-          : const Icon(Icons.save_outlined, color: Colors.white),
-      label: Text(
-        _saving ? 'Salvataggio...' : 'Salva provvigioni',
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      style: FilledButton.styleFrom(
-        backgroundColor: _primaryBlue,
-        foregroundColor: Colors.white,
-        disabledBackgroundColor: Colors.grey.shade300,
-        disabledForegroundColor: Colors.grey.shade600,
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-      ),
-    );
-
     return Card(
       color: Colors.white,
       elevation: AppCardTheme.elevation,
       shape: AppCardTheme.shape,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final stackButtons = constraints.maxWidth < 520;
-            if (stackButtons) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  saveButton,
-                  const SizedBox(height: 10),
-                  cancelButton,
-                ],
-              );
-            }
-            return Row(
-              children: [
-                Expanded(child: cancelButton),
-                const SizedBox(width: 12),
-                Expanded(flex: 2, child: saveButton),
-              ],
-            );
-          },
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _saving ? null : _cancelChanges,
+                icon: const Icon(
+                  Icons.refresh,
+                  color: AppActionStyles.cancelForeground,
+                ),
+                label: const Text(
+                  'Annulla modifiche',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                style: AppActionStyles.cancelOutlined,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: FilledButton.icon(
+                onPressed: _canSave ? _save : null,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.save_outlined, color: Colors.white),
+                label: Text(
+                  _saving ? 'Salvataggio...' : 'Salva provvigioni',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _primaryBlue,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  disabledForegroundColor: Colors.grey.shade600,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -609,7 +620,9 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
       secondary: true,
       pageTitle: 'Impostazioni provvigioni',
       current: CreditCalcNavItem.commissions,
-      body: ColoredBox(
+      body: SectionLockScope(
+        sectionKey: 'commission_settings:${widget.creditorId}',
+        child: ColoredBox(
         color: const Color(0xFFE8E8E8),
         child: _loading
             ? const Center(child: CircularProgressIndicator())
@@ -668,6 +681,7 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
                 _actionBar(),
               ],
             ),
+        ),
       ),
     );
   }

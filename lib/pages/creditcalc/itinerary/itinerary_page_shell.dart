@@ -2,6 +2,8 @@ import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/dimensions.dart';
+import '../../../core/maintenance_service.dart';
+import '../../../services/gestione_menu_badge_service.dart';
 import '../../area/personal_area_shell.dart';
 
 class ItineraryPageShell {
@@ -32,9 +34,19 @@ class ItineraryPageShell {
     );
   }
 
-  Widget primary({required String pageTitle, required Widget body}) {
+  Widget primary({
+    required String pageTitle,
+    required Widget body,
+    GestioneMenuBadgeKey? badgeKey,
+  }) {
     if (personalArea) {
-      return PersonalAreaShell(pageTitle: pageTitle, body: body);
+      return PersonalAreaShell(
+        pageTitle: pageTitle,
+        gestioneSection: true,
+        gestioneBadgeKey: badgeKey,
+        maintenanceSection: MaintenanceService.creditCalc,
+        body: body,
+      );
     }
     return wrapCreditCalcPage(
       pageTitle: pageTitle,
@@ -43,9 +55,19 @@ class ItineraryPageShell {
     );
   }
 
-  Widget secondary({required String pageTitle, required Widget body}) {
+  Widget secondary({
+    required String pageTitle,
+    required Widget body,
+    GestioneMenuBadgeKey? badgeKey,
+  }) {
     if (personalArea) {
-      return PersonalAreaShell(pageTitle: pageTitle, body: body);
+      return PersonalAreaShell(
+        pageTitle: pageTitle,
+        gestioneSection: true,
+        gestioneBadgeKey: badgeKey,
+        maintenanceSection: MaintenanceService.creditCalc,
+        body: body,
+      );
     }
     return wrapCreditCalcPage(
       secondary: true,

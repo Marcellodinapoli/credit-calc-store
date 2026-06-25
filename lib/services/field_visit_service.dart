@@ -1,20 +1,18 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 import '../core/firestore_user_scope.dart';
 import '../models/field_visit.dart';
 import 'creditor_visit_address_service.dart';
 import 'field_visit_notification_service.dart';
 import 'geocoding_service.dart';
+import 'itinerary_storage.dart';
 
 abstract final class FieldVisitService {
-  static CollectionReference<Map<String, dynamic>> get _col =>
-      FirebaseFirestore.instance.collection('field_visits');
+  static ItineraryStorage get _storage => ItineraryStorage.instance;
 
-  static DateTime _dayStart(DateTime day) =>
-      DateTime(day.year, day.month, day.day);
+  static bool _isSameLocalDay(DateTime a, DateTime day) =>
+      a.year == day.year && a.month == day.month && a.day == day.day;
 
-  static DateTime _dayEnd(DateTime day) =>
-      _dayStart(day).add(const Duration(days: 1));
+  static DateTime localDayKey(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
 
   static String visitDayKeyId(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-'
@@ -49,9 +47,7 @@ abstract final class FieldVisitService {
     DateTime scheduledAt, {
     String? excludeVisitId,
   }) async {
-    final userId = FirestoreUserScope.uid;
-    if (userId == null) return false;
-    final visits = await fetchAllForUser(userId);
+    final visits = await _storage.fetchAllVisits();
     return hasAppointmentAt(
       visits,
       scheduledAt,
@@ -78,14 +74,8 @@ abstract final class FieldVisitService {
     List<FieldVisit> visits,
     DateTime day,
   ) {
-    final start = _dayStart(day);
-    final end = _dayEnd(day);
-    final filtered = visits
-        .where(
-          (v) =>
-              !v.scheduledAt.isBefore(start) && v.scheduledAt.isBefore(end),
-        )
-        .toList();
+    final filtered =
+        visits.where((v) => _isSameLocalDay(v.scheduledAt, day)).toList();
     filtered.sort((a, b) {
       final orderA = a.routeOrder ?? 9999;
       final orderB = b.routeOrder ?? 9999;
@@ -152,6 +142,7 @@ abstract final class FieldVisitService {
       }
     }
 
+    final isNew = id == null || id.isEmpty;
     final visit = FieldVisit(
       id: id ?? '',
       userId: userId,
@@ -168,20 +159,12 @@ abstract final class FieldVisitService {
       routeOrder: routeOrder,
     );
 
-    final data = FirestoreUserScope.withOwner({
-      ...visit.toFirestore(),
-      if (id == null) 'createdAt': FieldValue.serverTimestamp(),
-      'preVisitPushSent': false,
-    });
-
-    String savedId;
-    if (id == null || id.isEmpty) {
-      final ref = await _col.add(data);
-      savedId = ref.id;
-    } else {
-      await _col.doc(id).set(data, SetOptions(merge: true));
-      savedId = id;
-    }
+    final savedId = await _storage.saveVisit(
+      id: id,
+      visit: visit,
+      isNew: isNew,
+      includePreVisitPushReset: isNew,
+    );
 
     await FieldVisitNotificationService.cancelForVisit(savedId);
     if (status == FieldVisitStatus.planned) {
@@ -209,7 +192,7 @@ abstract final class FieldVisitService {
 
   static Future<void> delete(String id) async {
     await FieldVisitNotificationService.cancelForVisit(id);
-    await _col.doc(id).delete();
+    await _storage.deleteVisit(id);
   }
 
   static Future<bool> refreshGeocoding(FieldVisit visit) async {
@@ -236,47 +219,35 @@ abstract final class FieldVisitService {
     return true;
   }
 
-  static Stream<List<FieldVisit>> watchAllForUser() {
-    final userId = FirestoreUserScope.uid;
-    if (userId == null) return Stream.value(const []);
+  static Stream<List<FieldVisit>> watchAllForUser() => _storage.watchAllVisits();
 
-    return _col.where('userId', isEqualTo: userId).snapshots().map((snap) {
-      return snap.docs.map(FieldVisit.fromDoc).toList();
-    });
+  static Future<List<FieldVisit>> fetchAllForUser() =>
+      _storage.fetchAllVisits();
+
+  static Future<List<FieldVisit>> fetchAllForUserId(String userId) async {
+    final current = FirestoreUserScope.uid;
+    if (current == userId) return fetchAllForUser();
+    return const [];
   }
 
   static Future<void> updateStatus(String id, FieldVisitStatus status) async {
-    await _col.doc(id).update({
-      'status': status.name,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    await _storage.updateVisitStatus(id, status);
 
     if (status != FieldVisitStatus.planned) {
       await FieldVisitNotificationService.cancelForVisit(id);
       return;
     }
 
-    final doc = await _col.doc(id).get();
-    if (!doc.exists) return;
-    await FieldVisitNotificationService.scheduleIfEnabled(
-      FieldVisit.fromDoc(doc),
-    );
-  }
-
-  static Future<List<FieldVisit>> fetchAllForUser(String userId) async {
-    final snap = await _col.where('userId', isEqualTo: userId).get();
-    return snap.docs.map(FieldVisit.fromDoc).toList();
-  }
-
-  static Future<void> saveRouteOrder(List<FieldVisit> ordered) async {
-    final batch = FirebaseFirestore.instance.batch();
-    for (var i = 0; i < ordered.length; i++) {
-      batch.update(_col.doc(ordered[i].id), {
-        'routeOrder': i,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+    final visits = await _storage.fetchAllVisits();
+    for (final visit in visits) {
+      if (visit.id != id) continue;
+      await FieldVisitNotificationService.scheduleIfEnabled(visit);
+      break;
     }
-    await batch.commit();
+  }
+
+  static Future<void> saveRouteOrder(List<FieldVisit> ordered) {
+    return _storage.saveVisitRouteOrder(ordered);
   }
 
   static Future<void> importFromCalculation({

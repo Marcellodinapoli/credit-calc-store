@@ -43,16 +43,7 @@ abstract final class PublicUsageGuard {
       consumeAmount: amount,
     );
     if (!ok) return false;
-    try {
-      await PublicUsageService.consume(metric, amount: amount);
-    } catch (_) {
-      if (!context.mounted) return false;
-      _showBlocked(
-        context,
-        'Impossibile registrare il consumo. Controlla la connessione e riprova.',
-      );
-      return false;
-    }
+    await PublicUsageService.consume(metric, amount: amount);
     return true;
   }
 
@@ -97,20 +88,14 @@ abstract final class PublicUsageGuard {
   }
 
   static void _showBlocked(BuildContext context, String? message) {
-    final text = message ??
-        'Limite del piano raggiunto. Passa a un piano superiore per '
-        'continuare.';
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Limite piano raggiunto'),
-        content: Text(text),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
-          ),
-        ],
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message ??
+              'Limite del piano raggiunto. Passa a un piano superiore per '
+              'continuare.',
+        ),
+        duration: const Duration(seconds: 5),
       ),
     );
   }

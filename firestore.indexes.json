@@ -15,6 +15,13 @@
         { "fieldPath": "pushSent", "order": "ASCENDING" },
         { "fieldPath": "remindAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "develop_sync_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "updatedAtMs", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

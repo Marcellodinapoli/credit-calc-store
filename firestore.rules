@@ -2,6 +2,43 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isWorkSupervisor() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.type == 'work'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.workRole == 'supervisor';
+    }
+
+    function sameCompanyWorkCollaborator(collaboratorId) {
+      return collaboratorId != request.auth.uid
+        && get(/databases/$(database)/documents/users/$(collaboratorId)).data.type == 'work'
+        && get(/databases/$(database)/documents/users/$(collaboratorId)).data.companyId
+          == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId;
+    }
+
+    function supervisorCanReadCollaborator(collaboratorId) {
+      return isWorkSupervisor() && sameCompanyWorkCollaborator(collaboratorId);
+    }
+
+    /// CreditCore web: dati Sviluppa gestiti in locale (IndexedDB).
+    /// Lettura e scrittura Firestore legacy bloccate se deviceManaged.
+    function developDataDeviceManaged() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid)/public_usage/totals)
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)/public_usage/totals).data.get('deviceManaged', false) == true;
+    }
+
+    function canAccessDevelopFirestoreData() {
+      return !developDataDeviceManaged();
+    }
+
+    function canWriteDevelopFirestoreData() {
+      return canAccessDevelopFirestoreData();
+    }
+
+    function canReadDevelopFirestoreData() {
+      return canAccessDevelopFirestoreData();
+    }
+
     // ------------------------------------------------------------------
     // PENDING LOGINS  (BackOffice ↔ App Sicurezza)
     // ------------------------------------------------------------------
@@ -148,21 +185,25 @@ match /job_applications/{docId} {
 match /creditors/{docId} {
   allow read: if request.auth != null && (
     request.auth.token.admin == true
-    || resource.data.userId == request.auth.uid
+    || (resource.data.userId == request.auth.uid
+      && canReadDevelopFirestoreData())
   );
 
   allow create: if request.auth != null
-    && request.resource.data.userId == request.auth.uid;
+    && request.resource.data.userId == request.auth.uid
+    && canWriteDevelopFirestoreData();
 
   allow update: if request.auth != null && (
     request.auth.token.admin == true
     || (resource.data.userId == request.auth.uid
-      && request.resource.data.userId == request.auth.uid)
+      && request.resource.data.userId == request.auth.uid
+      && canWriteDevelopFirestoreData())
   );
 
   allow delete: if request.auth != null && (
     request.auth.token.admin == true
-    || resource.data.userId == request.auth.uid
+    || (resource.data.userId == request.auth.uid
+      && canWriteDevelopFirestoreData())
   );
 }
 
@@ -182,65 +223,81 @@ match /applications/{docId} {
 match /calculations/{docId} {
   allow read: if request.auth != null && (
     request.auth.token.admin == true
-    || resource.data.userId == request.auth.uid
+    || (resource.data.userId == request.auth.uid
+      && canReadDevelopFirestoreData())
   );
 
   allow create: if request.auth != null
-    && request.resource.data.userId == request.auth.uid;
+    && request.resource.data.userId == request.auth.uid
+    && canWriteDevelopFirestoreData();
 
   allow update, delete: if request.auth != null && (
     request.auth.token.admin == true
-    || resource.data.userId == request.auth.uid
+    || (resource.data.userId == request.auth.uid
+      && canWriteDevelopFirestoreData())
   );
 }
 
+// ------------------------------------------------------------------
+// CREDITCALC — ITINERARIO (visite, attività, promemoria)
+// Web CreditPlanet + CreditCore Store: solo dati propri
+// ------------------------------------------------------------------
 match /field_visits/{docId} {
   allow read: if request.auth != null && (
     request.auth.token.admin == true
-    || resource.data.userId == request.auth.uid
+    || (resource.data.userId == request.auth.uid
+      && canReadDevelopFirestoreData())
   );
 
   allow create: if request.auth != null
-    && request.resource.data.userId == request.auth.uid;
+    && request.resource.data.userId == request.auth.uid
+    && canWriteDevelopFirestoreData();
 
   allow update, delete: if request.auth != null && (
     request.auth.token.admin == true
-    || resource.data.userId == request.auth.uid
+    || (resource.data.userId == request.auth.uid
+      && canWriteDevelopFirestoreData())
   );
 }
 
 match /field_activities/{docId} {
   allow read: if request.auth != null && (
     request.auth.token.admin == true
-    || resource.data.userId == request.auth.uid
+    || (resource.data.userId == request.auth.uid
+      && canReadDevelopFirestoreData())
   );
 
   allow create: if request.auth != null
-    && request.resource.data.userId == request.auth.uid;
+    && request.resource.data.userId == request.auth.uid
+    && canWriteDevelopFirestoreData();
 
   allow update, delete: if request.auth != null && (
     request.auth.token.admin == true
-    || resource.data.userId == request.auth.uid
+    || (resource.data.userId == request.auth.uid
+      && canWriteDevelopFirestoreData())
   );
 }
 
 match /field_reminders/{docId} {
   allow read: if request.auth != null && (
     request.auth.token.admin == true
-    || resource.data.userId == request.auth.uid
+    || (resource.data.userId == request.auth.uid
+      && canReadDevelopFirestoreData())
   );
 
   allow create: if request.auth != null
-    && request.resource.data.userId == request.auth.uid;
+    && request.resource.data.userId == request.auth.uid
+    && canWriteDevelopFirestoreData();
 
   allow update, delete: if request.auth != null && (
     request.auth.token.admin == true
-    || resource.data.userId == request.auth.uid
+    || (resource.data.userId == request.auth.uid
+      && canWriteDevelopFirestoreData())
   );
 }
 
 // ------------------------------------------------------------------
-// CREDITCALC — SESSIONE UNICA (App Mobile / Web)
+// CREDITCALC — SESSIONE UNICA (App Mobile / Desktop Store)
 // Documento: credit_calc_sessions/{userId}
 // ------------------------------------------------------------------
 match /credit_calc_sessions/{userId} {
@@ -264,24 +321,55 @@ match /credit_calc_sessions/{userId} {
 }
 
 // ------------------------------------------------------------------
+// CREDITCALC — BLOCCO SEZIONE IN MODIFICA (web + app)
+// Documento: section_locks/{lockId}
+// ------------------------------------------------------------------
+match /section_locks/{lockId} {
+
+  allow read: if request.auth != null && (
+    resource == null
+    || resource.data.lockedBy == request.auth.uid
+    || request.auth.token.admin == true
+  );
+
+  allow create, update: if request.auth != null
+    && request.resource.data.lockedBy == request.auth.uid;
+
+  allow delete: if request.auth != null && (
+    resource.data.lockedBy == request.auth.uid
+    || request.auth.token.admin == true
+  );
+}
+
+// ------------------------------------------------------------------
 // PLATFORM CONFIG — CreditCalc desktop OTA (BackOffice + app)
 // Documento: platform_config/credit_calc_desktop
 // ------------------------------------------------------------------
 match /platform_config/{docId} {
 
-  allow read: if request.auth != null;
+  // Landing index: download .exe/.dmg anche senza registrazione
+  allow read: if request.auth != null || docId == 'credit_calc_desktop';
 
   allow create, delete: if request.auth != null
     && request.auth.token.admin == true;
 
-  allow update: if request.auth != null && (
-    request.auth.token.admin == true
-    || (
-      docId == 'credit_calc_desktop'
-      && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['downloadCount'])
-      && request.resource.data.downloadCount
-          == resource.data.get('downloadCount', 0) + 1
+  allow update: if (
+    request.auth != null && request.auth.token.admin == true
+  ) || (
+    docId == 'credit_calc_desktop'
+    && (
+      (
+        request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['downloadCount'])
+        && request.resource.data.downloadCount
+            == resource.data.get('downloadCount', 0) + 1
+      )
+      || (
+        request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['macDownloadCount'])
+        && request.resource.data.macDownloadCount
+            == resource.data.get('macDownloadCount', 0) + 1
+      )
     )
   );
 }
@@ -351,9 +439,12 @@ match /companies/{companyId}/registration_consents_history/{docId} {
       allow read, write: if request.auth != null
         && request.auth.uid == userId;
 
+      allow read: if supervisorCanReadCollaborator(userId);
+
       match /courses/{courseId} {
         allow read, write: if request.auth != null
           && request.auth.uid == userId;
+        allow read: if supervisorCanReadCollaborator(userId);
         allow delete: if request.auth != null
           && request.auth.token.admin == true;
       }
@@ -362,6 +453,7 @@ match /companies/{companyId}/registration_consents_history/{docId} {
     match /listening_progress/{userId} {
       allow read, write: if request.auth != null
         && request.auth.uid == userId;
+      allow read: if supervisorCanReadCollaborator(userId);
     }
 
     // ------------------------------------------------------------------
@@ -371,6 +463,7 @@ match /companies/{companyId}/registration_consents_history/{docId} {
       allow read: if request.auth != null && (
         request.auth.token.admin == true
         || request.auth.uid == userId
+        || supervisorCanReadCollaborator(userId)
       );
 
       allow create, update: if request.auth != null
@@ -385,6 +478,7 @@ match /companies/{companyId}/registration_consents_history/{docId} {
 
     // ------------------------------------------------------------------
     // WORK — segnalazioni supervisor → backoffice (blocco utente)
+    // Web CreditPlanet + CreditCore Store
     // ------------------------------------------------------------------
     match /work_user_reports/{docId} {
 
@@ -395,7 +489,12 @@ match /companies/{companyId}/registration_consents_history/{docId} {
         && request.resource.data.status == 'pending'
         && request.resource.data.requestedAction == 'block';
 
-      allow read, update, delete: if request.auth != null
+      allow read: if request.auth != null && (
+        request.auth.token.admin == true
+        || resource.data.supervisorUid == request.auth.uid
+      );
+
+      allow update, delete: if request.auth != null
         && request.auth.token.admin == true;
     }
 
@@ -409,7 +508,8 @@ match /companies/{companyId}/registration_consents_history/{docId} {
 
       allow get: if request.auth != null && (
         request.auth.uid == userId ||
-        request.auth.token.admin == true
+        request.auth.token.admin == true ||
+        supervisorCanReadCollaborator(userId)
       );
 
       allow list: if request.auth != null && (
@@ -419,6 +519,13 @@ match /companies/{companyId}/registration_consents_history/{docId} {
           resource.data.type == "work" &&
           resource.data.companyCode ==
             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userCode
+        ) ||
+        (
+          isWorkSupervisor() &&
+          resource.data.type == "work" &&
+          resource.data.companyId ==
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId &&
+          resource.id != request.auth.uid
         )
       );
 
@@ -443,15 +550,57 @@ match /companies/{companyId}/registration_consents_history/{docId} {
       }
 
       match /public_usage/{docId} {
-        allow read, write: if request.auth != null
+        allow read, create, update: if request.auth != null
+          && request.auth.uid == userId;
+        allow delete: if request.auth != null
+          && request.auth.token.admin == true;
+      }
+
+      /// Relay sync multi-dispositivo Sviluppa (payload cifrati).
+      match /develop_sync/{docId} {
+        allow read, create, update: if request.auth != null
+          && request.auth.uid == userId;
+        allow delete: if request.auth != null
+          && request.auth.token.admin == true;
+      }
+
+      match /develop_sync_records/{recordId} {
+        allow read, create, update: if request.auth != null
+          && request.auth.uid == userId;
+        allow delete: if request.auth != null
           && request.auth.uid == userId;
       }
 
-      match /backoffice_pending_plans/{planId} {
-        allow read, write: if request.auth != null
+      match /develop_sync_private/{docId} {
+        allow read, create, update: if request.auth != null
           && request.auth.uid == userId;
+        allow delete: if request.auth != null
+          && request.auth.token.admin == true;
       }
 
+      match /pdr_schedules/{docId} {
+        allow read: if request.auth != null
+          && request.auth.uid == userId
+          && canReadDevelopFirestoreData();
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && canWriteDevelopFirestoreData();
+        allow delete: if request.auth != null
+          && request.auth.uid == userId
+          && canWriteDevelopFirestoreData();
+      }
+
+      match /backoffice_pending_plans/{docId} {
+        allow read: if request.auth != null
+          && request.auth.uid == userId
+          && canReadDevelopFirestoreData();
+
+        allow create, update, delete: if request.auth != null
+          && request.auth.uid == userId
+          && canWriteDevelopFirestoreData();
+      }
+
+      /// Itinerario legacy (store / dati storici). Preferire field_* su web.
       match /visit_itineraries/{dateId} {
         allow read, write: if request.auth != null
           && request.auth.uid == userId;
@@ -469,7 +618,17 @@ match /companies/{companyId}/registration_consents_history/{docId} {
 match /work_codes/{code} {
   allow read: if true;
   allow create: if request.auth != null;
-  allow update, delete: if request.auth != null
+  allow update: if request.auth != null && (
+    request.auth.token.admin == true ||
+    request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+      'activeWorkUsers',
+      'collaboratorLimit',
+      'subscriptionPlan',
+      'companyId',
+      'companyCode'
+    ])
+  );
+  allow delete: if request.auth != null
     && request.auth.token.admin == true;
 }
 
@@ -525,6 +684,42 @@ match /settings/{docId} {
     }
 
     // ------------------------------------------------------------------
+    // WARM-UP — contestazioni utente (moderazione BK)
+    // ------------------------------------------------------------------
+    match /warmup_contestations/{docId} {
+
+      allow create: if request.auth != null
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.status in ['draft', 'pending_review'];
+
+      allow list: if request.auth != null;
+
+      allow get: if request.auth != null && (
+        resource.data.status == 'approved'
+        || resource.data.authorUid == request.auth.uid
+        || request.auth.token.admin == true
+      );
+
+      allow update: if request.auth != null && (
+        (
+          resource.data.authorUid == request.auth.uid
+          && resource.data.status != 'approved'
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.status in ['draft', 'pending_review', 'rejected']
+        )
+        || request.auth.token.admin == true
+      );
+
+      allow delete: if request.auth != null && (
+        (
+          resource.data.authorUid == request.auth.uid
+          && resource.data.status != 'approved'
+        )
+        || request.auth.token.admin == true
+      );
+    }
+
+    // ------------------------------------------------------------------
     // COMMUNITY
     // ------------------------------------------------------------------
     match /community/{docId} {
@@ -553,7 +748,10 @@ match /settings/{docId} {
     match /coupons/{couponId} {
       allow get: if resource.data.enabled == true
         || (request.auth != null && request.auth.token.admin == true);
-      allow list: if request.auth != null && request.auth.token.admin == true;
+      allow list: if request.auth != null && (
+        request.auth.token.admin == true
+        || resource.data.lastUsedBy == request.auth.uid
+      );
       allow create, delete: if request.auth != null
         && request.auth.token.admin == true;
       allow update: if request.auth != null && (

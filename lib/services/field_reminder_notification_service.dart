@@ -117,8 +117,8 @@ abstract final class FieldReminderNotificationService {
         await ItineraryNotificationsService.loadEnabled(uid);
     if (!productEnabled || !itineraryEnabled) return;
 
-    final snap = await FieldReminderService.fetchAllForUser(uid);
-    for (final reminder in snap) {
+    final reminders = await FieldReminderService.fetchAllForUserId(uid);
+    for (final reminder in reminders) {
       await scheduleIfEnabled(reminder);
     }
   }

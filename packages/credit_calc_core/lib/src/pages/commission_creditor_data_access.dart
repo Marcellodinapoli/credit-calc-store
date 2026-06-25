@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/firestore_user_scope.dart';
+import '../data/migrated_data_firestore_policy.dart';
 
 class CreditorPick {
   final String id;
@@ -38,6 +39,7 @@ class FirestoreCommissionCreditorDataAccess
     implements CommissionCreditorDataAccess {
   @override
   Future<List<CreditorPick>> listCreditorsForPicker() async {
+    MigratedDataFirestorePolicy.assertFirestoreAccessAllowed();
     final snapshot = await FirestoreUserScope.creditorsOrdered().get();
     final docs = FirestoreUserScope.sortCreditorsByCreatedAt(snapshot.docs);
     return [
@@ -51,6 +53,7 @@ class FirestoreCommissionCreditorDataAccess
 
   @override
   Future<Map<String, dynamic>?> loadCreditor(String creditorId) async {
+    MigratedDataFirestorePolicy.assertFirestoreAccessAllowed();
     final doc = await FirebaseFirestore.instance
         .collection('creditors')
         .doc(creditorId)
@@ -64,6 +67,7 @@ class FirestoreCommissionCreditorDataAccess
     required String creditorId,
     required Map<String, dynamic> commissionSettings,
   }) async {
+    MigratedDataFirestorePolicy.assertWritesAllowed();
     await FirebaseFirestore.instance.collection('creditors').doc(creditorId).set(
       {
         'commissionSettings': commissionSettings,
