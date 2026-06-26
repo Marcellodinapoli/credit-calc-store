@@ -42,7 +42,7 @@ extension PersonalAreaMenuItemX on PersonalAreaMenuItem {
         PersonalAreaMenuItem.guide => const GuidePage(),
         PersonalAreaMenuItem.notificationPreferences =>
           const NotificationPreferencesPage(),
-        PersonalAreaMenuItem.privacyConsents => const ConsentsPage(),
+        PersonalAreaMenuItem.privacyConsents => const PrivacyConsentsPage(),
       };
 
   void open(BuildContext context) {

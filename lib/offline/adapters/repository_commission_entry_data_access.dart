@@ -17,7 +17,7 @@ class RepositoryCommissionEntryDataAccess implements CommissionEntryDataAccess {
   }
 
   @override
-  Future<void> saveEntry({
+  Future<String> saveEntry({
     required Map<String, dynamic> payload,
     String? entryId,
   }) async {
@@ -28,10 +28,17 @@ class RepositoryCommissionEntryDataAccess implements CommissionEntryDataAccess {
     final repo = CreditCalcRepository.instance;
     if (entryId != null && entryId.isNotEmpty) {
       await repo.saveCalculation(id: entryId, data: data, isNew: false);
-      return;
+      return entryId;
     }
 
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     await repo.saveCalculation(id: id, data: data, isNew: true);
+    return id;
+  }
+
+  @override
+  Future<void> deleteEntry(String entryId) async {
+    if (entryId.isEmpty) return;
+    await CreditCalcRepository.instance.deleteCalculation(entryId);
   }
 }

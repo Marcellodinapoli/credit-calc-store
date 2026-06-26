@@ -1,10 +1,7 @@
-﻿import 'package:credit_calc_core/credit_calc_core.dart'
-    hide BalanceWriteOffPage, DevelopPage, StandardRepaymentPlanPage;
+﻿import 'package:credit_calc_core/credit_calc_core.dart' hide DevelopPage;
 import 'package:flutter/material.dart';
 
-import 'balance_write_off_page.dart';
 import 'debtor_contact_page.dart';
-import 'standard_repayment_plan_page.dart';
 
 class DevelopPage extends StatelessWidget {
   const DevelopPage({super.key});

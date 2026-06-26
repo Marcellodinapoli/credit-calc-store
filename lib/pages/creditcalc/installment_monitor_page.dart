@@ -360,8 +360,7 @@ class _InstallmentMonitorPageState extends State<InstallmentMonitorPage> {
             },
           );
         },
-      ),
-    );
+      );
 
     if (widget.personalArea) {
       return PersonalAreaShell(
