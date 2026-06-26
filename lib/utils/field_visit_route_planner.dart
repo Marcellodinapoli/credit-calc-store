@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:credit_calc_core/credit_calc_core.dart';
 
 import '../models/field_visit.dart';
 import '../services/field_visit_service.dart';
@@ -83,6 +84,14 @@ abstract final class FieldVisitRoutePlanner {
       builder: (ctx) => _RoutePlanDialog(plan: plan),
     );
     if (confirmed != true || !context.mounted) return;
+
+    if (!await PublicUsageCounterRecorder.recordWithUi(
+      context,
+      PublicUsageMetric.itinerary,
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
 
     await FieldVisitService.saveRouteOrder(plan.orderedVisits);
 

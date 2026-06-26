@@ -22,14 +22,9 @@ abstract final class CreditModuleShellActions {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => CreditCalcSettingsPage(
-          modePrefs: CreditCalcRuntime.modePrefs!,
           sessionService: CreditCalcRuntime.sessionService!,
-          syncEngine: CreditCalcRuntime.syncEngine!,
         ),
       ),
     );
-    if (context.mounted) {
-      await CreditCalcRuntime.refreshPendingSyncCount();
-    }
   }
 }

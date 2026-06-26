@@ -1,3 +1,4 @@
+import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/public_page_shell.dart';
@@ -67,43 +68,16 @@ class LoginPricingPage extends StatelessWidget {
                       subtitle: 'Per professionisti e utenti singoli',
                     ),
                     const SizedBox(height: 16),
-                    const _PlanCard(
-                      name: 'FREE',
-                      price: '€0',
-                      description:
-                          'Uso base per testare la piattaforma.\n\n'
-                          '3 corsi attivi · 10 quiz/mese · 5 Warm-up/mese · '
-                          '2 Roleplay/mese · 3 contestazioni/mese · 1 piano di rientro '
-                          '(simulazione) · 1 saldo/stralcio · 2 itinerari/mese · '
-                          '5 creditori · 1 schema provvigioni · 3 candidature/mese.',
-                    ),
-                    const SizedBox(height: 16),
-                    const _PlanCard(
-                      name: 'PLUS',
-                      price: '€4,99 / mese',
-                      description:
-                          'Uso personale completo con limiti medi-alti.\n\n'
-                          'Fino a 50 corsi attivi · 200 quiz/mese · 100 Warm-up · '
-                          '80 Roleplay · 50 contestazioni · 20 piani di rientro · '
-                          '15 saldi/stralci · 20 itinerari · 200 creditori · '
-                          'storico provvigioni completo · 50 candidature/mese.\n\n'
-                          'Avviso al raggiungimento dell\'80% dei limiti.',
-                      highlighted: true,
-                      badge: 'Consigliato',
-                    ),
-                    const SizedBox(height: 16),
-                    const _PlanCard(
-                      name: 'ENTERPRISE',
-                      price: '€9,99 / mese',
-                      description:
-                          'Uso intensivo quasi senza limiti operativi.\n\n'
-                          'Corsi illimitati · Quiz illimitati · Warm-up illimitati · '
-                          'Roleplay illimitati · Contestazioni illimitate · '
-                          'Piani di rientro illimitati · Saldi e stralci illimitati · '
-                          'Itinerari illimitati · Creditori illimitati · '
-                          'Provvigioni illimitate · Candidature illimitate (fair use) · '
-                          'Analytics provvigioni avanzate.',
-                    ),
+                    for (final plan in defaultPublicSubscriptionPlans()) ...[
+                      _PlanCard(
+                        name: defaultPublicPlanTierLabel(plan.id),
+                        price: plan.price,
+                        description: plan.description,
+                        highlighted: plan.id == 'plus',
+                        badge: plan.id == 'plus' ? 'Consigliato' : null,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     const SizedBox(height: 32),
                     Divider(color: Colors.grey.shade300),
                     const SizedBox(height: 32),

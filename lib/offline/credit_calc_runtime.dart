@@ -1,76 +1,44 @@
 import 'dart:async';
 
+import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/foundation.dart';
 
 import 'credit_calc_repository_setup.dart';
 import 'develop_sync/develop_sync_coordinator.dart';
-import 'repository/credit_calc_repository.dart';
-import 'services/connectivity_service.dart';
-import 'services/mode_preferences_service.dart';
-import 'services/realtime_sync_service.dart';
+import 'local_itinerary_coordinator.dart';
 import 'services/session_service.dart';
-import 'services/sync_engine.dart';
 
-/// Servizi CreditCalc attivi nella sessione corrente (per impostazioni e menu).
+/// Servizi CreditCalc attivi nella sessione corrente.
 abstract final class CreditCalcRuntime {
-  static ModePreferencesService? modePrefs;
   static SessionService? sessionService;
-  static SyncEngine? syncEngine;
-  static RealtimeSyncService? realtimeSync;
 
   static final ValueNotifier<String?> writeBlockedMessage =
       ValueNotifier<String?>(null);
 
-  static final ValueNotifier<int> pendingSyncCount = ValueNotifier(0);
+  static bool get isReady => sessionService != null;
 
-  static bool get isReady =>
-      modePrefs != null && sessionService != null && syncEngine != null;
-
-  static void install({
-    required ModePreferencesService modePrefs,
-    required SessionService sessionService,
-    required SyncEngine syncEngine,
-    RealtimeSyncService? realtimeSync,
-  }) {
-    CreditCalcRuntime.modePrefs = modePrefs;
+  static void install({required SessionService sessionService}) {
     CreditCalcRuntime.sessionService = sessionService;
-    CreditCalcRuntime.syncEngine = syncEngine;
-    CreditCalcRuntime.realtimeSync = realtimeSync;
   }
 
   static void notifyWriteBlocked(String message) {
     writeBlockedMessage.value = message;
   }
 
-  static Future<void> refreshPendingSyncCount() async {
-    try {
-      pendingSyncCount.value =
-          await CreditCalcRepository.instance.pendingCount();
-    } catch (_) {
-      pendingSyncCount.value = 0;
-    }
-  }
-
   static void clear() {
-    realtimeSync?.dispose();
-    realtimeSync = null;
+    unawaited(LocalItineraryCoordinator.stop());
     unawaited(DevelopSyncCoordinator.stop());
-    modePrefs = null;
     sessionService = null;
-    syncEngine = null;
     writeBlockedMessage.value = null;
-    pendingSyncCount.value = 0;
   }
 
   static Future<void> reclaimSessionAfterUnlock() async {
     try {
-      if (await ConnectivityService.isOnline()) {
-        final result = await syncEngine?.runSync();
-        if (result?.success == true) {
-          CreditCalcRepositorySetup.notifyDataChanged();
-        }
-      }
-      await refreshPendingSyncCount();
+      PublicPlanLimitsConfigService.start();
+      await PublicPlanLimitsConfigService.ensureLoaded(
+        timeout: const Duration(seconds: 4),
+      );
+      CreditCalcRepositorySetup.notifyDataChanged();
     } catch (_) {}
   }
 }

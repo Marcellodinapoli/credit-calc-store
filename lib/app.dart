@@ -37,9 +37,14 @@ class _CreditCalcAppState extends State<CreditCalcApp> {
       localizationsDelegates: AppLocalizationsConfig.localizationsDelegates,
       supportedLocales: AppLocalizationsConfig.supportedLocales,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: ProjectColors.calc),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: ProjectColors.calc,
+          brightness: Brightness.light,
+        ),
+        scaffoldBackgroundColor: Colors.white,
         useMaterial3: true,
       ),
+      themeMode: ThemeMode.light,
       home: const _AuthGate(),
     );
   }
@@ -71,9 +76,11 @@ class _AuthGateState extends State<_AuthGate> {
   void _syncMaintenance(User? user) {
     if (user == null) {
       MaintenanceService.stop();
+      PublicPlanLimitsConfigService.stop();
       unawaited(DesktopPushService.stop());
     } else {
       MaintenanceService.start();
+      PublicPlanLimitsConfigService.start();
     }
   }
 

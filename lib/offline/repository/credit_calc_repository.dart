@@ -3,15 +3,8 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
 
-import '../credit_calc_runtime.dart';
-import '../develop_sync/develop_sync_coordinator.dart';
-import '../models/credit_calc_mode.dart';
 import '../models/sync_record_status.dart';
-import '../services/connectivity_service.dart';
 import '../services/local_database_service.dart';
-import '../services/mode_preferences_service.dart';
-import '../services/session_service.dart';
-import '../services/sync_engine.dart';
 
 class CreditCalcRecord {
   final String id;
@@ -20,7 +13,7 @@ class CreditCalcRecord {
   const CreditCalcRecord({required this.id, required this.data});
 }
 
-/// Accesso dati CreditCalc con routing Web / Offline.
+/// Accesso dati operativi CreditCalc (creditori e pratiche) sul dispositivo.
 class CreditCalcRepository {
   CreditCalcRepository._();
   static CreditCalcRepository? _instance;
@@ -33,74 +26,35 @@ class CreditCalcRepository {
     return i;
   }
 
-  static void install({
-    required CreditCalcMode mode,
-    required String userId,
-    required ModePreferencesService modePrefs,
-    required SessionService sessionService,
-    required SyncEngine syncEngine,
-  }) {
-    _instance = CreditCalcRepository._()
-      .._mode = mode
-      .._userId = userId
-      .._syncEngine = syncEngine;
+  static void install({required String userId}) {
+    _instance = CreditCalcRepository._().._userId = userId;
   }
 
   static void clear() => _instance = null;
 
-  CreditCalcMode _mode = CreditCalcMode.web;
+  String get userId => _userId;
+
   String _userId = '';
-  SyncEngine? _syncEngine;
   final _creditorsRevision = StreamController<int>.broadcast();
   final _calculationsRevision = StreamController<int>.broadcast();
   int _creditorsRev = 0;
   int _calculationsRev = 0;
 
-  CreditCalcMode get mode => _mode;
-  bool get isOfflineMode => _mode == CreditCalcMode.offlineSync;
-
   void notifyCreditorsChanged() {
     _creditorsRevision.add(++_creditorsRev);
-    unawaited(CreditCalcRuntime.refreshPendingSyncCount());
   }
 
   void notifyCalculationsChanged() {
     _calculationsRevision.add(++_calculationsRev);
-    unawaited(CreditCalcRuntime.refreshPendingSyncCount());
   }
-
-  Future<void> _assertCanWrite() async {}
-
-  Future<void> _maybeSync() async {
-    if (DevelopSyncCoordinator.isActive) return;
-    if (!await ConnectivityService.isOnline()) return;
-    unawaited(_syncEngine?.syncPendingChanges());
-  }
-
-  // --- Creditori ---
 
   Stream<List<CreditCalcRecord>> watchCreditorRecords() {
-    if (!isOfflineMode) {
-      return FirestoreUserScope.creditorsOrdered().snapshots().map((snap) {
-        return _sortCreditorRecords(
-          snap.docs
-              .map((d) => CreditCalcRecord(id: d.id, data: d.data()))
-              .toList(),
-        );
-      });
-    }
     return _creditorsRevision.stream
         .asyncMap((_) => _loadLocalCreditors())
         .startWithFuture(_loadLocalCreditors());
   }
 
   Future<CreditCalcRecord?> getCreditor(String id) async {
-    if (!isOfflineMode) {
-      final doc =
-          await FirebaseFirestore.instance.collection('creditors').doc(id).get();
-      if (!doc.exists) return null;
-      return CreditCalcRecord(id: doc.id, data: doc.data() ?? {});
-    }
     final row = await LocalDatabaseService.instance.recordById(
       collection: 'creditors',
       id: id,
@@ -141,24 +95,13 @@ class CreditCalcRepository {
     return records;
   }
 
-  Future<List<CreditCalcRecord>> listCreditorRecords() async {
-    if (!isOfflineMode) {
-      final snap = await FirestoreUserScope.creditorsOrdered().get();
-      return _sortCreditorRecords(
-        snap.docs
-            .map((d) => CreditCalcRecord(id: d.id, data: d.data()))
-            .toList(),
-      );
-    }
-    return _loadLocalCreditors();
-  }
+  Future<List<CreditCalcRecord>> listCreditorRecords() => _loadLocalCreditors();
 
   Future<void> saveCreditor({
     required String id,
     required Map<String, dynamic> data,
     bool isNew = false,
   }) async {
-    await _assertCanWrite();
     data = Map<String, dynamic>.from(data);
     if (!isNew) {
       final existing = await getCreditor(id);
@@ -168,14 +111,6 @@ class CreditCalcRepository {
     }
     FirestoreUserScope.withOwner(data);
     final now = DateTime.now();
-
-    if (!isOfflineMode) {
-      final ref = FirebaseFirestore.instance.collection('creditors').doc(id);
-      if (isNew) data['createdAt'] = FieldValue.serverTimestamp();
-      data['updatedAt'] = FieldValue.serverTimestamp();
-      await ref.set(data, SetOptions(merge: true));
-      return;
-    }
 
     await LocalDatabaseService.instance.upsertRecord(
       collection: 'creditors',
@@ -188,21 +123,14 @@ class CreditCalcRepository {
       },
       createdAt: now,
       updatedAt: now,
-      syncStatus: SyncRecordStatus.pending,
+      syncStatus: SyncRecordStatus.synced,
       origin: 'local',
     );
     notifyCreditorsChanged();
-    DevelopSyncCoordinator.notifyLocalMutation('creditors', id, deleted: false);
-    await _maybeSync();
+    PublicUsageLocalDataAccess.instance?.notifyChanged();
   }
 
   Future<void> deleteCreditor(String id) async {
-    await _assertCanWrite();
-    if (!isOfflineMode) {
-      await FirebaseFirestore.instance.collection('creditors').doc(id).delete();
-      return;
-    }
-
     final existing = await LocalDatabaseService.instance.recordById(
       collection: 'creditors',
       id: id,
@@ -219,45 +147,22 @@ class CreditCalcRepository {
       payload: payload,
       createdAt: existing['createdAt'] as DateTime,
       updatedAt: DateTime.now(),
-      syncStatus: SyncRecordStatus.pending,
+      syncStatus: SyncRecordStatus.synced,
       origin: 'local',
     );
     notifyCreditorsChanged();
-    DevelopSyncCoordinator.notifyLocalMutation('creditors', id, deleted: true);
-    await _maybeSync();
+    PublicUsageLocalDataAccess.instance?.notifyChanged();
   }
 
-  String newCreditorId() {
-    if (!isOfflineMode) {
-      return FirebaseFirestore.instance.collection('creditors').doc().id;
-    }
-    return DateTime.now().microsecondsSinceEpoch.toString();
-  }
-
-  // --- Calculations / pratiche ---
+  String newCreditorId() => DateTime.now().microsecondsSinceEpoch.toString();
 
   Stream<List<CreditCalcRecord>> watchCalculationRecords() {
-    if (!isOfflineMode) {
-      return FirestoreUserScope.userCalculations().snapshots().map(
-            (snap) => snap.docs
-                .map((d) => CreditCalcRecord(id: d.id, data: d.data()))
-                .toList(),
-          );
-    }
     return _calculationsRevision.stream
         .asyncMap((_) => _loadLocalCalculations())
         .startWithFuture(_loadLocalCalculations());
   }
 
   Future<CreditCalcRecord?> getCalculation(String id) async {
-    if (!isOfflineMode) {
-      final doc = await FirebaseFirestore.instance
-          .collection('calculations')
-          .doc(id)
-          .get();
-      if (!doc.exists) return null;
-      return CreditCalcRecord(id: doc.id, data: doc.data() ?? {});
-    }
     final row = await LocalDatabaseService.instance.recordById(
       collection: 'calculations',
       id: id,
@@ -269,15 +174,8 @@ class CreditCalcRepository {
     );
   }
 
-  Future<List<CreditCalcRecord>> getCalculationRecords() async {
-    if (!isOfflineMode) {
-      final snap = await FirestoreUserScope.userCalculations().get();
-      return snap.docs
-          .map((d) => CreditCalcRecord(id: d.id, data: d.data()))
-          .toList();
-    }
-    return _loadLocalCalculations();
-  }
+  Future<List<CreditCalcRecord>> getCalculationRecords() =>
+      _loadLocalCalculations();
 
   Future<List<CreditCalcRecord>> _loadLocalCalculations() async {
     final rows = await LocalDatabaseService.instance.recordsForUser(
@@ -300,7 +198,6 @@ class CreditCalcRepository {
     required Map<String, dynamic> data,
     bool isNew = false,
   }) async {
-    await _assertCanWrite();
     data = Map<String, dynamic>.from(data);
     if (!isNew) {
       final existing = await getCalculation(id);
@@ -310,14 +207,6 @@ class CreditCalcRepository {
     }
     FirestoreUserScope.withOwner(data);
     final now = DateTime.now();
-
-    if (!isOfflineMode) {
-      final ref = FirebaseFirestore.instance.collection('calculations').doc(id);
-      if (isNew) data['createdAt'] = FieldValue.serverTimestamp();
-      data['updatedAt'] = FieldValue.serverTimestamp();
-      await ref.set(data, SetOptions(merge: true));
-      return;
-    }
 
     await LocalDatabaseService.instance.upsertRecord(
       collection: 'calculations',
@@ -330,21 +219,13 @@ class CreditCalcRepository {
       },
       createdAt: now,
       updatedAt: now,
-      syncStatus: SyncRecordStatus.pending,
+      syncStatus: SyncRecordStatus.synced,
       origin: 'local',
     );
     notifyCalculationsChanged();
-    DevelopSyncCoordinator.notifyLocalMutation('calculations', id, deleted: false);
-    await _maybeSync();
   }
 
   Future<void> deleteCalculation(String id) async {
-    await _assertCanWrite();
-    if (!isOfflineMode) {
-      await FirebaseFirestore.instance.collection('calculations').doc(id).delete();
-      return;
-    }
-
     final existing = await LocalDatabaseService.instance.recordById(
       collection: 'calculations',
       id: id,
@@ -361,35 +242,15 @@ class CreditCalcRepository {
       payload: payload,
       createdAt: existing['createdAt'] as DateTime,
       updatedAt: DateTime.now(),
-      syncStatus: SyncRecordStatus.pending,
+      syncStatus: SyncRecordStatus.synced,
       origin: 'local',
     );
     notifyCalculationsChanged();
-    DevelopSyncCoordinator.notifyLocalMutation('calculations', id, deleted: true);
-    await _maybeSync();
   }
 
   Future<List<String>> createCalculationsBatch(
     List<Map<String, dynamic>> payloads,
   ) async {
-    await _assertCanWrite();
-    if (!isOfflineMode) {
-      final batch = FirebaseFirestore.instance.batch();
-      final collection = FirebaseFirestore.instance.collection('calculations');
-      final now = FieldValue.serverTimestamp();
-      final ids = <String>[];
-      for (final payload in payloads) {
-        final ref = collection.doc();
-        final data = Map<String, dynamic>.from(payload);
-        data['createdAt'] = now;
-        data['updatedAt'] = now;
-        batch.set(ref, data);
-        ids.add(ref.id);
-      }
-      await batch.commit();
-      return ids;
-    }
-
     final now = DateTime.now();
     final ids = <String>[];
     for (final payload in payloads) {
@@ -406,14 +267,12 @@ class CreditCalcRepository {
         },
         createdAt: now,
         updatedAt: now,
-        syncStatus: SyncRecordStatus.pending,
+        syncStatus: SyncRecordStatus.synced,
         origin: 'local',
       );
       await Future<void>.delayed(const Duration(microseconds: 2));
-      DevelopSyncCoordinator.notifyLocalMutation('calculations', id, deleted: false);
     }
     notifyCalculationsChanged();
-    await _maybeSync();
     return ids;
   }
 
@@ -440,15 +299,6 @@ class CreditCalcRepository {
       if (row['payload']['_deleted'] != true) count++;
     }
     return count;
-  }
-
-  Future<int> pendingCount() async {
-    if (DevelopSyncCoordinator.isActive) return 0;
-    final pending =
-        await LocalDatabaseService.instance.pendingRecords(_userId);
-    return pending
-        .where((row) => row['collection'] != 'plan_drafts')
-        .length;
   }
 }
 

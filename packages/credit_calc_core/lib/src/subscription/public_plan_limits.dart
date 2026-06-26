@@ -1,3 +1,196 @@
+/// Area funzionale del limite (per BackOffice e consumi).
+enum PublicPlanLimitArea {
+  creditForm,
+  creditCalc,
+  creditJob,
+}
+
+String publicPlanLimitAreaLabel(PublicPlanLimitArea area) => switch (area) {
+      PublicPlanLimitArea.creditForm => 'CreditForm (formazione)',
+      PublicPlanLimitArea.creditCalc => 'CreditCalc (operatività)',
+      PublicPlanLimitArea.creditJob => 'CreditJob (lavoro)',
+    };
+
+/// Specifica campo limite — unica fonte per BackOffice, consumi e testi piano.
+class PublicPlanLimitFieldSpec {
+  const PublicPlanLimitFieldSpec({
+    required this.key,
+    required this.label,
+    required this.area,
+    required this.readValue,
+    this.periodHint,
+    this.descriptionLabel,
+  });
+
+  final String key;
+  final String label;
+  final PublicPlanLimitArea area;
+  final String? periodHint;
+  /// Etichetta breve per descrizione piano (es. «itinerari/mese»).
+  final String? descriptionLabel;
+  final int? Function(PublicPlanLimits limits) readValue;
+}
+
+const publicPlanLimitFieldSpecs = <PublicPlanLimitFieldSpec>[
+  PublicPlanLimitFieldSpec(
+    key: 'activeCourses',
+    label: 'Corsi attivi',
+    area: PublicPlanLimitArea.creditForm,
+    periodHint: 'totali',
+    descriptionLabel: 'corsi attivi',
+    readValue: _readActiveCourses,
+  ),
+  PublicPlanLimitFieldSpec(
+    key: 'monthlyQuiz',
+    label: 'Quiz',
+    area: PublicPlanLimitArea.creditForm,
+    periodHint: 'al mese',
+    descriptionLabel: 'quiz/mese',
+    readValue: _readMonthlyQuiz,
+  ),
+  PublicPlanLimitFieldSpec(
+    key: 'monthlyWarmup',
+    label: 'Warm-up',
+    area: PublicPlanLimitArea.creditForm,
+    periodHint: 'al mese',
+    descriptionLabel: 'Warm-up/mese',
+    readValue: _readMonthlyWarmup,
+  ),
+  PublicPlanLimitFieldSpec(
+    key: 'monthlyRoleplay',
+    label: 'Roleplay',
+    area: PublicPlanLimitArea.creditForm,
+    periodHint: 'al mese',
+    descriptionLabel: 'Roleplay/mese',
+    readValue: _readMonthlyRoleplay,
+  ),
+  PublicPlanLimitFieldSpec(
+    key: 'monthlyContestation',
+    label: 'Contestazioni',
+    area: PublicPlanLimitArea.creditForm,
+    periodHint: 'al mese',
+    descriptionLabel: 'contestazioni/mese',
+    readValue: _readMonthlyContestation,
+  ),
+  PublicPlanLimitFieldSpec(
+    key: 'monthlyRepaymentPlan',
+    label: 'Piani di rientro',
+    area: PublicPlanLimitArea.creditCalc,
+    periodHint: 'al mese',
+    descriptionLabel: 'piani di rientro',
+    readValue: _readMonthlyRepaymentPlan,
+  ),
+  PublicPlanLimitFieldSpec(
+    key: 'monthlyBalanceWriteOff',
+    label: 'Saldi e stralci',
+    area: PublicPlanLimitArea.creditCalc,
+    periodHint: 'al mese',
+    descriptionLabel: 'saldi/stralci',
+    readValue: _readMonthlyBalanceWriteOff,
+  ),
+  PublicPlanLimitFieldSpec(
+    key: 'monthlyItinerary',
+    label: 'Generazioni itinerario',
+    area: PublicPlanLimitArea.creditCalc,
+    periodHint: 'al mese',
+    descriptionLabel: 'itinerari/mese',
+    readValue: _readMonthlyItinerary,
+  ),
+  PublicPlanLimitFieldSpec(
+    key: 'totalCreditors',
+    label: 'Creditori',
+    area: PublicPlanLimitArea.creditCalc,
+    periodHint: 'totali',
+    descriptionLabel: 'creditori',
+    readValue: _readTotalCreditors,
+  ),
+  PublicPlanLimitFieldSpec(
+    key: 'totalCommissionSchemas',
+    label: 'Schemi provvigioni',
+    area: PublicPlanLimitArea.creditCalc,
+    periodHint: 'totali',
+    descriptionLabel: 'schemi provvigioni',
+    readValue: _readTotalCommissionSchemas,
+  ),
+  PublicPlanLimitFieldSpec(
+    key: 'monthlyJobApplications',
+    label: 'Candidature lavoro',
+    area: PublicPlanLimitArea.creditJob,
+    periodHint: 'al mese',
+    descriptionLabel: 'candidature/mese',
+    readValue: _readMonthlyJobApplications,
+  ),
+];
+
+int? _readActiveCourses(PublicPlanLimits l) => l.activeCourses;
+int? _readMonthlyQuiz(PublicPlanLimits l) => l.monthlyQuiz;
+int? _readMonthlyWarmup(PublicPlanLimits l) => l.monthlyWarmup;
+int? _readMonthlyRoleplay(PublicPlanLimits l) => l.monthlyRoleplay;
+int? _readMonthlyContestation(PublicPlanLimits l) => l.monthlyContestation;
+int? _readMonthlyRepaymentPlan(PublicPlanLimits l) => l.monthlyRepaymentPlan;
+int? _readMonthlyBalanceWriteOff(PublicPlanLimits l) => l.monthlyBalanceWriteOff;
+int? _readMonthlyItinerary(PublicPlanLimits l) => l.monthlyItinerary;
+int? _readTotalCreditors(PublicPlanLimits l) => l.totalCreditors;
+int? _readTotalCommissionSchemas(PublicPlanLimits l) => l.totalCommissionSchemas;
+int? _readMonthlyJobApplications(PublicPlanLimits l) => l.monthlyJobApplications;
+
+int? readPublicPlanLimitField(PublicPlanLimits limits, String key) {
+  for (final spec in publicPlanLimitFieldSpecs) {
+    if (spec.key == key) return spec.readValue(limits);
+  }
+  return null;
+}
+
+List<PublicPlanLimitFieldSpec> publicPlanLimitFieldsForArea(
+  PublicPlanLimitArea area,
+) =>
+    publicPlanLimitFieldSpecs.where((s) => s.area == area).toList();
+
+/// Testo marketing sintetico dai limiti numerici (per descrizione piano).
+String buildPublicPlanDescriptionFromLimits(
+  PublicPlanLimits limits,
+  String planId,
+) {
+  if (limits.enforcement == PublicPlanEnforcement.fairUse) {
+    return 'Uso intensivo quasi senza limiti operativi.\n\n'
+        'Corsi, quiz, Warm-up, Roleplay, contestazioni, piani di '
+        'rientro, saldi/stralci, itinerari, creditori, provvigioni e '
+        'candidature illimitati (fair use).'
+        '${limits.advancedCommissionAnalytics ? ' Analytics provvigioni avanzate.' : ''}';
+  }
+
+  final intro = switch (planId) {
+    'plus' => 'Uso personale completo con limiti medi-alti.',
+    'enterprise' => 'Uso intensivo quasi senza limiti operativi.',
+    _ => 'Uso base per testare la piattaforma.',
+  };
+
+  final parts = <String>[];
+  for (final spec in publicPlanLimitFieldSpecs) {
+    final value = spec.readValue(limits);
+    if (value == null) continue;
+    final label = spec.descriptionLabel ?? spec.label.toLowerCase();
+    if (spec.key == 'monthlyRepaymentPlan' && planId == 'free' && value == 1) {
+      parts.add('1 piano di rientro (simulazione)');
+    } else if (spec.key == 'activeCourses' && planId == 'plus') {
+      parts.add('Fino a $value $label');
+    } else {
+      parts.add('$value $label');
+    }
+  }
+
+  if (limits.unlimitedCommissionHistory) {
+    parts.add('storico provvigioni completo');
+  }
+
+  final body = parts.join(' · ');
+  final softNote = limits.enforcement == PublicPlanEnforcement.soft
+      ? '\n\nAvviso al raggiungimento dell\'80% dei limiti.'
+      : '';
+
+  return '$intro\n\n$body.$softNote';
+}
+
 /// Metriche conteggiate per i piani individuali (public).
 enum PublicUsageMetric {
   activeCourse,
@@ -81,7 +274,7 @@ class PublicPlanLimits {
       };
 }
 
-PublicPlanLimits publicPlanLimitsForPlan(String planId) {
+PublicPlanLimits defaultPublicPlanLimitsForPlan(String planId) {
   return switch (planId) {
     'plus' => const PublicPlanLimits(
       enforcement: PublicPlanEnforcement.soft,
@@ -120,6 +313,102 @@ PublicPlanLimits publicPlanLimitsForPlan(String planId) {
   };
 }
 
+extension PublicPlanLimitsFirestore on PublicPlanLimits {
+  Map<String, dynamic> toFirestoreMap() => {
+        'enforcement': enforcement.name,
+        if (activeCourses != null) 'activeCourses': activeCourses,
+        if (monthlyQuiz != null) 'monthlyQuiz': monthlyQuiz,
+        if (monthlyWarmup != null) 'monthlyWarmup': monthlyWarmup,
+        if (monthlyRoleplay != null) 'monthlyRoleplay': monthlyRoleplay,
+        if (monthlyContestation != null) 'monthlyContestation': monthlyContestation,
+        if (monthlyRepaymentPlan != null) 'monthlyRepaymentPlan': monthlyRepaymentPlan,
+        if (monthlyBalanceWriteOff != null) {
+          'monthlyBalanceWriteOff': monthlyBalanceWriteOff,
+        },
+        if (monthlyItinerary != null) 'monthlyItinerary': monthlyItinerary,
+        if (totalCreditors != null) 'totalCreditors': totalCreditors,
+        if (totalCommissionSchemas != null) {
+          'totalCommissionSchemas': totalCommissionSchemas,
+        },
+        if (monthlyJobApplications != null) {
+          'monthlyJobApplications': monthlyJobApplications,
+        },
+        'unlimitedCommissionHistory': unlimitedCommissionHistory,
+        'advancedCommissionAnalytics': advancedCommissionAnalytics,
+      };
+
+  static PublicPlanLimits mergeFromMap(
+    PublicPlanLimits defaults,
+    Map<String, dynamic> overrides,
+  ) {
+    return PublicPlanLimits(
+      enforcement: _parseEnforcement(overrides['enforcement']) ??
+          defaults.enforcement,
+      activeCourses: overrides.containsKey('activeCourses')
+          ? _nullableInt(overrides['activeCourses'])
+          : defaults.activeCourses,
+      monthlyQuiz: overrides.containsKey('monthlyQuiz')
+          ? _nullableInt(overrides['monthlyQuiz'])
+          : defaults.monthlyQuiz,
+      monthlyWarmup: overrides.containsKey('monthlyWarmup')
+          ? _nullableInt(overrides['monthlyWarmup'])
+          : defaults.monthlyWarmup,
+      monthlyRoleplay: overrides.containsKey('monthlyRoleplay')
+          ? _nullableInt(overrides['monthlyRoleplay'])
+          : defaults.monthlyRoleplay,
+      monthlyContestation: overrides.containsKey('monthlyContestation')
+          ? _nullableInt(overrides['monthlyContestation'])
+          : defaults.monthlyContestation,
+      monthlyRepaymentPlan: overrides.containsKey('monthlyRepaymentPlan')
+          ? _nullableInt(overrides['monthlyRepaymentPlan'])
+          : defaults.monthlyRepaymentPlan,
+      monthlyBalanceWriteOff: overrides.containsKey('monthlyBalanceWriteOff')
+          ? _nullableInt(overrides['monthlyBalanceWriteOff'])
+          : defaults.monthlyBalanceWriteOff,
+      monthlyItinerary: overrides.containsKey('monthlyItinerary')
+          ? _nullableInt(overrides['monthlyItinerary'])
+          : defaults.monthlyItinerary,
+      totalCreditors: overrides.containsKey('totalCreditors')
+          ? _nullableInt(overrides['totalCreditors'])
+          : defaults.totalCreditors,
+      totalCommissionSchemas: overrides.containsKey('totalCommissionSchemas')
+          ? _nullableInt(overrides['totalCommissionSchemas'])
+          : defaults.totalCommissionSchemas,
+      monthlyJobApplications: overrides.containsKey('monthlyJobApplications')
+          ? _nullableInt(overrides['monthlyJobApplications'])
+          : defaults.monthlyJobApplications,
+      unlimitedCommissionHistory: overrides.containsKey(
+            'unlimitedCommissionHistory',
+          )
+          ? overrides['unlimitedCommissionHistory'] == true
+          : defaults.unlimitedCommissionHistory,
+      advancedCommissionAnalytics: overrides.containsKey(
+            'advancedCommissionAnalytics',
+          )
+          ? overrides['advancedCommissionAnalytics'] == true
+          : defaults.advancedCommissionAnalytics,
+    );
+  }
+
+  static PublicPlanEnforcement? _parseEnforcement(dynamic raw) {
+    final value = raw?.toString().trim().toLowerCase();
+    return switch (value) {
+      'hard' => PublicPlanEnforcement.hard,
+      'soft' => PublicPlanEnforcement.soft,
+      'fairuse' || 'fair_use' => PublicPlanEnforcement.fairUse,
+      _ => null,
+    };
+  }
+
+  static int? _nullableInt(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is num) return raw.toInt();
+    final text = raw.toString().trim();
+    if (text.isEmpty) return null;
+    return int.tryParse(text);
+  }
+}
+
 String publicUsageMetricLabel(PublicUsageMetric metric) => switch (metric) {
       PublicUsageMetric.activeCourse => 'corsi attivi',
       PublicUsageMetric.quiz => 'quiz',
@@ -132,4 +421,25 @@ String publicUsageMetricLabel(PublicUsageMetric metric) => switch (metric) {
       PublicUsageMetric.creditorTotal => 'creditori',
       PublicUsageMetric.commissionSchema => 'schemi provvigioni',
       PublicUsageMetric.jobApplication => 'candidature lavoro',
+    };
+
+/// Metriche con contatore solo sul dispositivo (CreditCalc operativo).
+bool publicUsageMetricIsDeviceLocal(PublicUsageMetric metric) =>
+    switch (metric) {
+      PublicUsageMetric.creditorTotal ||
+      PublicUsageMetric.commissionSchema ||
+      PublicUsageMetric.repaymentPlan ||
+      PublicUsageMetric.balanceWriteOff ||
+      PublicUsageMetric.itinerary =>
+        true,
+      _ => false,
+    };
+
+/// Chiave persistenza contatori mensili locali.
+String? publicUsageMonthlyStorageField(PublicUsageMetric metric) =>
+    switch (metric) {
+      PublicUsageMetric.repaymentPlan => 'repaymentPlan',
+      PublicUsageMetric.balanceWriteOff => 'balanceWriteOff',
+      PublicUsageMetric.itinerary => 'itinerary',
+      _ => null,
     };

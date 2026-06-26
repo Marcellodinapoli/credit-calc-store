@@ -5,6 +5,7 @@ import '../core/theme/app_card_theme.dart';
 import '../core/theme/project_colors.dart';
 import '../subscription/subscription_billing_service.dart';
 import '../subscription/company_collaborator_limit_service.dart';
+import '../subscription/public_plan_limits_config_service.dart';
 import '../subscription/public_usage_service.dart';
 import '../subscription/subscription_plan_options.dart';
 import '../subscription/user_subscription_service.dart';
@@ -185,6 +186,7 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                   style: GoogleFonts.inter(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
+                    color: Colors.black87,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -243,6 +245,7 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                   style: GoogleFonts.inter(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
+                    color: Colors.black87,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -321,10 +324,25 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
           );
         }
 
-        final plans = subscriptionPlansForType(sub.registerType);
-        final current = sub.planOption(plans);
+        final isPublicAudience =
+            !isCompanySubscriptionAudience(sub.registerType);
+        final plansStream = isPublicAudience
+            ? PublicPlanLimitsConfigService.watchPlansConfig().map(
+                (_) => PublicPlanLimitsConfigService.subscriptionPlansForPublic(),
+              )
+            : Stream.value(subscriptionPlansForType(sub.registerType));
 
-        return AbsorbPointer(
+        return StreamBuilder<List<SubscriptionPlanOption>>(
+          stream: plansStream,
+          initialData: isPublicAudience
+              ? PublicPlanLimitsConfigService.subscriptionPlansForPublic()
+              : subscriptionPlansForType(sub.registerType),
+          builder: (context, plansSnap) {
+            final plans = plansSnap.data ??
+                subscriptionPlansForType(sub.registerType);
+            final current = sub.planOption(plans);
+
+            return AbsorbPointer(
           absorbing: _busy,
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -334,6 +352,7 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                 style: GoogleFonts.inter(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
+                  color: Colors.black87,
                 ),
               ),
               const SizedBox(height: 8),
@@ -379,6 +398,7 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                 style: GoogleFonts.inter(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
+                  color: Colors.black87,
                 ),
               ),
               const SizedBox(height: 6),
@@ -438,6 +458,8 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
               ],
             ],
           ),
+        );
+          },
         );
       },
     );
@@ -528,6 +550,7 @@ class _CurrentPlanCard extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
+                color: Colors.black87,
               ),
             ),
             if (plan != null) ...[
@@ -592,6 +615,7 @@ class _MyConsumptionSection extends StatelessWidget {
           style: GoogleFonts.inter(
             fontSize: 18,
             fontWeight: FontWeight.w700,
+            color: Colors.black87,
           ),
         ),
         const SizedBox(height: 6),
@@ -943,11 +967,7 @@ class _PlanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tierLabel = tierLabelOverride ??
-        switch (plan.id) {
-          'enterprise' => 'ENTERPRISE',
-          'plus' => 'PLUS',
-          _ => 'FREE',
-        };
+        PublicPlanLimitsConfigService.publicPlanTierLabel(plan.id);
 
     return SizedBox(
       width: double.infinity,
@@ -975,6 +995,7 @@ class _PlanCard extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
                     letterSpacing: 0.04,
+                    color: Colors.black87,
                   ),
                 ),
                 const Spacer(),
@@ -993,6 +1014,7 @@ class _PlanCard extends StatelessWidget {
               style: GoogleFonts.inter(
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
+                color: Colors.black87,
               ),
             ),
             const SizedBox(height: 6),

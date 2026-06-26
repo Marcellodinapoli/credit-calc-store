@@ -50,7 +50,7 @@ class ItineraryPageShell {
     }
     return wrapCreditCalcPage(
       pageTitle: pageTitle,
-      current: CreditCalcNavItem.develop,
+      current: CreditCalcNavItem.tools,
       body: body,
     );
   }
@@ -72,7 +72,7 @@ class ItineraryPageShell {
     return wrapCreditCalcPage(
       secondary: true,
       pageTitle: pageTitle,
-      current: CreditCalcNavItem.develop,
+      current: CreditCalcNavItem.tools,
       body: body,
     );
   }

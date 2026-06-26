@@ -14,7 +14,7 @@ String _displayPageTitle(CreditCalcNavItem? current, String pageTitle) {
     case CreditCalcNavItem.management:
       return 'Gestione';
     case CreditCalcNavItem.tools:
-      return 'Strumenti';
+      return 'Itinerario';
     default:
       return pageTitle;
   }

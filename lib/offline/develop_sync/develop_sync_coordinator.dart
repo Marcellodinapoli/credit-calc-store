@@ -8,11 +8,11 @@ import '../../services/field_reminder_notification_service.dart';
 import '../../services/field_visit_notification_service.dart';
 import '../../services/installment_monitor_config_storage.dart';
 import '../../services/itinerary_storage.dart';
+import '../local_itinerary_coordinator.dart';
 import 'develop_backoffice_pending_plan_repository.dart';
 import 'develop_backoffice_pending_plan_storage.dart';
 import 'develop_installment_monitor_config_storage.dart';
 import 'develop_installment_monitor_repository.dart';
-import 'develop_itinerary_migration.dart';
 import 'develop_itinerary_repository.dart';
 import 'develop_itinerary_storage.dart';
 import 'develop_pdr_schedule_storage.dart';
@@ -45,13 +45,20 @@ abstract final class DevelopSyncCoordinator {
     await stop();
 
     _store = DevelopSyncSqliteStore(userId);
-    await DevelopItineraryMigration.importFromFirestoreIfEmpty(_store!);
-    _itineraryRepository = DevelopItineraryRepository(_store!);
+    if (!LocalItineraryCoordinator.isActive) {
+      _itineraryRepository = DevelopItineraryRepository(_store!);
+      ItineraryStorage.instance =
+          DevelopItineraryStorage(_itineraryRepository!);
+    } else {
+      _itineraryRepository = LocalItineraryCoordinator.repository;
+    }
     _backofficeRepository = DevelopBackofficePendingPlanRepository(_store!);
     _installmentMonitorRepository =
         DevelopInstallmentMonitorRepository(_store!);
-    ItineraryStorage.instance =
-        DevelopItineraryStorage(_itineraryRepository!);
+    if (_itineraryRepository != null) {
+      ItineraryStorage.instance =
+          DevelopItineraryStorage(_itineraryRepository!);
+    }
     BackofficePendingPlanStorage.instance =
         DevelopBackofficePendingPlanStorage(_backofficeRepository!);
     PdrScheduleStorage.instance = DevelopPdrScheduleStorage(_store!);
@@ -80,7 +87,9 @@ abstract final class DevelopSyncCoordinator {
       MigratedDataFirestorePolicy.isLocalPrimary = null;
       DevelopSyncCrypto.clearCache(_store?.userId);
     }
-    ItineraryStorage.instance = FirestoreItineraryStorage();
+    if (!LocalItineraryCoordinator.isActive) {
+      ItineraryStorage.instance = FirestoreItineraryStorage();
+    }
     BackofficePendingPlanStorage.instance =
         FirestoreBackofficePendingPlanStorage();
     PdrScheduleStorage.instance = FirestorePdrScheduleStorage();

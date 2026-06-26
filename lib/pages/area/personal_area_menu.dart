@@ -7,11 +7,9 @@ import 'community_list_page.dart';
 import 'guide_page.dart';
 import 'my_data_page.dart';
 import 'notification_preferences_page.dart';
-import 'visit_itinerary_page.dart';
-
+import 'personal_area_shell.dart';
 /// Voci Area personale nel menù panino.
 enum PersonalAreaMenuItem {
-  visitItinerary,
   myData,
   subscription,
   directSupport,
@@ -23,7 +21,6 @@ enum PersonalAreaMenuItem {
 
 extension PersonalAreaMenuItemX on PersonalAreaMenuItem {
   String get title => switch (this) {
-        PersonalAreaMenuItem.visitItinerary => 'Itinerario',
         PersonalAreaMenuItem.myData => 'I miei dati',
         PersonalAreaMenuItem.subscription => 'Il mio piano',
         PersonalAreaMenuItem.directSupport => 'Assistenza diretta',
@@ -34,9 +31,11 @@ extension PersonalAreaMenuItemX on PersonalAreaMenuItem {
       };
 
   Widget page() => switch (this) {
-        PersonalAreaMenuItem.visitItinerary => const VisitItineraryPage(),
         PersonalAreaMenuItem.myData => const MyDataPage(),
-        PersonalAreaMenuItem.subscription => const SubscriptionAccountPage(),
+        PersonalAreaMenuItem.subscription => const PersonalAreaShell(
+              pageTitle: 'Il mio piano',
+              body: SubscriptionAccountBody(),
+            ),
         PersonalAreaMenuItem.directSupport => const DirectSupportPage(),
         PersonalAreaMenuItem.community => const CommunityListPage(),
         PersonalAreaMenuItem.guide => const GuidePage(),

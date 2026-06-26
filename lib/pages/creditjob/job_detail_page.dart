@@ -13,6 +13,7 @@ import '../../core/theme/app_card_theme.dart';
 import '../../ui/layout/adaptive_action_bar.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:credit_calc_core/credit_calc_core.dart';
 
 // ================================================================
 // PAGE
@@ -66,6 +67,15 @@ class JobDetailPage extends StatelessWidget {
       );
       return;
     }
+
+    if (!context.mounted) return;
+    if (!await PublicUsageCounterRecorder.recordWithUi(
+      context,
+      PublicUsageMetric.jobApplication,
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
 
     final presentationController = TextEditingController(
       text:

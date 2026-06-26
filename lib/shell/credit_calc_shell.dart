@@ -14,7 +14,7 @@ import '../pages/creditcalc/credit_calc_settings_page.dart';
 import '../pages/creditcalc/creditors_page.dart';
 import '../pages/creditcalc/develop_page.dart';
 import '../pages/creditcalc/management_hub_page.dart';
-import '../pages/creditcalc/tools_page.dart';
+import '../pages/creditcalc/itinerary/itinerary_hub_page.dart';
 import '../ui/layout/page_shell.dart';
 import '../widgets/desktop_app_update_button.dart';
 import 'credit_core_account_menu_sheet.dart';
@@ -42,7 +42,6 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
   void initState() {
     super.initState();
     CreditCalcRuntime.writeBlockedMessage.addListener(_onWriteBlocked);
-    unawaited(CreditCalcRuntime.refreshPendingSyncCount());
   }
 
   @override
@@ -65,18 +64,13 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => CreditCalcSettingsPage(
-          modePrefs: CreditCalcRuntime.modePrefs!,
           sessionService: CreditCalcRuntime.sessionService!,
-          syncEngine: CreditCalcRuntime.syncEngine!,
         ),
       ),
     );
-    if (!mounted) return;
-    unawaited(CreditCalcRuntime.refreshPendingSyncCount());
   }
 
   Future<void> _logout() async {
-    final pending = CreditCalcRuntime.pendingSyncCount.value;
     final online = await ConnectivityService.isOnline();
     final canSoftLock = await BiometricLockGate.canLockWithBiometric();
     if (!mounted) return;
@@ -86,11 +80,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
       builder: (ctx) => AlertDialog(
         title: const Text('Esci'),
         content: Text(
-          _logoutDialogMessage(
-            pending: pending,
-            softLock: canSoftLock,
-            online: online,
-          ),
+          _logoutDialogMessage(softLock: canSoftLock, online: online),
         ),
         actions: [
           TextButton(
@@ -114,8 +104,6 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     );
     if (action == null) return;
 
-    CreditCalcRuntime.realtimeSync?.stop();
-
     if (action == 'lock') {
       BiometricLockGate.lockAgain();
       return;
@@ -129,22 +117,15 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
   }
 
   String _logoutDialogMessage({
-    required int pending,
     required bool softLock,
     required bool online,
   }) {
-    final pendingText = pending > 0
-        ? 'Hai $pending modifiche non ancora sincronizzate. Restano su '
-            'questo dispositivo e verranno inviate al prossimo accesso '
-            'con internet.\n\n'
-        : '';
-
     if (softLock) {
-      return '${pendingText}L\'app verrà bloccata su questo dispositivo. '
+      return 'L\'app verrà bloccata su questo dispositivo. '
           'Potrai rientrare con la biometria, anche senza connessione.';
     }
 
-    return '${pendingText}Vuoi uscire dall\'account CreditCore?';
+    return 'Vuoi uscire dall\'account CreditCore?';
   }
 
   void _openAnnouncements() {
@@ -176,7 +157,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
       case CreditCalcNavItem.commissions:
         return const CommissionsPage();
       case CreditCalcNavItem.tools:
-        return const ToolsPage();
+        return const ItineraryHubPage();
       case CreditCalcNavItem.management:
         return const ManagementHubPage();
       case CreditCalcNavItem.subscription:
@@ -270,9 +251,9 @@ class _MobileShell extends StatelessWidget {
             label: 'Provvigioni',
           ),
           NavigationDestination(
-            icon: Icon(Icons.build_outlined),
-            selectedIcon: Icon(Icons.build),
-            label: 'Strumenti',
+            icon: Icon(Icons.route_outlined),
+            selectedIcon: Icon(Icons.route),
+            label: 'Itinerario',
           ),
         ],
       ),
@@ -405,8 +386,8 @@ class _SideNav extends StatelessWidget {
                 onTap: () => onSectionChanged(CreditCalcNavItem.commissions),
               ),
               _NavTile(
-                icon: Icons.build,
-                label: 'Strumenti',
+                icon: Icons.route,
+                label: 'Itinerario',
                 selected: section == CreditCalcNavItem.tools,
                 onTap: () => onSectionChanged(CreditCalcNavItem.tools),
               ),
@@ -474,23 +455,10 @@ class _SettingsIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: CreditCalcRuntime.pendingSyncCount,
-      builder: (context, pending, _) {
-        final label = pending > 99 ? '99+' : '$pending';
-        return Badge(
-          isLabelVisible: pending > 0,
-          label: Text(label),
-          backgroundColor: Colors.red.shade700,
-          child: IconButton(
-            tooltip: pending > 0
-                ? '$pending modifiche in attesa di internet'
-                : 'Impostazioni CreditCalc',
-            onPressed: () => onPressed(),
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        );
-      },
+    return IconButton(
+      tooltip: 'Impostazioni CreditCalc',
+      onPressed: () => onPressed(),
+      icon: const Icon(Icons.settings_outlined),
     );
   }
 }
@@ -500,17 +468,7 @@ class _SettingsNavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: CreditCalcRuntime.pendingSyncCount,
-      builder: (context, pending, _) {
-        return Badge(
-          isLabelVisible: pending > 0,
-          smallSize: 8,
-          backgroundColor: Colors.red.shade700,
-          child: const Icon(Icons.settings_outlined, size: 20),
-        );
-      },
-    );
+    return const Icon(Icons.settings_outlined, size: 20);
   }
 }
 

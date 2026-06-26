@@ -7,44 +7,68 @@ import 'backoffice_pending_plans_page.dart';
 import 'balance_write_off_page.dart';
 import 'standard_repayment_plan_page.dart';
 
+class _DevelopMenuItem {
+  const _DevelopMenuItem({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.page,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Widget page;
+}
+
 class DevelopPage extends StatelessWidget {
   const DevelopPage({super.key});
 
+  static const _menuItems = [
+    _DevelopMenuItem(
+      title: 'Piano di rientro',
+      subtitle: 'Simula rate e scadenze per il rientro del debito.',
+      icon: Icons.calendar_month_outlined,
+      page: StandardRepaymentPlanPage(),
+    ),
+    _DevelopMenuItem(
+      title: 'Saldo e stralcio',
+      subtitle: 'Valuta proposte di saldo e stralcio con confronto scenari.',
+      icon: Icons.handshake_outlined,
+      page: BalanceWriteOffPage(),
+    ),
+    _DevelopMenuItem(
+      title: 'Riscontro backoffice',
+      subtitle: 'Piani sviluppati in attesa di approvazione o incasso.',
+      icon: Icons.fact_check_outlined,
+      page: BackofficePendingPlansPage(),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    const items = [
-      'Piano di rientro',
-      'Saldo e stralcio',
-      'Riscontro backoffice',
-    ];
-
     return wrapCreditCalcPage(
       pageTitle: 'Sviluppa',
       current: CreditCalcNavItem.develop,
-      body: Card(
-        child: ListView.separated(
-          padding: const EdgeInsets.all(8),
-          itemCount: items.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, index) {
-            return ListTile(
-              leading: const Icon(Icons.chevron_right),
-              title: Text(items[index]),
-              onTap: () {
-                final title = items[index];
-                final page = switch (title) {
-                  'Piano di rientro' => const StandardRepaymentPlanPage(),
-                  'Saldo e stralcio' => const BalanceWriteOffPage(),
-                  'Riscontro backoffice' => const BackofficePendingPlansPage(),
-                  _ => const StandardRepaymentPlanPage(),
-                };
-                Navigator.of(context, rootNavigator: true).push(
-                  MaterialPageRoute(builder: (_) => page),
-                );
-              },
-            );
-          },
-        ),
+      body: ListView(
+        children: [
+          for (var i = 0; i < _menuItems.length; i++) ...[
+            if (i > 0) const SizedBox(height: 12),
+            Card(
+              child: ListTile(
+                leading: Icon(_menuItems[i].icon),
+                title: Text(_menuItems[i].title),
+                subtitle: Text(_menuItems[i].subtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context, rootNavigator: true).push(
+                    MaterialPageRoute(builder: (_) => _menuItems[i].page),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

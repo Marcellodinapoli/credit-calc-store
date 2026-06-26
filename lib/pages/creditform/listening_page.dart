@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:credit_calc_core/credit_calc_core.dart';
 import 'personal_form_shell.dart';
 import '../../core/theme/custom_tabbar_theme.dart';
 import '../../core/dimensions.dart';
@@ -191,6 +192,15 @@ class _TelefonataTabState extends State<TelefonataTab> {
   // ACTIONS
   // ---------------------------------------------------------------------------
   Future<void> _openPhase(String key) async {
+    if (!mounted) return;
+    if (!await PublicUsageCounterRecorder.recordWithUi(
+      context,
+      PublicUsageMetric.warmup,
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
     final completed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
@@ -585,6 +595,14 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
   // ---------------------------------------------------------------------------
   Future<void> _open(ContestationItem item, int index) async {
     if (!_isEnabled(index)) return;
+    if (!mounted) return;
+    if (!await PublicUsageCounterRecorder.recordWithUi(
+      context,
+      PublicUsageMetric.contestation,
+    )) {
+      return;
+    }
+    if (!mounted) return;
 
     final completed = await Navigator.push<bool>(
       context,
@@ -668,6 +686,15 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
 
       if (action != 'train') return;
     }
+
+    if (!mounted) return;
+    if (!await PublicUsageCounterRecorder.recordWithUi(
+      context,
+      PublicUsageMetric.contestation,
+    )) {
+      return;
+    }
+    if (!mounted) return;
 
     final completed = await Navigator.push<bool>(
       context,

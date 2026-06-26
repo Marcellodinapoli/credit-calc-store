@@ -2,33 +2,21 @@ import 'dart:async';
 
 import 'package:credit_calc_core/credit_calc_core.dart';
 
-import 'credit_calc_runtime.dart';
 import 'adapters/repository_commission_creditor_data_access.dart';
 import 'adapters/repository_commission_entries_data_access.dart';
 import 'adapters/repository_commission_entry_data_access.dart';
 import 'adapters/repository_creditors_list_data_access.dart';
-import 'models/credit_calc_mode.dart';
+import 'device_public_usage_local_data_access.dart';
 import 'repository/credit_calc_repository.dart';
-import 'services/mode_preferences_service.dart';
-import 'services/session_service.dart';
-import 'services/sync_engine.dart';
 
-/// Installa / aggiorna il repository dopo scelta o cambio modalità.
+/// Installa il repository dati operativi CreditCalc.
 abstract final class CreditCalcRepositorySetup {
-  static void apply({
-    required CreditCalcMode mode,
-    required String userId,
-    required ModePreferencesService modePrefs,
-    required SessionService sessionService,
-    required SyncEngine syncEngine,
-  }) {
-    CreditCalcRepository.install(
-      mode: mode,
-      userId: userId,
-      modePrefs: modePrefs,
-      sessionService: sessionService,
-      syncEngine: syncEngine,
-    );
+  static DevicePublicUsageLocalDataAccess? _localUsage;
+
+  static void apply({required String userId}) {
+    CreditCalcRepository.install(userId: userId);
+    _localUsage = DevicePublicUsageLocalDataAccess(userId);
+    PublicUsageLocalDataAccess.install(_localUsage!);
     CommissionEntryDataAccess.instance =
         RepositoryCommissionEntryDataAccess();
     CommissionCreditorDataAccess.instance =
@@ -38,11 +26,16 @@ abstract final class CreditCalcRepositorySetup {
     CreditorsListDataAccess.instance = RepositoryCreditorsListDataAccess();
   }
 
+  static void clear() {
+    PublicUsageLocalDataAccess.clear();
+    _localUsage = null;
+  }
+
   static void notifyDataChanged() {
     try {
       CreditCalcRepository.instance.notifyCreditorsChanged();
       CreditCalcRepository.instance.notifyCalculationsChanged();
+      _localUsage?.notifyChanged();
     } catch (_) {}
-    unawaited(CreditCalcRuntime.refreshPendingSyncCount());
   }
 }

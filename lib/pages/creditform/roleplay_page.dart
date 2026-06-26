@@ -14,6 +14,7 @@ import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:credit_calc_core/credit_calc_core.dart';
 import '../../services/read_state_service.dart';
 import '../../services/roleplay_progress_service.dart';
 import 'personal_form_shell.dart';
@@ -392,11 +393,20 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _channel?.sink.add(jsonEncode(_wsPayload(userText: transcript)));
   }
 
-  void _startSimulation(
+  Future<void> _startSimulation(
     Map<String, dynamic> simulationData, {
     required String simulationId,
     required String category,
-  }) {
+  }) async {
+    if (!mounted) return;
+    if (!await PublicUsageCounterRecorder.recordWithUi(
+      context,
+      PublicUsageMetric.roleplay,
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
     _currentSimulation = simulationData;
     _currentSimulationId = simulationId;
     _currentSimulationCategory = category;

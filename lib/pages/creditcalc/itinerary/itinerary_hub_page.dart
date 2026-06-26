@@ -45,110 +45,114 @@ class ItineraryHubPage extends StatelessWidget {
           const ItineraryNotificationsCard(),
           const SizedBox(height: 16),
           Card(
-            child: Column(
-              children: [
-                StreamBuilder<List<FieldVisit>>(
-                  stream: FieldVisitService.watchAllForUser(),
-                  builder: (context, visitsSnap) {
-                    final badgeCount =
-                        InstallmentMonitorService.upcomingDomiciliareCount(
-                      visitsSnap.data ?? const [],
-                    );
-                    return ListTile(
-                      leading: Badge(
-                        isLabelVisible: badgeCount > 0,
-                        label: Text(badgeCount > 99 ? '99+' : '$badgeCount'),
-                        backgroundColor: Colors.red.shade700,
-                        child: const Icon(Icons.event, color: Color(0xFF00B0FF)),
-                      ),
-                      title: const Text('Appuntamenti'),
-                      subtitle: const Text(
-                        'Agenda giornaliera: visite, import da provvigioni e stato pratiche.',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _open(
-                        context,
-                        PracticeAgendaPage(
-                          personalArea: personalArea,
-                          pageTitle: 'Appuntamenti',
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.checklist, color: Color(0xFF00B0FF)),
-                  title: const Text('Attività'),
+            child: StreamBuilder<List<FieldVisit>>(
+              stream: FieldVisitService.watchAllForUser(),
+              builder: (context, visitsSnap) {
+                final badgeCount =
+                    InstallmentMonitorService.upcomingDomiciliareCount(
+                  visitsSnap.data ?? const [],
+                );
+                return ListTile(
+                  leading: Badge(
+                    isLabelVisible: badgeCount > 0,
+                    label: Text(badgeCount > 99 ? '99+' : '$badgeCount'),
+                    backgroundColor: Colors.red.shade700,
+                    child: const Icon(Icons.event, color: Color(0xFF00B0FF)),
+                  ),
+                  title: const Text('Appuntamenti'),
                   subtitle: const Text(
-                    'Compiti e follow-up da completare, con scadenza opzionale.',
+                    'Agenda giornaliera: visite, import da provvigioni e stato pratiche.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _open(
                     context,
-                    ActivitiesPage(personalArea: personalArea),
-                  ),
-                ),
-                const Divider(height: 1),
-                StreamBuilder<List<FieldReminder>>(
-                  stream: FieldReminderService.watchUpcoming(),
-                  builder: (context, remindersSnap) {
-                    final badgeCount =
-                        InstallmentMonitorService.badgeCountFromReminders(
-                      remindersSnap.data ?? const [],
-                    );
-                    return ListTile(
-                      leading: Badge(
-                        isLabelVisible: badgeCount > 0,
-                        label: Text(badgeCount > 99 ? '99+' : '$badgeCount'),
-                        backgroundColor: Colors.red.shade700,
-                        child: const Icon(
-                          Icons.alarm,
-                          color: Color(0xFF00B0FF),
-                        ),
-                      ),
-                      title: const Text('Promemoria'),
-                      subtitle: const Text(
-                        'Avvisi programmati per richiami e scadenze importanti.',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _open(
-                        context,
-                        RemindersPage(personalArea: personalArea),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.map_outlined, color: Color(0xFF00B0FF)),
-                  title: const Text('Pianificazione territoriale'),
-                  subtitle: const Text(
-                    'Mappa OpenStreetMap con visite geolocalizzate e percorsi.',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _open(
-                    context,
-                    TerritoryMapPage(
+                    PracticeAgendaPage(
                       personalArea: personalArea,
-                      pageTitle: 'Pianificazione territoriale',
+                      pageTitle: 'Appuntamenti',
                     ),
                   ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.history, color: Color(0xFF00B0FF)),
-                  title: const Text('Storico visite'),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.checklist, color: Color(0xFF00B0FF)),
+              title: const Text('Attività'),
+              subtitle: const Text(
+                'Compiti e follow-up da completare, con scadenza opzionale.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _open(
+                context,
+                ActivitiesPage(personalArea: personalArea),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: StreamBuilder<List<FieldReminder>>(
+              stream: FieldReminderService.watchUpcoming(),
+              builder: (context, remindersSnap) {
+                final badgeCount =
+                    InstallmentMonitorService.badgeCountFromReminders(
+                  remindersSnap.data ?? const [],
+                );
+                return ListTile(
+                  leading: Badge(
+                    isLabelVisible: badgeCount > 0,
+                    label: Text(badgeCount > 99 ? '99+' : '$badgeCount'),
+                    backgroundColor: Colors.red.shade700,
+                    child: const Icon(
+                      Icons.alarm,
+                      color: Color(0xFF00B0FF),
+                    ),
+                  ),
+                  title: const Text('Promemoria'),
                   subtitle: const Text(
-                    'Riepilogo per mese e zona territoriale.',
+                    'Avvisi programmati per richiami e scadenze importanti.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _open(
                     context,
-                    VisitHistoryPage(personalArea: personalArea),
+                    RemindersPage(personalArea: personalArea),
                   ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.map_outlined, color: Color(0xFF00B0FF)),
+              title: const Text('Pianificazione territoriale'),
+              subtitle: const Text(
+                'Mappa OpenStreetMap con visite geolocalizzate e percorsi.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _open(
+                context,
+                TerritoryMapPage(
+                  personalArea: personalArea,
+                  pageTitle: 'Pianificazione territoriale',
                 ),
-              ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.history, color: Color(0xFF00B0FF)),
+              title: const Text('Storico visite'),
+              subtitle: const Text(
+                'Riepilogo per mese e zona territoriale.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _open(
+                context,
+                VisitHistoryPage(personalArea: personalArea),
+              ),
             ),
           ),
         ],

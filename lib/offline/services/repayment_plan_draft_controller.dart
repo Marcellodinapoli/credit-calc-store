@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../repository/credit_calc_repository.dart';
 import 'repayment_plan_draft_service.dart';
 
-/// Autosave / restore bozze piani di rientro (solo modalità offline).
+/// Autosave / restore bozze piani di rientro sul dispositivo.
 class RepaymentPlanDraftController {
   RepaymentPlanDraftController({
     required this.planType,
@@ -25,7 +25,8 @@ class RepaymentPlanDraftController {
 
   bool get _enabled {
     try {
-      return CreditCalcRepository.instance.isOfflineMode;
+      CreditCalcRepository.instance;
+      return true;
     } catch (_) {
       return false;
     }

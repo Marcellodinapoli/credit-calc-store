@@ -11,6 +11,7 @@ import '../pages/bk/bk_coupons_page.dart';
 import '../pages/bk/bk_warmup_contestations_page.dart';
 import '../pages/bk/bk_normative_search_page.dart';
 import '../pages/bk/bk_call_analysis_page.dart';
+import '../pages/bk/bk_plan_limits_page.dart';
 import '../models/field_activity.dart';
 import '../models/field_reminder.dart';
 import '../models/field_visit.dart';
@@ -19,7 +20,6 @@ import '../services/field_reminder_service.dart';
 import '../services/field_visit_service.dart';
 import '../services/gestione_menu_badge_service.dart';
 import '../services/read_state_service.dart';
-import '../pages/creditcalc/app_download_catalog_page.dart';
 import '../pages/creditcalc/commissions_page.dart';
 import '../pages/creditcalc/creditors_page.dart';
 import '../pages/creditcalc/develop_page.dart';
@@ -35,7 +35,7 @@ import '../pages/creditform/personal_form_menu.dart';
 import '../pages/creditjob/personal_job_menu.dart';
 import 'credit_core_site_actions.dart';
 
-enum _MenuSection { creditForm, creditJob, creditCalc, gestione, downloads }
+enum _MenuSection { creditForm, creditJob, creditCalc, gestione }
 
 /// Menù account mobile allineato a CreditPlanet (`SingleMenu`), filtrato per tipo utente.
 class CreditCoreAccountMenuSheet extends StatefulWidget {
@@ -542,31 +542,6 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
     );
   }
 
-  Widget _buildDownloadsMenuSection(Map<String, dynamic>? maintenanceData) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildCalcAreaSectionTitle(
-          'Scarica app',
-          _MenuSection.downloads,
-          maintenanceData,
-        ),
-        if (_openSection == _MenuSection.downloads)
-          _buildGestioneSubItem(
-            'Catalogo app',
-            () => _closeAnd(() {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const AppDownloadCatalogPage(),
-                ),
-              );
-            }),
-            maintenanceData,
-          ),
-      ],
-    );
-  }
-
   Widget _item({
     required IconData icon,
     required String title,
@@ -745,19 +720,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
 
           children.addAll([
             const Divider(height: 24),
-            if (!calcBlocked) ...[
-              _buildCreditCalcMenuSection(maintenanceData),
-              _buildGestioneMenuSection(maintenanceData),
-              _buildDownloadsMenuSection(maintenanceData),
-            ],
             _areaHeader(),
             if (!areaBlocked) ...[
-              _item(
-                icon: Icons.route_outlined,
-                title: PersonalAreaMenuItem.visitItinerary.title,
-                iconColor: _areaColor,
-                onTap: () => _closeAndArea(PersonalAreaMenuItem.visitItinerary),
-              ),
               _item(
                 icon: Icons.person_outline,
                 title: PersonalAreaMenuItem.myData.title,
@@ -814,6 +778,18 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const BkCouponsPage(),
+                    ),
+                  );
+                }),
+              ),
+              _item(
+                icon: Icons.speed_outlined,
+                title: 'Piani FREE / PLUS / ENTERPRISE',
+                iconColor: _areaColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BkPlanLimitsPage(),
                     ),
                   );
                 }),

@@ -1,3 +1,5 @@
+import 'public_plan_limits.dart';
+
 class SubscriptionPlanOption {
   final String id;
   final String name;
@@ -191,41 +193,45 @@ List<SubscriptionPlanOption> subscriptionPlansForType(String registerType) {
     ];
   }
 
-  return const [
-    SubscriptionPlanOption(
-      id: 'free',
-      name: 'Gratis',
-      price: '€0',
-      description:
-          'Uso base per testare la piattaforma.\n\n'
-          '3 corsi attivi · 10 quiz/mese · 5 Warm-up/mese · '
-          '2 Roleplay/mese · 3 contestazioni/mese · 1 piano di rientro '
-          '(simulazione) · 1 saldo/stralcio · 2 itinerari/mese · '
-          '5 creditori · 1 schema provvigioni · 3 candidature/mese.',
-    ),
-    SubscriptionPlanOption(
-      id: 'plus',
-      name: 'Plus',
-      price: '€4,99 / mese',
-      description:
-          'Uso personale completo con limiti medi-alti.\n\n'
-          'Fino a 50 corsi attivi · 200 quiz/mese · 100 Warm-up · '
-          '80 Roleplay · 50 contestazioni · 20 piani di rientro · '
-          '15 saldi/stralci · 20 itinerari · 200 creditori · '
-          'storico provvigioni completo · 50 candidature/mese.\n\n'
-          'Avviso al raggiungimento dell\'80% dei limiti.',
-      availableNow: true,
-    ),
-    SubscriptionPlanOption(
-      id: 'enterprise',
+  return defaultPublicSubscriptionPlans();
+}
+
+/// Piani individuali predefiniti (FREE / PLUS / ENTERPRISE).
+List<SubscriptionPlanOption> defaultPublicSubscriptionPlans() {
+  const planMeta = <String, ({String name, String price, bool availableNow})>{
+    'free': (name: 'Gratis', price: '€0', availableNow: false),
+    'plus': (name: 'Plus', price: '€4,99 / mese', availableNow: true),
+    'enterprise': (
       name: 'Enterprise',
       price: '€9,99 / mese',
-      description:
-          'Uso intensivo quasi senza limiti operativi.\n\n'
-          'Corsi, quiz, Warm-up, Roleplay, contestazioni, piani di '
-          'rientro, saldi/stralci, itinerari, creditori, provvigioni e '
-          'candidature illimitati (fair use). Analytics provvigioni avanzate.',
       availableNow: true,
     ),
+  };
+
+  return [
+    for (final planId in const ['free', 'plus', 'enterprise'])
+      SubscriptionPlanOption(
+        id: planId,
+        name: planMeta[planId]!.name,
+        price: planMeta[planId]!.price,
+        description: buildPublicPlanDescriptionFromLimits(
+          defaultPublicPlanLimitsForPlan(planId),
+          planId,
+        ),
+        availableNow: planMeta[planId]!.availableNow,
+      ),
   ];
 }
+
+SubscriptionPlanOption defaultPublicSubscriptionPlanForId(String planId) {
+  for (final plan in defaultPublicSubscriptionPlans()) {
+    if (plan.id == planId) return plan;
+  }
+  return defaultPublicSubscriptionPlans().first;
+}
+
+String defaultPublicPlanTierLabel(String planId) => switch (planId) {
+      'enterprise' => 'ENTERPRISE',
+      'plus' => 'PLUS',
+      _ => 'FREE',
+    };

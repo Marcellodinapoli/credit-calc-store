@@ -4,8 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'public_plan_limits.dart';
+import 'public_plan_limits_config_service.dart';
 import 'platform_admin.dart';
-import 'public_usage_counts_data_access.dart';
+import 'public_usage_local_data_access.dart';
 
 class PublicUsageCheckResult {
   const PublicUsageCheckResult({
@@ -78,13 +79,6 @@ abstract final class PublicUsageService {
         PublicUsageMetric.jobApplication => 'jobApplication',
         _ => '',
       };
-
-  static DocumentReference<Map<String, dynamic>> _totalsRef(String uid) =>
-      _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('public_usage')
-          .doc('totals');
 
   static DocumentReference<Map<String, dynamic>> _monthlyRef(String uid) =>
       _firestore.collection('users').doc(uid).collection('public_usage').doc('monthly');
@@ -180,6 +174,15 @@ abstract final class PublicUsageService {
     if (limits.enforcement == PublicPlanEnforcement.fairUse) return;
     if (limits.limitFor(metric) == null) return;
 
+    if (publicUsageMetricIsDeviceLocal(metric)) {
+      if (!limits.isMonthly(metric)) return;
+      await PublicUsageLocalDataAccess.instance?.incrementMonthly(
+        metric,
+        amount,
+      );
+      return;
+    }
+
     if (!limits.isMonthly(metric)) return;
 
     final uid = FirebaseAuth.instance.currentUser!.uid;
@@ -220,6 +223,7 @@ abstract final class PublicUsageService {
       'resetAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    await PublicUsageLocalDataAccess.instance?.resetMonthlyCounts();
   }
 
   static Future<int> _readUsage(
@@ -229,12 +233,18 @@ abstract final class PublicUsageService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return 0;
 
-    if (metric == PublicUsageMetric.creditorTotal) {
-      return PublicUsageCountsDataAccess.instance.countCreditors(uid);
+    if (publicUsageMetricIsDeviceLocal(metric)) {
+      final local = PublicUsageLocalDataAccess.instance;
+      if (local == null) return 0;
+      if (metric == PublicUsageMetric.creditorTotal) {
+        return local.countCreditors(uid);
+      }
+      if (metric == PublicUsageMetric.commissionSchema) {
+        return local.countCommissionSchemas(uid);
+      }
+      return local.readMonthlyCount(metric);
     }
-    if (metric == PublicUsageMetric.commissionSchema) {
-      return PublicUsageCountsDataAccess.instance.countCommissionSchemas(uid);
-    }
+
     if (metric == PublicUsageMetric.activeCourse) {
       return _countActiveCourses(uid);
     }
@@ -429,7 +439,8 @@ abstract final class PublicUsageService {
     if (uid == null) return Stream.value(const []);
 
     final monthlyRef = _monthlyRef(uid);
-    final totalsRef = _totalsRef(uid);
+    final local = PublicUsageLocalDataAccess.instance;
+    final planLimits = PublicPlanLimitsConfigService.onConfigChanged;
 
     return Stream.multi((controller) async {
       Future<void> emit() async {
@@ -445,10 +456,12 @@ abstract final class PublicUsageService {
 
       await emit();
       final subMonthly = monthlyRef.snapshots().listen((_) => emit());
-      final subTotals = totalsRef.snapshots().listen((_) => emit());
+      final subLocal = local?.changes.listen((_) => emit());
+      final subLimits = planLimits.listen((_) => emit());
       controller.onCancel = () {
         subMonthly.cancel();
-        subTotals.cancel();
+        subLocal?.cancel();
+        subLimits.cancel();
       };
     });
   }

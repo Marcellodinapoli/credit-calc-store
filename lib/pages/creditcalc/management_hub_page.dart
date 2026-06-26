@@ -64,128 +64,157 @@ class ManagementHubPage extends StatelessWidget {
                   const ManagementSectionIntro(),
                   const SizedBox(height: 16),
                   Card(
-                    child: Column(
-                      children: [
-                        ListTile(
-                          leading: const Icon(
-                            Icons.fact_check_outlined,
-                            color: ProjectColors.area,
-                          ),
-                          title: const Text('Riscontro backoffice'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _open(
-                            context,
-                            const BackofficePendingPlansPage(),
-                          ),
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.fact_check_outlined,
+                        color: ProjectColors.area,
+                      ),
+                      title: const Text('Riscontro backoffice'),
+                      subtitle: const Text(
+                        'Piani sviluppati in attesa di approvazione o incasso.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _open(
+                        context,
+                        const BackofficePendingPlansPage(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
+                      leading: Badge(
+                        isLabelVisible: rateizzoBadge > 0,
+                        label: Text(
+                          rateizzoBadge > 99 ? '99+' : '$rateizzoBadge',
                         ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: Badge(
-                            isLabelVisible: rateizzoBadge > 0,
-                            label: Text(
-                              rateizzoBadge > 99 ? '99+' : '$rateizzoBadge',
-                            ),
-                            backgroundColor: Colors.red.shade700,
-                            child: const Icon(
-                              Icons.calendar_month_outlined,
-                              color: ProjectColors.area,
-                            ),
-                          ),
-                          title: const Text('Monitoraggio rata'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _open(
-                            context,
-                            const InstallmentMonitorPage(personalArea: true),
-                          ),
+                        backgroundColor: Colors.red.shade700,
+                        child: const Icon(
+                          Icons.calendar_month_outlined,
+                          color: ProjectColors.area,
                         ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: Badge(
-                            isLabelVisible: appuntamentiBadge > 0,
-                            label: Text(
-                              appuntamentiBadge > 99
-                                  ? '99+'
-                                  : '$appuntamentiBadge',
-                            ),
-                            backgroundColor: Colors.red.shade700,
-                            child: const Icon(
-                              Icons.event,
-                              color: ProjectColors.area,
-                            ),
-                          ),
-                          title: const Text('Appuntamenti'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _open(
-                            context,
-                            const PracticeAgendaPage(
-                              pageTitle: 'Appuntamenti',
-                              personalArea: true,
-                            ),
-                          ),
+                      ),
+                      title: const Text('Monitoraggio rata'),
+                      subtitle: const Text(
+                        'Scadenze PDR e collegamento con l\'agenda.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _open(
+                        context,
+                        const InstallmentMonitorPage(personalArea: true),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
+                      leading: Badge(
+                        isLabelVisible: appuntamentiBadge > 0,
+                        label: Text(
+                          appuntamentiBadge > 99
+                              ? '99+'
+                              : '$appuntamentiBadge',
                         ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: const Icon(
-                            Icons.checklist,
-                            color: ProjectColors.area,
-                          ),
-                          title: const Text('Attività'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _open(
-                            context,
-                            const ActivitiesPage(personalArea: true),
-                          ),
+                        backgroundColor: Colors.red.shade700,
+                        child: const Icon(
+                          Icons.event,
+                          color: ProjectColors.area,
                         ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: Badge(
-                            isLabelVisible: promemoriaBadge > 0,
-                            label: Text(
-                              promemoriaBadge > 99 ? '99+' : '$promemoriaBadge',
-                            ),
-                            backgroundColor: Colors.red.shade700,
-                            child: const Icon(
-                              Icons.alarm,
-                              color: ProjectColors.area,
-                            ),
-                          ),
-                          title: const Text('Promemoria'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _open(
-                            context,
-                            const RemindersPage(personalArea: true),
-                          ),
+                      ),
+                      title: const Text('Appuntamenti'),
+                      subtitle: const Text(
+                        'Visite programmate e stato delle pratiche in agenda.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _open(
+                        context,
+                        const PracticeAgendaPage(
+                          pageTitle: 'Appuntamenti',
+                          personalArea: true,
                         ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: const Icon(
-                            Icons.map_outlined,
-                            color: ProjectColors.area,
-                          ),
-                          title: const Text('Pianificazione'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _open(
-                            context,
-                            const TerritoryMapPage(
-                              pageTitle: 'Pianificazione',
-                              personalArea: true,
-                            ),
-                          ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.checklist,
+                        color: ProjectColors.area,
+                      ),
+                      title: const Text('Attività'),
+                      subtitle: const Text(
+                        'Compiti e follow-up da completare, con scadenza opzionale.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _open(
+                        context,
+                        const ActivitiesPage(personalArea: true),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
+                      leading: Badge(
+                        isLabelVisible: promemoriaBadge > 0,
+                        label: Text(
+                          promemoriaBadge > 99 ? '99+' : '$promemoriaBadge',
                         ),
-                        const Divider(height: 1),
-                        ListTile(
-                          leading: const Icon(
-                            Icons.history,
-                            color: ProjectColors.area,
-                          ),
-                          title: const Text('Storico visite'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _open(
-                            context,
-                            const VisitHistoryPage(personalArea: true),
-                          ),
+                        backgroundColor: Colors.red.shade700,
+                        child: const Icon(
+                          Icons.alarm,
+                          color: ProjectColors.area,
                         ),
-                      ],
+                      ),
+                      title: const Text('Promemoria'),
+                      subtitle: const Text(
+                        'Avvisi per richiami e scadenze importanti.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _open(
+                        context,
+                        const RemindersPage(personalArea: true),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.map_outlined,
+                        color: ProjectColors.area,
+                      ),
+                      title: const Text('Pianificazione'),
+                      subtitle: const Text(
+                        'Mappa con visite geolocalizzate e percorsi sul territorio.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _open(
+                        context,
+                        const TerritoryMapPage(
+                          pageTitle: 'Pianificazione',
+                          personalArea: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.history,
+                        color: ProjectColors.area,
+                      ),
+                      title: const Text('Storico visite'),
+                      subtitle: const Text(
+                        'Riepilogo visite per mese e zona territoriale.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _open(
+                        context,
+                        const VisitHistoryPage(personalArea: true),
+                      ),
                     ),
                   ),
                 ],

@@ -9,6 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:credit_calc_core/credit_calc_core.dart';
 
 import '../../core/theme/app_card_theme.dart';
 import 'quiz_tab.dart';
@@ -64,6 +65,18 @@ class _TrainingPageState extends State<TrainingPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkCourseAccess());
+  }
+
+  Future<void> _checkCourseAccess() async {
+    if (!mounted) return;
+    final allowed = await PublicUsageGuard.ensureCourseAccess(
+      context,
+      widget.courseId,
+    );
+    if (!allowed && mounted) {
+      Navigator.maybePop(context);
+    }
   }
 
   @override

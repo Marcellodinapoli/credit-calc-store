@@ -3,7 +3,7 @@ import '../models/field_reminder.dart';
 import '../models/field_visit.dart';
 import 'firestore_itinerary_storage.dart';
 
-/// Persistenza itinerario (Firestore di default; locale se multi-dispositivo).
+/// Persistenza itinerario sul dispositivo (default).
 abstract class ItineraryStorage {
   static ItineraryStorage instance = FirestoreItineraryStorage();
 

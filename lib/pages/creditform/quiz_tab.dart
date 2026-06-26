@@ -7,6 +7,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:credit_calc_core/credit_calc_core.dart';
 
 import '../../core/adaptive_button_styles.dart';
 import '../../core/dimensions.dart';
@@ -113,7 +114,16 @@ class _QuizTabState extends State<QuizTab> {
 // -----------------------------------------------------------------------------
 // QUIZ FLOW
 // -----------------------------------------------------------------------------
-  void _startQuiz() {
+  Future<void> _startQuiz() async {
+    if (!mounted) return;
+    if (!await PublicUsageCounterRecorder.recordWithUi(
+      context,
+      PublicUsageMetric.quiz,
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
     setState(() {
       _quizStarted = true;
       _quizFinished = false;

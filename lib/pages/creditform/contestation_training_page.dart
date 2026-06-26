@@ -1,8 +1,12 @@
 // ignore_for_file: deprecated_member_use
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'personal_form_shell.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+
+import 'personal_form_shell.dart';
 import '../../core/platform/native_audio_helper.dart';
 
 
@@ -54,10 +58,11 @@ class _ContestationTrainingPageState
   // AUDIO
   bool _isRecording = false;
   bool _hasRecording = false;
-  final _suggestionCtrl = TextEditingController();
+  bool _isProcessing = false;
+  Map<String, dynamic>? _aiResult;
+  bool _evaluationPending = false;
 
-  bool get _canCompleteSimulation =>
-      _hasRecording && _suggestionCtrl.text.trim().isNotEmpty;
+  bool get _canCompleteSimulation => _hasRecording;
 
   // ---------------------------------------------------------------------------
   // LIFECYCLE
@@ -66,12 +71,6 @@ class _ContestationTrainingPageState
   void initState() {
     super.initState();
     _restoreProgress();
-  }
-
-  @override
-  void dispose() {
-    _suggestionCtrl.dispose();
-    super.dispose();
   }
 
   // ---------------------------------------------------------------------------
@@ -140,18 +139,9 @@ class _ContestationTrainingPageState
       Navigator.pop(context, true);
       return;
     }
-    final missing = <String>[];
-    if (_suggestionCtrl.text.trim().isEmpty) {
-      missing.add('compila il suggerimento atteso');
-    }
-    if (!_hasRecording) {
-      missing.add('registra la tua risposta');
-    }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Per concludere devi ${missing.join(' e ')}.',
-        ),
+      const SnackBar(
+        content: Text('Registra la tua risposta prima di concludere.'),
       ),
     );
   }
@@ -163,8 +153,39 @@ class _ContestationTrainingPageState
     if (_isRecording) {
       setState(() => _isRecording = false);
       try {
-        await NativeAudioHelper.stopRecording();
-        setState(() => _hasRecording = true);
+        final bytes = await NativeAudioHelper.stopRecording();
+        if (bytes.length < 5000) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Registrazione troppo breve, riprova'),
+              ),
+            );
+          }
+          return;
+        }
+
+        setState(() {
+          _hasRecording = true;
+          _isProcessing = true;
+          _aiResult = null;
+          _evaluationPending = false;
+        });
+
+        try {
+          final result = await _sendToAI(bytes);
+          if (!mounted) return;
+          setState(() {
+            _aiResult = result;
+            _isProcessing = false;
+          });
+        } catch (_) {
+          if (!mounted) return;
+          setState(() {
+            _isProcessing = false;
+            _evaluationPending = true;
+          });
+        }
       } catch (_) {}
       return;
     }
@@ -179,6 +200,49 @@ class _ContestationTrainingPageState
         );
       }
     }
+  }
+
+  Future<Map<String, dynamic>> _sendToAI(List<int> bytes) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('https://api.dinapolimarcello.it/evaluate'),
+    );
+
+    request.fields['phase'] = widget.item.title;
+    request.fields['expectedText'] = widget.item.response;
+    request.fields['phaseExplanation'] =
+        'Contestazione: ${widget.item.declared}\n'
+        'Significato: ${widget.item.meaning}\n'
+        'Rischio: ${widget.item.risk}\n'
+        'Obiettivo: ${widget.item.objective}';
+    request.fields['customerLine'] = widget.item.declared;
+
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'audio',
+        bytes,
+        filename: 'audio.m4a',
+      ),
+    );
+
+    final streamedResponse = await request.send().timeout(
+      const Duration(seconds: 40),
+      onTimeout: () {
+        throw Exception('Timeout AI backend');
+      },
+    );
+
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode != 200) {
+      throw Exception(response.body);
+    }
+
+    final decoded = jsonDecode(response.body);
+
+    return decoded is Map<String, dynamic>
+        ? decoded
+        : Map<String, dynamic>.from(decoded);
   }
 
   void _playRecording() {
@@ -264,18 +328,6 @@ class _ContestationTrainingPageState
           ),
           const SizedBox(height: 16),
         ],
-        TextFormField(
-          controller: _suggestionCtrl,
-          maxLines: 4,
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            labelText: 'Suggerimento atteso',
-            hintText: 'Scrivi la risposta professionale che intendi dare al cliente',
-            border: OutlineInputBorder(),
-            alignLabelWithHint: true,
-          ),
-        ),
-        const SizedBox(height: 28),
         Center(
           child: Column(
             children: [
@@ -307,6 +359,65 @@ class _ContestationTrainingPageState
               onPressed: _playRecording,
               icon: const Icon(Icons.play_arrow),
               label: const Text("Riascolta la registrazione"),
+            ),
+          ),
+        if (_isProcessing)
+          const Padding(
+            padding: EdgeInsets.only(top: 16),
+            child: Column(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 8),
+                Text('Analisi in corso...'),
+              ],
+            ),
+          ),
+        if (_evaluationPending && !_isProcessing)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: const Text(
+                'Registrazione ricevuta. Il suggerimento AI sarà disponibile '
+                'a breve: puoi comunque concludere la simulazione.',
+                style: TextStyle(fontSize: 13, height: 1.45),
+              ),
+            ),
+          ),
+        if (_aiResult != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Suggerimento atteso',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if ((_aiResult!['commento'] ?? '').toString().isNotEmpty)
+                  Text(_aiResult!['commento'].toString()),
+                if ((_aiResult!['versione_migliorata'] ?? '')
+                    .toString()
+                    .isNotEmpty) ...[
+                  if ((_aiResult!['commento'] ?? '').toString().isNotEmpty)
+                    const SizedBox(height: 8),
+                  Text(
+                    'Esempio di risposta: '
+                    '${_aiResult!['versione_migliorata']}',
+                  ),
+                ],
+              ],
             ),
           ),
       ],
