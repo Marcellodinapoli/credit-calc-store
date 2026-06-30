@@ -75,7 +75,7 @@ class _CreditCalcSettingsPageState extends State<CreditCalcSettingsPage> {
               ),
               children: [
                 const Text(
-                  'Impostazioni',
+                  'Storico trasferimenti',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,

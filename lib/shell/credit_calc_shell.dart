@@ -458,7 +458,7 @@ class _SettingsIconButton extends StatelessWidget {
     return IconButton(
       tooltip: 'Impostazioni CreditCalc',
       onPressed: () => onPressed(),
-      icon: const Icon(Icons.settings_outlined),
+      icon: const Icon(Icons.history),
     );
   }
 }
@@ -468,7 +468,7 @@ class _SettingsNavIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Icon(Icons.settings_outlined, size: 20);
+    return const Icon(Icons.history, size: 20);
   }
 }
 

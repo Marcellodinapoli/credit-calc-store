@@ -1,6 +1,7 @@
 ﻿import 'package:credit_calc_core/credit_calc_core.dart' hide DevelopPage;
 import 'package:flutter/material.dart';
 
+import 'building_residents_lookup_page.dart';
 import 'debtor_contact_page.dart';
 import 'normative_search_page.dart';
 import 'phone_call_analysis_page.dart';
@@ -40,6 +41,12 @@ class DevelopPage extends StatelessWidget {
       title: 'Calcolatrice',
       subtitle: 'Calcoli rapidi durante la trattativa.',
       icon: Icons.calculate_outlined,
+    ),
+    _DevelopMenuItem(
+      title: 'Ricerca per indirizzo',
+      subtitle:
+          'Nominativi da Pagine Bianche e motori web pubblici al civico.',
+      icon: Icons.apartment_outlined,
     ),
     _DevelopMenuItem(
       title: 'Ricerca normativa',
@@ -89,6 +96,8 @@ class DevelopPage extends StatelessWidget {
       );
     } else if (title == 'WhatsApp e email') {
       page = const DebtorContactPage();
+    } else if (title == 'Ricerca per indirizzo') {
+      page = const BuildingResidentsLookupPage();
     } else if (title == 'Ricerca normativa') {
       page = const NormativeSearchPage();
     } else if (title == 'Analisi telefonata') {
