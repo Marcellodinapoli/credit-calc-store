@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 import '../core/firestore_user_scope.dart';
 import '../data/migrated_data_firestore_policy.dart';
 import 'commission_collections_shared.dart';

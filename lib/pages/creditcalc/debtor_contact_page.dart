@@ -171,9 +171,9 @@ class _DebtorContactPageState extends State<DebtorContactPage> {
 
   String _creditorName(List<CreditorRecord>? creditors) {
     if (creditors == null || _selectedCreditorId == null) return '';
-    for (final creditor in creditors) {
-      if (creditor.id == _selectedCreditorId) {
-        return DebtorMessageTemplates.creditorDisplayName(creditor.data);
+    for (var i = 0; i < creditors.length; i++) {
+      if (creditors[i].id == _selectedCreditorId) {
+        return creditorDisplayLabel(i, creditors[i].data);
       }
     }
     return '';
@@ -346,11 +346,11 @@ class _DebtorContactPageState extends State<DebtorContactPage> {
               value: null,
               child: Text('Seleziona creditore'),
             ),
-            for (final creditor in creditors)
+            for (var i = 0; i < creditors.length; i++)
               DropdownMenuItem(
-                value: creditor.id,
+                value: creditors[i].id,
                 child: Text(
-                  DebtorMessageTemplates.creditorDisplayName(creditor.data),
+                  creditorDisplayLabel(i, creditors[i].data),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

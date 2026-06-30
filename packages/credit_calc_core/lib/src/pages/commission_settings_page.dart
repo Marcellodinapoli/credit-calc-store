@@ -113,7 +113,7 @@ class CommissionCreditorPicker {
       );
     } else if (saved == false) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Modifiche annullate.')),
+        const SnackBar(content: Text('Modifiche cancellate.')),
       );
     }
   }
@@ -397,23 +397,17 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
       ),
       child: const Row(
         children: [
-          SizedBox(width: 36),
+          SizedBox(width: 34),
           Expanded(
-            flex: 5,
             child: Text(
               'Modalità di pagamento',
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             ),
           ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'Provvigione %',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-            ),
+          Text(
+            'Provvigione %',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
           ),
-          SizedBox(width: 40),
         ],
       ),
     );
@@ -434,16 +428,18 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
         ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            allowed ? Icons.check_circle_rounded : Icons.cancel_rounded,
-            color: allowed ? Colors.green.shade600 : Colors.red.shade400,
-            size: 22,
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              allowed ? Icons.check_circle_rounded : Icons.cancel_rounded,
+              color: allowed ? Colors.green.shade600 : Colors.red.shade400,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            flex: 5,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -462,74 +458,71 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ],
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 72,
-                  child: TextField(
-                    controller: row.rateCtrl,
-                    enabled: allowed,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    textAlign: TextAlign.center,
-                    onChanged: allowed ? (_) => setState(() {}) : null,
-                    style: TextStyle(
-                      color: allowed ? Colors.black87 : Colors.black38,
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 72,
+                      child: TextField(
+                        controller: row.rateCtrl,
+                        enabled: allowed,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        textAlign: TextAlign.center,
+                        onChanged: allowed ? (_) => setState(() {}) : null,
+                        style: TextStyle(
+                          color: allowed ? Colors.black87 : Colors.black38,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          filled: true,
+                          fillColor:
+                              allowed ? Colors.white : Colors.grey.shade100,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          disabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade200),
+                          ),
+                        ),
+                      ),
                     ),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      filled: true,
-                      fillColor: allowed ? Colors.white : Colors.grey.shade100,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 10,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      disabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
+                    const SizedBox(width: 4),
+                    Text(
+                      '%',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: allowed ? Colors.black87 : Colors.black38,
                       ),
                     ),
-                  ),
+                    if (allowed)
+                      IconButton(
+                        onPressed: row.rateCtrl.text.trim().isEmpty
+                            ? null
+                            : () => _clearRow(mode.key),
+                        icon: const Icon(Icons.delete_outline, size: 20),
+                        color: Colors.red.shade700,
+                        tooltip: 'Azzera provvigione',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 36,
+                          minHeight: 36,
+                        ),
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  '%',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: allowed ? Colors.black87 : Colors.black38,
-                  ),
-                ),
-                if (allowed)
-                  IconButton(
-                    onPressed: row.rateCtrl.text.trim().isEmpty
-                        ? null
-                        : () => _clearRow(mode.key),
-                    icon: const Icon(Icons.delete_outline, size: 20),
-                    color: Colors.red.shade700,
-                    tooltip: 'Azzera provvigione',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 36,
-                      minHeight: 36,
-                    ),
-                  )
-                else
-                  const SizedBox(width: 36),
               ],
             ),
           ),
@@ -564,48 +557,40 @@ class _CommissionSettingsPageState extends State<CommissionSettingsPage> {
       shape: AppCardTheme.shape,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _saving ? null : _cancelChanges,
-                icon: const Icon(
-                  Icons.refresh,
-                  color: AppActionStyles.cancelForeground,
-                ),
-                label: const Text(
-                  'Annulla modifiche',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                style: AppActionStyles.cancelOutlined,
+            FilledButton.icon(
+              onPressed: _canSave ? _save : null,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.save_outlined, color: Colors.white),
+              label: Text(
+                _saving ? 'Salvataggio...' : 'Salva provvigioni',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: _primaryBlue,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade300,
+                disabledForegroundColor: Colors.grey.shade600,
+                padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: FilledButton.icon(
-                onPressed: _canSave ? _save : null,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.save_outlined, color: Colors.white),
-                label: Text(
-                  _saving ? 'Salvataggio...' : 'Salva provvigioni',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: _primaryBlue,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey.shade300,
-                  disabledForegroundColor: Colors.grey.shade600,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
+            const SizedBox(height: 10),
+            OutlinedButton(
+              onPressed: _saving ? null : _cancelChanges,
+              style: AppActionStyles.cancelOutlined,
+              child: const Text(
+                'Cancella modifiche',
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
           ],

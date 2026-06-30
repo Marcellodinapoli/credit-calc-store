@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../offline/utils/firestore_json_codec.dart';
+import '../utils/itinerary_date_time.dart';
+
 class FieldActivity {
   const FieldActivity({
     required this.id,
@@ -26,22 +29,20 @@ class FieldActivity {
   }
 
   factory FieldActivity.fromMap(String id, Map<String, dynamic> data) {
-    final due = data['dueAt'];
+    final normalized = FirestoreJsonCodec.decodeMap(
+      Map<String, dynamic>.from(data),
+    );
     return FieldActivity(
       id: id,
-      userId: (data['userId'] ?? '').toString(),
-      title: (data['title'] ?? '').toString().trim(),
-      completed: data['completed'] == true,
-      notes: data['notes']?.toString(),
-      dueAt: due is Timestamp
-          ? due.toDate()
-          : due is DateTime
-              ? due
-              : null,
-      visitId: data['visitId']?.toString(),
-      recurrenceDays: data['recurrenceDays'] is int
-          ? data['recurrenceDays'] as int
-          : int.tryParse(data['recurrenceDays']?.toString() ?? ''),
+      userId: (normalized['userId'] ?? '').toString(),
+      title: (normalized['title'] ?? '').toString().trim(),
+      completed: normalized['completed'] == true,
+      notes: normalized['notes']?.toString(),
+      dueAt: _readOptionalDateTime(normalized, data, 'dueAt'),
+      visitId: normalized['visitId']?.toString(),
+      recurrenceDays: normalized['recurrenceDays'] is num
+          ? (normalized['recurrenceDays'] as num).toInt()
+          : int.tryParse(normalized['recurrenceDays']?.toString() ?? ''),
     );
   }
 
@@ -52,7 +53,10 @@ class FieldActivity {
       'title': title,
       'completed': completed,
       if (notes != null && notes!.isNotEmpty) 'notes': notes,
-      if (dueAt != null) 'dueAt': Timestamp.fromDate(dueAt!),
+      if (dueAt != null) ...{
+        'dueAt': Timestamp.fromDate(dueAt!),
+        'dueAtMs': dueAt!.millisecondsSinceEpoch,
+      },
       if (visitId != null && visitId!.isNotEmpty) 'visitId': visitId,
       if (recurrenceDays != null && recurrenceDays! > 0)
         'recurrenceDays': recurrenceDays,
@@ -72,5 +76,19 @@ class FieldActivity {
         'recurrenceDays': recurrenceDays,
       'updatedAt': FieldValue.serverTimestamp(),
     };
+  }
+
+  static DateTime? _readOptionalDateTime(
+    Map<String, dynamic> normalized,
+    Map<String, dynamic> raw,
+    String field,
+  ) {
+    final msField = '${field}Ms';
+    final ms = normalized[msField] ?? raw[msField];
+    if (ms is num) {
+      return DateTime.fromMillisecondsSinceEpoch(ms.toInt(), isUtc: true).toLocal();
+    }
+    return ItineraryDateTime.parseStored(normalized[field]) ??
+        ItineraryDateTime.parseStored(raw[field]);
   }
 }

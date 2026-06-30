@@ -2,6 +2,7 @@ import '../core/firestore_user_scope.dart';
 import '../models/field_reminder.dart';
 import 'field_reminder_notification_service.dart';
 import 'itinerary_storage.dart';
+import 'itinerary_storage_access.dart';
 
 class FieldReminderSaveResult {
   const FieldReminderSaveResult({
@@ -14,7 +15,7 @@ class FieldReminderSaveResult {
 }
 
 abstract final class FieldReminderService {
-  static ItineraryStorage get _storage => ItineraryStorage.instance;
+  static ItineraryStorage get _storage => ItineraryStorageAccess.instance;
 
   static Stream<List<FieldReminder>> watchUpcoming() =>
       _storage.watchAllReminders();

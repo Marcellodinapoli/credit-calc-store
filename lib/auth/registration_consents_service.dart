@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'auth_redirect_feedback.dart';
 import 'registration_privacy_consents_page.dart';
 
 class RegistrationConsentsDocument {
@@ -130,6 +131,9 @@ class RegistrationConsentsService {
     );
 
     if (version == null) {
+      AuthRedirectFeedback.setMessage(
+        'Per accedere devi accettare l\'informativa privacy e consensi aggiornata.',
+      );
       await FirebaseAuth.instance.signOut();
       return false;
     }

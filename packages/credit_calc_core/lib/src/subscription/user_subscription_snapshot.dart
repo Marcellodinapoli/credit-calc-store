@@ -6,6 +6,8 @@ class UserSubscriptionSnapshot {
   final String subscriptionStatus;
   final String? couponCode;
   final bool lifetimeAccess;
+  final DateTime? couponAppliedAt;
+  final DateTime? limitsEffectExpiresAt;
   final String registerType;
   final bool canManage;
   final DateTime? cancelledAt;
@@ -15,6 +17,8 @@ class UserSubscriptionSnapshot {
     required this.subscriptionStatus,
     this.couponCode,
     this.lifetimeAccess = false,
+    this.couponAppliedAt,
+    this.limitsEffectExpiresAt,
     required this.registerType,
     required this.canManage,
     this.cancelledAt,
@@ -28,6 +32,13 @@ class UserSubscriptionSnapshot {
   bool get hasCoupon =>
       couponCode != null && couponCode!.trim().isNotEmpty;
 
+  /// Effetto limiti del coupon terminato ([limitsEffectExpiresAt] nel passato).
+  bool get isCouponLimitsEffectExpired =>
+      hasCoupon &&
+      !lifetimeAccess &&
+      limitsEffectExpiresAt != null &&
+      limitsEffectExpiresAt!.isBefore(DateTime.now());
+
   bool get canCancel =>
       canManage &&
       !lifetimeAccess &&
@@ -37,10 +48,9 @@ class UserSubscriptionSnapshot {
   bool get canChangePlan => canManage && !lifetimeAccess;
 
   String get statusLabel {
-    if (lifetimeAccess || hasCoupon) {
-      if (lifetimeAccess) return 'Attivo (coupon lifetime)';
-      return 'Attivo (coupon applicato)';
-    }
+    if (isCouponLimitsEffectExpired) return 'Effetto limiti scaduto';
+    if (lifetimeAccess) return 'Attivo (coupon lifetime)';
+    if (hasCoupon) return 'Attivo (coupon applicato)';
     return switch (subscriptionStatus) {
       'cancelled' => 'Abbonamento annullato',
       'pending' => 'In attesa di attivazione',

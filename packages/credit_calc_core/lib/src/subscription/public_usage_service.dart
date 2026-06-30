@@ -83,14 +83,60 @@ abstract final class PublicUsageService {
   static DocumentReference<Map<String, dynamic>> _monthlyRef(String uid) =>
       _firestore.collection('users').doc(uid).collection('public_usage').doc('monthly');
 
-  static Future<({String type, String planId})?> _userContext() async {
+  static const _couponBenefitUsageItems = [
+    PlanUsageItem(
+      label: 'Utilizzo con coupon',
+      used: 0,
+      unlimited: true,
+      periodHint: 'Tutta la piattaforma senza limiti fino a scadenza effetto',
+    ),
+  ];
+
+  /// Con coupon attivo: fair use Enterprise (nessun servizio escluso).
+  static PublicPlanLimits _limitsForContext({
+    required String planId,
+    required bool couponBenefitActive,
+  }) {
+    if (couponBenefitActive) {
+      return defaultPublicPlanLimitsForPlan('enterprise');
+    }
+    return publicPlanLimitsForPlan(planId);
+  }
+
+  /// Piano effettivo per i limiti: dopo [subscriptionExpiresAt] torna Gratis.
+  static String _effectivePlanId(Map<String, dynamic> data) {
+    var planId = (data['subscriptionPlan'] ?? 'free').toString();
+    final expires = data['subscriptionExpiresAt'];
+    if (expires is Timestamp && expires.toDate().isBefore(DateTime.now())) {
+      planId = 'free';
+    }
+    return planId;
+  }
+
+  /// Coupon backoffice attivo: limiti illimitati fino a scadenza effetto.
+  static bool _isCouponBenefitActive(Map<String, dynamic> data) {
+    final code = (data['couponCode'] ?? '').toString().trim();
+    if (code.isEmpty) return false;
+
+    final expires = data['subscriptionExpiresAt'];
+    if (expires is Timestamp) {
+      return !expires.toDate().isBefore(DateTime.now());
+    }
+    return data['lifetimeAccess'] == true;
+  }
+
+  static Future<({String type, String planId, bool couponBenefitActive})?>
+      _userContext() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return null;
     final snap = await _firestore.collection('users').doc(uid).get();
     final data = snap.data() ?? {};
     final type = (data['type'] ?? 'public').toString().trim().toLowerCase();
-    final planId = (data['subscriptionPlan'] ?? 'free').toString();
-    return (type: type, planId: planId);
+    return (
+      type: type,
+      planId: _effectivePlanId(data),
+      couponBenefitActive: _isCouponBenefitActive(data),
+    );
   }
 
   static bool shouldEnforceForUserType(String type) {
@@ -116,7 +162,10 @@ abstract final class PublicUsageService {
       return PublicUsageCheckResult.skipped;
     }
 
-    final limits = publicPlanLimitsForPlan(ctx.planId);
+    final limits = _limitsForContext(
+      planId: ctx.planId,
+      couponBenefitActive: ctx.couponBenefitActive,
+    );
     if (limits.enforcement == PublicPlanEnforcement.fairUse) {
       return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
     }
@@ -170,7 +219,10 @@ abstract final class PublicUsageService {
     final ctx = await _userContext();
     if (ctx == null || !shouldEnforceForUserType(ctx.type)) return;
 
-    final limits = publicPlanLimitsForPlan(ctx.planId);
+    final limits = _limitsForContext(
+      planId: ctx.planId,
+      couponBenefitActive: ctx.couponBenefitActive,
+    );
     if (limits.enforcement == PublicPlanEnforcement.fairUse) return;
     if (limits.limitFor(metric) == null) return;
 
@@ -296,6 +348,15 @@ abstract final class PublicUsageService {
     return limits.unlimitedCommissionHistory;
   }
 
+  static Future<bool> allowsAdvancedCommissionHistoryForCurrentUser() async {
+    final ctx = await _userContext();
+    if (ctx == null) return false;
+    return _limitsForContext(
+      planId: ctx.planId,
+      couponBenefitActive: ctx.couponBenefitActive,
+    ).unlimitedCommissionHistory;
+  }
+
   static Future<PublicUsageCheckResult> checkCommissionHistoryAccess() async {
     if (await PlatformAdmin.isCurrentUser()) {
       return PublicUsageCheckResult.skipped;
@@ -310,7 +371,10 @@ abstract final class PublicUsageService {
     if (!shouldEnforceForUserType(ctx.type)) {
       return PublicUsageCheckResult.skipped;
     }
-    final limits = publicPlanLimitsForPlan(ctx.planId);
+    final limits = _limitsForContext(
+      planId: ctx.planId,
+      couponBenefitActive: ctx.couponBenefitActive,
+    );
     if (limits.unlimitedCommissionHistory) {
       return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
     }
@@ -337,7 +401,10 @@ abstract final class PublicUsageService {
     if (!shouldEnforceForUserType(ctx.type)) {
       return PublicUsageCheckResult.skipped;
     }
-    final limits = publicPlanLimitsForPlan(ctx.planId);
+    final limits = _limitsForContext(
+      planId: ctx.planId,
+      couponBenefitActive: ctx.couponBenefitActive,
+    );
     if (limits.advancedCommissionAnalytics) {
       return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
     }
@@ -354,6 +421,9 @@ abstract final class PublicUsageService {
     final ctx = await _userContext();
     if (ctx == null || !shouldEnforceForUserType(ctx.type)) {
       return const [];
+    }
+    if (ctx.couponBenefitActive) {
+      return _couponBenefitUsageItems;
     }
     return loadUsageItemsForPlan(ctx.planId);
   }
@@ -428,7 +498,11 @@ abstract final class PublicUsageService {
         yield const <PlanUsageItem>[];
         return;
       }
-      final planId = (data['subscriptionPlan'] ?? 'free').toString();
+      if (_isCouponBenefitActive(data)) {
+        yield _couponBenefitUsageItems;
+        return;
+      }
+      final planId = _effectivePlanId(data);
       yield* watchUsageForPlan(planId);
     });
   }
@@ -528,7 +602,10 @@ abstract final class PublicUsageService {
       return PublicUsageCheckResult.skipped;
     }
 
-    final limits = publicPlanLimitsForPlan(ctx.planId);
+    final limits = _limitsForContext(
+      planId: ctx.planId,
+      couponBenefitActive: ctx.couponBenefitActive,
+    );
     if (limits.enforcement == PublicPlanEnforcement.fairUse) {
       return PublicUsageCheckResult(allowed: true, planId: ctx.planId);
     }

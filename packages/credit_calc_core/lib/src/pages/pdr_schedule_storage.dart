@@ -240,7 +240,7 @@ class FirestorePdrScheduleStorage implements PdrScheduleStorage {
       'creditorName': creditorName.trim(),
       'planSource': planSource,
       'installments': parsed.map((i) => i.toJson()).toList(),
-      'totalAmount': parsed.fold<double>(0, (sum, i) => sum + i.amount),
+      'totalAmount': parsed.fold<double>(0, (total, i) => total + i.amount),
       'rateCount': parsed.length,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': FieldValue.serverTimestamp(),

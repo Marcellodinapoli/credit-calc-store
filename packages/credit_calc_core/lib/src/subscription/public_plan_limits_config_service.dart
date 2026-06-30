@@ -13,25 +13,39 @@ abstract final class PublicPlanLimitsConfigService {
   static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _subscription;
   static final StreamController<void> _configChanges =
       StreamController<void>.broadcast();
+  static final StreamController<Map<String, dynamic>?> _plansController =
+      StreamController<Map<String, dynamic>?>.broadcast();
+
+  static const _serverGet = GetOptions(source: Source.server);
 
   static DocumentReference<Map<String, dynamic>> get _doc =>
       FirebaseFirestore.instance.collection('settings').doc(docId);
 
-  /// Emesso quando i limiti su Firestore cambiano (BackOffice o altro client).
+  /// Emesso quando i limiti su Firestore cambiano.
   static Stream<void> get onConfigChanged => _configChanges.stream;
 
   static void start() {
-    if (_subscription != null) return;
-
-    unawaited(_loadFromServer());
-
-    _subscription = _doc.snapshots().listen(
+    _subscription?.cancel();
+    _subscription = _doc.snapshots(includeMetadataChanges: true).listen(
       (snapshot) {
-        _plansConfig = _readPlans(snapshot.data());
-        if (!_configChanges.isClosed) _configChanges.add(null);
+        if (!_isAuthoritativeSnapshot(snapshot)) return;
+        _publishPlans(_readPlans(snapshot.data()));
       },
       onError: (_, __) {},
     );
+  }
+
+  static bool _isAuthoritativeSnapshot(
+    DocumentSnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    return snapshot.metadata.hasPendingWrites ||
+        !snapshot.metadata.isFromCache;
+  }
+
+  static void _publishPlans(Map<String, dynamic>? plans) {
+    _plansConfig = plans;
+    if (!_plansController.isClosed) _plansController.add(plans);
+    if (!_configChanges.isClosed) _configChanges.add(null);
   }
 
   static void stop() {
@@ -40,31 +54,29 @@ abstract final class PublicPlanLimitsConfigService {
     _plansConfig = null;
   }
 
-  /// Attende il primo caricamento limiti (cache o server).
+  /// Stream tempo reale dei piani (include pending write dopo salvataggio).
+  static Stream<Map<String, dynamic>?> watchPlansConfig() {
+    start();
+    return Stream.multi((controller) {
+      if (_plansConfig != null) {
+        controller.add(_plansConfig);
+      }
+      final sub = _plansController.stream.listen(
+        controller.add,
+        onError: controller.addError,
+      );
+      controller.onCancel = sub.cancel;
+    });
+  }
+
+  /// Attende il caricamento limiti dal server Firestore.
   static Future<void> ensureLoaded({
     Duration timeout = const Duration(seconds: 8),
   }) async {
     start();
-    if (_plansConfig != null) return;
-
     try {
-      await _loadFromServer().timeout(timeout);
-    } on TimeoutException {
-      // Usa cache locale Firestore se il server non risponde in tempo.
-    }
-
-    if (_plansConfig != null) return;
-
-    try {
-      final snapshot = await _doc.get().timeout(timeout);
-      _plansConfig = _readPlans(snapshot.data());
-    } catch (_) {}
-  }
-
-  static Future<void> _loadFromServer() async {
-    try {
-      final snapshot = await _doc.get(const GetOptions(source: Source.server));
-      _plansConfig = _readPlans(snapshot.data());
+      final snapshot = await _doc.get(_serverGet).timeout(timeout);
+      _publishPlans(_readPlans(snapshot.data()));
     } catch (_) {}
   }
 
@@ -97,8 +109,62 @@ abstract final class PublicPlanLimitsConfigService {
     return defaults;
   }
 
-  static Stream<Map<String, dynamic>?> watchPlansConfig() {
-    return _doc.snapshots().map((snap) => _readPlans(snap.data()));
+  static List<String>? _readLimitLines(dynamic raw) {
+    if (raw is! List) return null;
+    final lines = raw
+        .map((e) => e.toString().trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    return lines.isEmpty ? null : lines;
+  }
+
+  /// Righe elenco salvate in BackOffice (`limitLines`), se presenti.
+  static List<String>? storedLimitLinesForPlan(String planId) {
+    final normalized = _normalizePlanId(planId);
+    final raw = _plansConfig?[normalized];
+    if (raw is! Map) return null;
+    final map = raw is Map<String, dynamic>
+        ? raw
+        : Map<String, dynamic>.from(raw);
+    return _readLimitLines(map['limitLines']);
+  }
+
+  /// Intro card da descrizione BackOffice (primo paragrafo).
+  static String planIntroForDisplay(String planId) {
+    final normalized = _normalizePlanId(planId);
+    final raw = _plansConfig?[normalized];
+    if (raw is Map) {
+      final map =
+          raw is Map<String, dynamic> ? raw : Map<String, dynamic>.from(raw);
+      final desc = _readString(map['description']);
+      if (desc != null && desc.isNotEmpty) {
+        return desc.split('\n\n').first.split('\n').first.trim();
+      }
+    }
+    return defaultPublicSubscriptionPlanForId(normalized)
+        .description
+        .split('\n\n')
+        .first
+        .split('\n')
+        .first
+        .trim();
+  }
+
+  /// Righe elenco in card: BackOffice se salvate, altrimenti dai limiti effettivi.
+  static List<String> limitLinesForDisplay(String planId) {
+    final stored = storedLimitLinesForPlan(planId);
+    if (stored != null && stored.isNotEmpty) return stored;
+    return buildPublicPlanLimitListItems(limitsForPlan(planId), planId);
+  }
+
+  /// Lettura singola dal server (BackOffice).
+  static Future<Map<String, dynamic>?> fetchPlansConfig() async {
+    try {
+      final snapshot = await _doc.get(_serverGet);
+      return _readPlans(snapshot.data());
+    } catch (_) {
+      return null;
+    }
   }
 
   static const publicPlanIds = ['free', 'plus', 'enterprise'];
@@ -125,11 +191,19 @@ abstract final class PublicPlanLimitsConfigService {
             ? defaults.availableNow
             : availableRaw == true || availableRaw == 1;
 
+    final limits = limitsForPlan(normalized);
+    final intro = planIntroForDisplay(normalized);
+    final items = limitLinesForDisplay(normalized);
+
     return SubscriptionPlanOption(
       id: normalized,
       name: _readString(map['name']) ?? defaults.name,
       price: _readString(map['price']) ?? defaults.price,
-      description: _readString(map['description']) ?? defaults.description,
+      description: formatPublicPlanDescriptionList(
+        intro: intro,
+        items: items,
+        enforcement: limits.enforcement,
+      ),
       availableNow: availableNow,
     );
   }

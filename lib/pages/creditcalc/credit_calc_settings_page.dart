@@ -1,4 +1,3 @@
-import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
 import '../../offline/repository/credit_calc_repository.dart';

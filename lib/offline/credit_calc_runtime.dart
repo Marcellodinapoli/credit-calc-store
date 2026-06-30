@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'credit_calc_repository_setup.dart';
 import 'develop_sync/develop_sync_coordinator.dart';
 import 'local_itinerary_coordinator.dart';
+import 'services/local_data_cipher.dart';
 import 'services/session_service.dart';
 
 /// Servizi CreditCalc attivi nella sessione corrente.
@@ -34,6 +35,7 @@ abstract final class CreditCalcRuntime {
 
   static Future<void> reclaimSessionAfterUnlock() async {
     try {
+      await LocalDataCipher.warmUp();
       PublicPlanLimitsConfigService.start();
       await PublicPlanLimitsConfigService.ensureLoaded(
         timeout: const Duration(seconds: 4),

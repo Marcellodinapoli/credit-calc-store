@@ -27,6 +27,11 @@ class BiometricLockGate extends StatefulWidget {
     _BiometricLockGateState.lockAgain();
   }
 
+  /// Segna lo sblocco prima di un eventuale re-login Firebase (evita re-lock al rebuild).
+  static void markUnlocked() {
+    _BiometricLockGateState.markUnlocked();
+  }
+
   static Future<bool> canLockWithBiometric() =>
       _BiometricLockGateState.canLockWithBiometric();
 
@@ -38,6 +43,7 @@ class _BiometricLockGateState extends State<BiometricLockGate> {
   /// Sblocco già effettuato in questa esecuzione dell'app.
   static bool _unlockedThisSession = false;
   static final ValueNotifier<int> _lockGeneration = ValueNotifier(0);
+  static final ValueNotifier<int> _unlockGeneration = ValueNotifier(0);
 
   final _biometricService = BiometricService();
 
@@ -49,6 +55,11 @@ class _BiometricLockGateState extends State<BiometricLockGate> {
     _unlockedThisSession = false;
     CreditCoreSessionRuntime.resetPendingBootstrap();
     _lockGeneration.value++;
+  }
+
+  static void markUnlocked() {
+    _unlockedThisSession = true;
+    _unlockGeneration.value++;
   }
 
   static Future<bool> canLockWithBiometric() async {
@@ -66,18 +77,25 @@ class _BiometricLockGateState extends State<BiometricLockGate> {
   void initState() {
     super.initState();
     _lockGeneration.addListener(_onLockRequested);
+    _unlockGeneration.addListener(_onUnlockRequested);
     _prepare();
   }
 
   @override
   void dispose() {
     _lockGeneration.removeListener(_onLockRequested);
+    _unlockGeneration.removeListener(_onUnlockRequested);
     super.dispose();
   }
 
   void _onLockRequested() {
     if (!mounted || !_lockEnabled) return;
     setState(() => _locked = true);
+  }
+
+  void _onUnlockRequested() {
+    if (!mounted || !_lockEnabled) return;
+    setState(() => _locked = false);
   }
 
   Future<void> _unlock() async {
@@ -122,13 +140,23 @@ class _BiometricLockGateState extends State<BiometricLockGate> {
       );
     }
 
-    if (_lockEnabled && _locked) {
-      return LoginPage(
-        unlockMode: true,
-        onUnlocked: _unlock,
-      );
+    if (!_lockEnabled) {
+      return widget.child;
     }
 
-    return widget.child;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Offstage(
+          offstage: _locked,
+          child: widget.child,
+        ),
+        if (_locked)
+          LoginPage(
+            unlockMode: true,
+            onUnlocked: _unlock,
+          ),
+      ],
+    );
   }
 }

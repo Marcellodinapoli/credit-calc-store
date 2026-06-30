@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:credit_calc_core/credit_calc_core.dart'
-    hide CommissionsPage, CreditorsPage, DevelopPage;
+import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -12,30 +11,12 @@ import '../pages/bk/bk_warmup_contestations_page.dart';
 import '../pages/bk/bk_normative_search_page.dart';
 import '../pages/bk/bk_call_analysis_page.dart';
 import '../pages/bk/bk_plan_limits_page.dart';
-import '../models/field_activity.dart';
-import '../models/field_reminder.dart';
-import '../models/field_visit.dart';
-import '../services/field_activity_service.dart';
-import '../services/field_reminder_service.dart';
-import '../services/field_visit_service.dart';
-import '../services/gestione_menu_badge_service.dart';
-import '../services/read_state_service.dart';
-import '../pages/creditcalc/commissions_page.dart';
-import '../pages/creditcalc/creditors_page.dart';
-import '../pages/creditcalc/develop_page.dart';
-import '../widgets/itinerary_day_summary_card.dart';
-import '../pages/creditcalc/installment_monitor_page.dart';
-import '../pages/creditcalc/itinerary/activities_page.dart';
-import '../pages/creditcalc/itinerary/practice_agenda_page.dart';
-import '../pages/creditcalc/itinerary/reminders_page.dart';
-import '../pages/creditcalc/itinerary/territory_map_page.dart';
-import '../pages/creditcalc/itinerary/visit_history_page.dart';
 import '../ui/layout/page_shell.dart';
 import '../pages/creditform/personal_form_menu.dart';
 import '../pages/creditjob/personal_job_menu.dart';
 import 'credit_core_site_actions.dart';
 
-enum _MenuSection { creditForm, creditJob, creditCalc, gestione }
+enum _MenuSection { creditForm, creditJob }
 
 /// Menù account mobile allineato a CreditPlanet (`SingleMenu`), filtrato per tipo utente.
 class CreditCoreAccountMenuSheet extends StatefulWidget {
@@ -56,12 +37,10 @@ class CreditCoreAccountMenuSheet extends StatefulWidget {
 class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet> {
   static const _formColor = Color(0xFFFFA726);
   static const _jobColor = Color(0xFF00C4B3);
-  static const _calcColor = Color(0xFF00B0FF);
   static const _areaColor = Color(0xFF1565C0);
 
   static final _formLight = _formColor.withValues(alpha: 0.15);
   static final _jobLight = _jobColor.withValues(alpha: 0.15);
-  static final _calcLight = _calcColor.withValues(alpha: 0.15);
 
   _MenuSection? _openSection;
   String? _userType;
@@ -69,30 +48,11 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
   bool _blockedContext = false;
   bool _isBkAdmin = false;
   bool _loading = true;
-  Map<String, String> _gestioneViewedDays = const {};
 
   @override
   void initState() {
     super.initState();
     _loadUserContext();
-    _loadGestioneViewedDays();
-    GestioneMenuBadgeService.changes.addListener(_onGestioneBadgeChanged);
-  }
-
-  @override
-  void dispose() {
-    GestioneMenuBadgeService.changes.removeListener(_onGestioneBadgeChanged);
-    super.dispose();
-  }
-
-  void _onGestioneBadgeChanged() {
-    _loadGestioneViewedDays();
-  }
-
-  Future<void> _loadGestioneViewedDays() async {
-    final days = await ReadStateService.getGestioneMenuViewedDays();
-    if (!mounted) return;
-    setState(() => _gestioneViewedDays = days);
   }
 
   Future<void> _loadUserContext() async {
@@ -193,8 +153,6 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
     final sectionName = switch (section) {
       _MenuSection.creditForm => MaintenanceService.creditForm,
       _MenuSection.creditJob => MaintenanceService.creditJob,
-      _MenuSection.creditCalc => MaintenanceService.creditCalc,
-      _ => MaintenanceService.creditCalc,
     };
     final blocked = MaintenanceService.isSectionBlocked(maintenanceData, sectionName);
 
@@ -275,273 +233,6 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
     );
   }
 
-  Widget _menuRedDot() {
-    return Container(
-      width: 8,
-      height: 8,
-      margin: const EdgeInsets.only(right: 8),
-      decoration: const BoxDecoration(
-        color: Colors.red,
-        shape: BoxShape.circle,
-      ),
-    );
-  }
-
-  Widget _buildCalcAreaSectionTitle(
-    String label,
-    _MenuSection section,
-    Map<String, dynamic>? maintenanceData, {
-    bool showBadge = false,
-  }) {
-    final isOpen = _openSection == section;
-    final blocked = MaintenanceService.isSectionBlocked(
-      maintenanceData,
-      MaintenanceService.creditCalc,
-    );
-
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      title: Text(
-        label,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 16,
-          color: _areaColor,
-        ),
-      ),
-      trailing: blocked
-          ? const Icon(Icons.warning_amber_rounded, color: Colors.orange)
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (showBadge) _menuRedDot(),
-                Icon(isOpen ? Icons.remove : Icons.add),
-              ],
-            ),
-      onTap: blocked
-          ? _showMaintenanceSnackBar
-          : () {
-              setState(() {
-                _openSection = isOpen ? null : section;
-              });
-            },
-    );
-  }
-
-  void _openCalcPage(Widget page) {
-    _closeAnd(() {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => page),
-      );
-    });
-  }
-
-  void _openGestionePage(Widget page, GestioneMenuBadgeKey? badgeKey) {
-    _closeAnd(() {
-      if (badgeKey != null) {
-        GestioneMenuBadgeService.markViewed(badgeKey);
-      }
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => page),
-      );
-    });
-  }
-
-  Widget _buildGestioneSubItem(
-    String title,
-    VoidCallback onTap,
-    Map<String, dynamic>? maintenanceData, {
-    bool showBadge = false,
-  }) {
-    final blocked = MaintenanceService.isSectionBlocked(
-      maintenanceData,
-      MaintenanceService.creditCalc,
-    );
-
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '- $title',
-              style: TextStyle(color: blocked ? Colors.black38 : Colors.black87),
-            ),
-          ),
-          if (showBadge) _menuRedDot(),
-        ],
-      ),
-      tileColor: _areaColor.withValues(alpha: 0.08),
-      onTap: blocked ? _showMaintenanceSnackBar : onTap,
-    );
-  }
-
-  Widget _buildCreditCalcMenuSection(Map<String, dynamic>? maintenanceData) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildExpandableSectionTitle(
-          BrandedPageProject.calc,
-          _MenuSection.creditCalc,
-          maintenanceData,
-        ),
-        if (_openSection == _MenuSection.creditCalc) ...[
-          _buildSubMenuItem(
-            'Creditori',
-            () => _openCalcPage(const CreditorsPage()),
-            _calcColor,
-            _calcLight,
-            maintenanceData,
-            MaintenanceService.creditCalc,
-          ),
-          _buildSubMenuItem(
-            'Sviluppa',
-            () => _openCalcPage(const DevelopPage()),
-            _calcColor,
-            _calcLight,
-            maintenanceData,
-            MaintenanceService.creditCalc,
-          ),
-          _buildSubMenuItem(
-            'Provvigioni',
-            () => _openCalcPage(const CommissionsPage()),
-            _calcColor,
-            _calcLight,
-            maintenanceData,
-            MaintenanceService.creditCalc,
-          ),
-          _buildSubMenuItem(
-            'Riscontro backoffice',
-            () => _openCalcPage(const BackofficePendingPlansPage()),
-            _calcColor,
-            _calcLight,
-            maintenanceData,
-            MaintenanceService.creditCalc,
-          ),
-          _buildSubMenuItem(
-            'Monitoraggio rata',
-            () => _openCalcPage(
-              const InstallmentMonitorPage(personalArea: true),
-            ),
-            _calcColor,
-            _calcLight,
-            maintenanceData,
-            MaintenanceService.creditCalc,
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildGestioneMenuSection(Map<String, dynamic>? maintenanceData) {
-    final today = DateTime.now();
-
-    return StreamBuilder<List<FieldVisit>>(
-      stream: FieldVisitService.watchForDay(today),
-      builder: (context, visitsSnap) {
-        return StreamBuilder<List<FieldActivity>>(
-          stream: FieldActivityService.watchAll(),
-          builder: (context, activitiesSnap) {
-            return StreamBuilder<List<FieldReminder>>(
-              stream: FieldReminderService.watchUpcoming(),
-              builder: (context, remindersSnap) {
-                final visits = visitsSnap.data ?? const [];
-                final activities = activitiesSnap.data ?? const [];
-                final reminders = remindersSnap.data ?? const [];
-
-                bool badgeFor(GestioneMenuBadgeKey key) =>
-                    GestioneMenuBadgeService.shouldShowBadge(
-                      key,
-                      viewedDays: _gestioneViewedDays,
-                      visits: visits,
-                      activities: activities,
-                      reminders: reminders,
-                      today: today,
-                    );
-
-                final sectionBadge =
-                    GestioneMenuBadgeService.shouldShowGestioneSectionBadge(
-                  viewedDays: _gestioneViewedDays,
-                  visits: visits,
-                  activities: activities,
-                  reminders: reminders,
-                  today: today,
-                );
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildCalcAreaSectionTitle(
-                      'Gestione',
-                      _MenuSection.gestione,
-                      maintenanceData,
-                      showBadge: sectionBadge,
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(12, 4, 12, 8),
-                      child: ItineraryDaySummaryCard(),
-                    ),
-                    if (_openSection == _MenuSection.gestione) ...[
-                      _buildGestioneSubItem(
-                        'Appuntamenti',
-                        () => _openGestionePage(
-                          const PracticeAgendaPage(
-                            pageTitle: 'Appuntamenti',
-                            personalArea: true,
-                          ),
-                          GestioneMenuBadgeKey.appointments,
-                        ),
-                        maintenanceData,
-                        showBadge: badgeFor(GestioneMenuBadgeKey.appointments),
-                      ),
-                      _buildGestioneSubItem(
-                        'Attività',
-                        () => _openGestionePage(
-                          const ActivitiesPage(personalArea: true),
-                          GestioneMenuBadgeKey.activities,
-                        ),
-                        maintenanceData,
-                        showBadge: badgeFor(GestioneMenuBadgeKey.activities),
-                      ),
-                      _buildGestioneSubItem(
-                        'Promemoria',
-                        () => _openGestionePage(
-                          const RemindersPage(personalArea: true),
-                          GestioneMenuBadgeKey.reminders,
-                        ),
-                        maintenanceData,
-                        showBadge: badgeFor(GestioneMenuBadgeKey.reminders),
-                      ),
-                      _buildGestioneSubItem(
-                        'Pianificazione',
-                        () => _openGestionePage(
-                          const TerritoryMapPage(
-                            pageTitle: 'Pianificazione',
-                            personalArea: true,
-                          ),
-                          null,
-                        ),
-                        maintenanceData,
-                      ),
-                      _buildGestioneSubItem(
-                        'Storico visite',
-                        () => _openGestionePage(
-                          const VisitHistoryPage(personalArea: true),
-                          null,
-                        ),
-                        maintenanceData,
-                      ),
-                    ],
-                  ],
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
   Widget _item({
     required IconData icon,
     required String title,
@@ -591,10 +282,6 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
         final areaBlocked = MaintenanceService.isSectionBlocked(
           maintenanceData,
           MaintenanceService.area,
-        );
-        final calcBlocked = MaintenanceService.isSectionBlocked(
-          maintenanceData,
-          MaintenanceService.creditCalc,
         );
 
         final children = <Widget>[

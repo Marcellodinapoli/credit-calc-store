@@ -68,16 +68,30 @@ class LoginPricingPage extends StatelessWidget {
                       subtitle: 'Per professionisti e utenti singoli',
                     ),
                     const SizedBox(height: 16),
-                    for (final plan in defaultPublicSubscriptionPlans()) ...[
-                      _PlanCard(
-                        name: defaultPublicPlanTierLabel(plan.id),
-                        price: plan.price,
-                        description: plan.description,
-                        highlighted: plan.id == 'plus',
-                        badge: plan.id == 'plus' ? 'Consigliato' : null,
-                      ),
-                      const SizedBox(height: 16),
-                    ],
+                    StreamBuilder<Map<String, dynamic>?>(
+                      stream: PublicPlanLimitsConfigService.watchPlansConfig(),
+                      builder: (context, snapshot) {
+                        final planOptions = PublicPlanLimitsConfigService
+                            .subscriptionPlansForPublic();
+                        return Column(
+                          children: [
+                            for (var i = 0; i < planOptions.length; i++) ...[
+                              if (i > 0) const SizedBox(height: 16),
+                              _PlanCard(
+                                name: PublicPlanLimitsConfigService
+                                    .publicPlanTierLabel(planOptions[i].id),
+                                price: planOptions[i].price,
+                                description: planOptions[i].description,
+                                highlighted: planOptions[i].id == 'plus',
+                                badge: planOptions[i].id == 'plus'
+                                    ? 'Consigliato'
+                                    : null,
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
                     const SizedBox(height: 32),
                     Divider(color: Colors.grey.shade300),
                     const SizedBox(height: 32),

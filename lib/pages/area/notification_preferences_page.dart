@@ -154,16 +154,18 @@ class _NotificationPreferencesPageState
                         ),
                         const Divider(height: 1),
                         SwitchListTile(
-                          title: const Text('Notifiche itinerario'),
+                          title: const Text(
+                            'Notifiche itinerario',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
                           subtitle: const Text(
                             'Promemoria programmati e avviso 30 min prima delle visite.',
                           ),
                           value: _itineraryEnabled,
-                          onChanged: _uid == null ||
-                                  _savingItinerary ||
-                                  !_enabled
-                              ? null
-                              : _onItineraryChanged,
+                          onChanged:
+                              _uid == null || _savingItinerary || !_enabled
+                                  ? null
+                                  : _onItineraryChanged,
                         ),
                       ],
                     ),
@@ -212,8 +214,7 @@ class _NotificationPreferencesPageState
                     context,
                     icon: Icons.verified_user_outlined,
                     title: 'Consenso da questa pagina',
-                    text:
-                        'Attivando le opzioni confermi di voler ricevere gli '
+                    text: 'Attivando le opzioni confermi di voler ricevere gli '
                         'avvisi indicati e, per l\'itinerario, di autorizzare '
                         'l\'uso della posizione per i percorsi. La scelta resta '
                         'valida su questo dispositivo finché non la modifichi.',
@@ -250,7 +251,8 @@ class _NotificationPreferencesPageState
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        color:
+            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(

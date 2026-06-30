@@ -52,12 +52,14 @@ class SollecitoInstallmentOption {
 abstract final class DebtorMessageTemplates {
   DebtorMessageTemplates._();
 
-  static String creditorDisplayName(Map<String, dynamic> data) {
-    for (final key in ['displayLabel', 'clientName', 'name']) {
-      final value = (data[key] ?? '').toString().trim();
-      if (value.isNotEmpty) return value;
-    }
-    return 'Creditore';
+  static String creditorDisplayName(Map<String, dynamic> data, {int? index}) {
+    if (index != null) return creditorDisplayLabel(index, data);
+
+    final clientName = (data['clientName'] ?? '').toString().trim();
+    if (clientName.isNotEmpty) return clientName;
+
+    final name = (data['name'] ?? data['displayLabel'] ?? '').toString().trim();
+    return name.isNotEmpty ? name : 'Creditore';
   }
 
   static List<CreditorPaymentMethodOption> paymentMethodsForCreditor(

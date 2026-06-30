@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../core/theme/app_card_theme.dart';
 import '../core/theme/project_colors.dart';
+import '../subscription/public_plan_limits.dart';
 import '../subscription/subscription_billing_service.dart';
 import '../subscription/company_collaborator_limit_service.dart';
 import '../subscription/public_plan_limits_config_service.dart';
@@ -22,6 +23,17 @@ class SubscriptionAccountBody extends StatefulWidget {
 
 class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
   bool _busy = false;
+
+  Widget _scrollableContent(List<Widget> children) {
+    return SingleChildScrollView(
+      primary: false,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    );
+  }
 
   Future<void> _runAction(
     Future<void> Function() action, {
@@ -178,9 +190,7 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
 
           return AbsorbPointer(
             absorbing: _busy,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
+            child: _scrollableContent([
                 Text(
                   'Il tuo piano',
                   style: GoogleFonts.inter(
@@ -258,13 +268,14 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                 _PlanCardsLayout(
                   plans: plans,
                   sideBySideBreakpoint: 640,
-                  builder: (plan) => _PlanCard(
+                  builder: (plan, {required bool stretch}) => _PlanCard(
                     plan: plan,
                     currentPlanId: normalizeCompanyPlanId(sub.planId),
                     isCurrent: _isSameCompanyPlan(plan.id, sub.planId),
                     canChange: sub.canChangePlan,
                     isCompanyAudience: true,
                     tierLabelOverride: plan.name,
+                    stretch: stretch,
                     onSelect: sub.canChangePlan &&
                             !_isSameCompanyPlan(plan.id, sub.planId)
                         ? () => _onChangePlan(sub, plan, isCompany: true)
@@ -319,8 +330,7 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                   const SizedBox(height: 16),
                   const Center(child: CircularProgressIndicator()),
                 ],
-              ],
-            ),
+            ]),
           );
         }
 
@@ -344,9 +354,7 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
 
             return AbsorbPointer(
           absorbing: _busy,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
+          child: _scrollableContent([
               Text(
                 'Il tuo piano',
                 style: GoogleFonts.inter(
@@ -410,22 +418,21 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
               _PlanCardsLayout(
                 plans: plans,
                 sideBySideBreakpoint: 640,
-                builder: (plan) => _PlanCard(
+                builder: (plan, {required bool stretch}) => _PlanCard(
                   plan: plan,
                   currentPlanId: sub.planId,
                   isCurrent: plan.id == sub.planId,
                   canChange: sub.canChangePlan,
+                  stretch: stretch,
                   onSelect: sub.canChangePlan && plan.id != sub.planId
                       ? () => _onChangePlan(sub, plan, isCompany: false)
                       : null,
-                  stretch: true,
                 ),
               ),
               const SizedBox(height: 28),
               if (PublicUsageService.shouldEnforceForUserType(sub.registerType))
                 StreamBuilder<List<PlanUsageItem>>(
-                  key: ValueKey(sub.planId),
-                  stream: PublicUsageService.watchUsageForPlan(sub.planId),
+                  stream: PublicUsageService.watchUsageItems(),
                   builder: (context, usageSnap) {
                     if (usageSnap.connectionState == ConnectionState.waiting &&
                         !usageSnap.hasData) {
@@ -456,8 +463,7 @@ class _SubscriptionAccountBodyState extends State<SubscriptionAccountBody> {
                 const SizedBox(height: 16),
                 const Center(child: CircularProgressIndicator()),
               ],
-            ],
-          ),
+          ]),
         );
           },
         );
@@ -474,7 +480,8 @@ class _PlanCardsLayout extends StatelessWidget {
   });
 
   final List<SubscriptionPlanOption> plans;
-  final Widget Function(SubscriptionPlanOption plan) builder;
+  final Widget Function(SubscriptionPlanOption plan, {required bool stretch})
+      builder;
   final double sideBySideBreakpoint;
 
   @override
@@ -487,7 +494,7 @@ class _PlanCardsLayout extends StatelessWidget {
             children: [
               for (var i = 0; i < plans.length; i++) ...[
                 if (i > 0) const SizedBox(height: 10),
-                builder(plans[i]),
+                builder(plans[i], stretch: false),
               ],
             ],
           );
@@ -498,7 +505,7 @@ class _PlanCardsLayout extends StatelessWidget {
             children: [
               for (var i = 0; i < plans.length; i++) ...[
                 if (i > 0) const SizedBox(width: 12),
-                Expanded(child: builder(plans[i])),
+                Expanded(child: builder(plans[i], stretch: true)),
               ],
             ],
           ),
@@ -541,7 +548,10 @@ class _CurrentPlanCard extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                _StatusChip(label: snapshot.statusLabel),
+                _StatusChip(
+                  label: snapshot.statusLabel,
+                  warning: snapshot.isCouponLimitsEffectExpired,
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -563,14 +573,19 @@ class _CurrentPlanCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                plan!.description,
-                style: TextStyle(
-                  color: Colors.grey.shade800,
-                  height: 1.45,
-                  fontSize: 14,
+              if (!isCompanySubscriptionAudience(snapshot.registerType) &&
+                  PublicPlanLimitsConfigService.publicPlanIds
+                      .contains(plan!.id))
+                _PublicPlanDescription(planId: plan!.id)
+              else
+                Text(
+                  plan!.description,
+                  style: TextStyle(
+                    color: Colors.grey.shade800,
+                    height: 1.45,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
             ],
             if (snapshot.cancelledAt != null) ...[
               const SizedBox(height: 10),
@@ -891,27 +906,39 @@ class _CouponInfoCard extends StatelessWidget {
 
   final UserSubscriptionSnapshot snapshot;
 
+  static String _formatCouponDate(DateTime dt) =>
+      '${dt.day.toString().padLeft(2, '0')}/'
+      '${dt.month.toString().padLeft(2, '0')}/'
+      '${dt.year}';
+
   @override
   Widget build(BuildContext context) {
+    final expired = snapshot.isCouponLimitsEffectExpired;
+
     return Card(
-      color: const Color(0xFFF0FDF4),
+      color: expired ? const Color(0xFFFFF7ED) : const Color(0xFFF0FDF4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppCardTheme.radius),
-        side: const BorderSide(color: Color(0xFF86EFAC)),
+        side: BorderSide(
+          color: expired ? const Color(0xFFFDBA74) : const Color(0xFF86EFAC),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.verified_outlined, color: Colors.green.shade700),
+            Icon(
+              expired ? Icons.event_busy_outlined : Icons.verified_outlined,
+              color: expired ? Colors.orange.shade800 : Colors.green.shade700,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Coupon applicato',
+                    expired ? 'Coupon applicato (effetto scaduto)' : 'Coupon applicato',
                     style: GoogleFonts.inter(fontWeight: FontWeight.w700),
                   ),
                   if (snapshot.hasCoupon) ...[
@@ -921,16 +948,37 @@ class _CouponInfoCard extends StatelessWidget {
                       style: const TextStyle(fontFamily: 'monospace'),
                     ),
                   ],
+                  if (snapshot.couponAppliedAt != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Data inserimento: '
+                      '${_formatCouponDate(snapshot.couponAppliedAt!)}',
+                      style: TextStyle(
+                        color: Colors.grey.shade800,
+                        height: 1.4,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 4),
                   Text(
-                    snapshot.lifetimeAccess
-                        ? 'Accesso lifetime attivo: il piano selezionato è '
-                            'attivo senza abbonamento ricorrente.'
-                        : 'Coupon registrato in fase di iscrizione.',
+                    expired
+                        ? 'Effetto limiti terminato il '
+                            '${_formatCouponDate(snapshot.limitsEffectExpiresAt!)}. '
+                            'Sono attivi i limiti del piano Gratis.'
+                        : snapshot.limitsEffectExpiresAt != null
+                            ? 'Data effetto limiti: '
+                                '${_formatCouponDate(snapshot.limitsEffectExpiresAt!)}'
+                            : snapshot.lifetimeAccess
+                                ? 'Data effetto limiti: senza scadenza'
+                                : 'Coupon registrato in fase di iscrizione.',
                     style: TextStyle(
-                      color: Colors.grey.shade800,
+                      color: expired
+                          ? Colors.orange.shade900
+                          : Colors.grey.shade800,
                       height: 1.4,
                       fontSize: 13,
+                      fontWeight: expired ? FontWeight.w600 : FontWeight.normal,
                     ),
                   ),
                 ],
@@ -969,24 +1017,21 @@ class _PlanCard extends StatelessWidget {
     final tierLabel = tierLabelOverride ??
         PublicPlanLimitsConfigService.publicPlanTierLabel(plan.id);
 
-    return SizedBox(
-      width: double.infinity,
-      height: stretch ? double.infinity : null,
-      child: Card(
-        color: isCurrent ? Colors.white : AppCardTheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppCardTheme.radius),
-          side: BorderSide(
-            color: isCurrent ? ProjectColors.area : const Color(0xFFE5E7EB),
-            width: isCurrent ? 2 : 1,
-          ),
+    return Card(
+      color: isCurrent ? Colors.white : AppCardTheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppCardTheme.radius),
+        side: BorderSide(
+          color: isCurrent ? ProjectColors.area : const Color(0xFFE5E7EB),
+          width: isCurrent ? 2 : 1,
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: stretch ? MainAxisSize.max : MainAxisSize.min,
-            children: [
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: stretch ? MainAxisSize.max : MainAxisSize.min,
+          children: [
             Row(
               children: [
                 Text(
@@ -1018,14 +1063,18 @@ class _PlanCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            Text(
-              plan.description,
-              style: TextStyle(
-                color: Colors.grey.shade800,
-                height: 1.45,
-                fontSize: 13,
+            if (!isCompanyAudience &&
+                PublicPlanLimitsConfigService.publicPlanIds.contains(plan.id))
+              _PublicPlanDescription(planId: plan.id)
+            else
+              Text(
+                plan.description,
+                style: TextStyle(
+                  color: Colors.grey.shade800,
+                  height: 1.45,
+                  fontSize: 13,
+                ),
               ),
-            ),
             if (!plan.availableNow && plan.id != 'free') ...[
               const SizedBox(height: 8),
               Text(
@@ -1086,8 +1135,7 @@ class _PlanCard extends StatelessWidget {
                 ),
               ),
             ],
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -1114,23 +1162,88 @@ class _PlanCard extends StatelessWidget {
   }
 }
 
+class _PublicPlanDescription extends StatelessWidget {
+  const _PublicPlanDescription({required this.planId});
+
+  final String planId;
+
+  static final _bodyStyle = TextStyle(
+    color: Colors.grey.shade800,
+    height: 1.45,
+    fontSize: 13,
+  );
+
+  static final _noteStyle = TextStyle(
+    color: Colors.grey.shade600,
+    height: 1.45,
+    fontSize: 12,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final limits = publicPlanLimitsForPlan(planId);
+    final intro = PublicPlanLimitsConfigService.planIntroForDisplay(planId);
+    final items = PublicPlanLimitsConfigService.limitLinesForDisplay(planId);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(intro, style: _bodyStyle),
+        if (items.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          for (var i = 0; i < items.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 22,
+                    child: Text('${i + 1}.', style: _bodyStyle),
+                  ),
+                  Expanded(
+                    child: Text(items[i], style: _bodyStyle),
+                  ),
+                ],
+              ),
+            ),
+        ],
+        if (limits.enforcement == PublicPlanEnforcement.soft) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Avviso al raggiungimento dell\'80% dei limiti.',
+            style: _noteStyle,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.label});
+  const _StatusChip({required this.label, this.warning = false});
 
   final String label;
+  final bool warning;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: warning ? const Color(0xFFFFF7ED) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(
+          color: warning ? const Color(0xFFFDBA74) : Colors.grey.shade300,
+        ),
       ),
       child: Text(
         label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: warning ? Colors.orange.shade900 : null,
+        ),
       ),
     );
   }

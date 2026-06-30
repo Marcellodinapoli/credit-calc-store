@@ -6,7 +6,6 @@ import 'develop_sync_crypto.dart';
 import 'develop_sync_device.dart';
 import 'develop_sync_wire_record.dart';
 import 'models/develop_local_collection.dart';
-import 'models/develop_local_record.dart';
 
 /// Persistenza cloud del sync Sviluppa (relay cifrato per utente).
 class DevelopSyncFirestore {

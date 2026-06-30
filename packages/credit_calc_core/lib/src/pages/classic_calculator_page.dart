@@ -49,10 +49,6 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
     setState(() => _display = _format(value));
   }
 
-  void _setDisplayRaw(String value) {
-    setState(() => _display = value.isEmpty ? '0' : value);
-  }
-
   void _inputDigit(String digit) {
     setState(() {
       if (_freshEntry || _display == '0') {

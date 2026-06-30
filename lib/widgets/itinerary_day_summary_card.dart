@@ -6,13 +6,14 @@ import '../models/field_visit.dart';
 import '../services/field_activity_service.dart';
 import '../services/field_reminder_service.dart';
 import '../services/field_visit_service.dart';
+import '../utils/itinerary_date_time.dart';
 
 class ItineraryDaySummaryCard extends StatelessWidget {
   const ItineraryDaySummaryCard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
+    final today = ItineraryDateTime.calendarDay(DateTime.now());
 
     return Card(
       color: const Color(0xFFE8F4FD),
@@ -34,10 +35,10 @@ class ItineraryDaySummaryCard extends StatelessWidget {
                         .where((a) => !a.completed)
                         .length;
                     final reminders = (remindersSnap.data ?? []).where((r) {
-                      final d = r.remindAt;
-                      return d.year == today.year &&
-                          d.month == today.month &&
-                          d.day == today.day;
+                      return ItineraryDateTime.isSameCalendarDay(
+                        r.remindAt,
+                        today,
+                      );
                     }).length;
 
                     const summaryStyle = TextStyle(

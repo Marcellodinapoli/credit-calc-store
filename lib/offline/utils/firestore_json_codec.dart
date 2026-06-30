@@ -34,10 +34,21 @@ abstract final class FirestoreJsonCodec {
 
   static dynamic decodeValue(dynamic value) {
     if (value is Map) {
-      if (value.length == 1 && value.containsKey(_timestampKey)) {
-        return Timestamp.fromMillisecondsSinceEpoch(
-          value[_timestampKey] as int,
-        );
+      if (value.containsKey(_timestampKey)) {
+        final ms = value[_timestampKey];
+        if (ms is num) {
+          return Timestamp.fromMillisecondsSinceEpoch(ms.toInt());
+        }
+      }
+      if (value.containsKey('_seconds')) {
+        final seconds = value['_seconds'];
+        if (seconds is num) {
+          final nanos = value['_nanoseconds'];
+          final extraMs = nanos is num ? nanos.toInt() ~/ 1000000 : 0;
+          return Timestamp.fromMillisecondsSinceEpoch(
+            seconds.toInt() * 1000 + extraMs,
+          );
+        }
       }
       if (value.length == 1 && value.containsKey(_geoPointKey)) {
         final coords = value[_geoPointKey] as List;

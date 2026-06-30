@@ -6,12 +6,14 @@ class RegistrationCouponValidation {
   final bool isValid;
   final bool lifetimeFree;
   final String? restrictedPlan;
+  final DateTime? benefitExpiresAt;
 
   const RegistrationCouponValidation({
     required this.code,
     required this.isValid,
     this.lifetimeFree = false,
     this.restrictedPlan,
+    this.benefitExpiresAt,
   });
 
   static const invalid = RegistrationCouponValidation(
@@ -55,11 +57,18 @@ abstract final class RegistrationCouponService {
       }
 
       final plan = (data['plan'] ?? '').toString().trim().toLowerCase();
+      final benefitExpiresAt = data['benefitExpiresAt'];
+      DateTime? benefitEnd;
+      if (benefitExpiresAt is Timestamp) {
+        benefitEnd = benefitExpiresAt.toDate();
+      }
       return RegistrationCouponValidation(
         code: code,
         isValid: true,
-        lifetimeFree: data['lifetimeFree'] as bool? ?? true,
+        lifetimeFree:
+            (data['lifetimeFree'] as bool? ?? true) && benefitEnd == null,
         restrictedPlan: plan.isEmpty ? null : plan,
+        benefitExpiresAt: benefitEnd,
       );
     } catch (_) {
       return RegistrationCouponValidation.invalid;
@@ -70,16 +79,32 @@ abstract final class RegistrationCouponService {
     required String planId,
     RegistrationCouponValidation? coupon,
   }) {
-    final lifetime =
-        coupon != null && coupon.isValid && coupon.lifetimeFree;
+    if (coupon != null && coupon.isValid) {
+      if (coupon.lifetimeFree) {
+        return {
+          'subscriptionPlan': planId,
+          'subscriptionStatus': 'active',
+          'couponCode': coupon.code,
+          'lifetimeAccess': true,
+          'couponAppliedAt': FieldValue.serverTimestamp(),
+        };
+      }
+      if (coupon.benefitExpiresAt != null) {
+        return {
+          'subscriptionPlan': planId,
+          'subscriptionStatus': 'active',
+          'couponCode': coupon.code,
+          'lifetimeAccess': false,
+          'subscriptionExpiresAt':
+              Timestamp.fromDate(coupon.benefitExpiresAt!),
+          'couponAppliedAt': FieldValue.serverTimestamp(),
+        };
+      }
+    }
 
     return {
       'subscriptionPlan': planId,
-      'subscriptionStatus': lifetime || planId == 'free' ? 'active' : 'pending',
-      if (lifetime) ...{
-        'couponCode': coupon.code,
-        'lifetimeAccess': true,
-      },
+      'subscriptionStatus': planId == 'free' ? 'active' : 'pending',
     };
   }
 

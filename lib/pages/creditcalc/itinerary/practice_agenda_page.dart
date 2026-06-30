@@ -1,11 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/firestore_user_scope.dart';
 import '../../../core/theme/app_card_theme.dart';
 import '../../../models/field_visit.dart';
+import '../../../offline/repository/credit_calc_repository.dart';
 import '../../../services/field_visit_service.dart';
 import '../../../utils/field_visit_route_planner.dart';
 import '../../../utils/itinerary_calendar_export.dart';
@@ -53,10 +52,7 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
   }
 
   Future<void> _openVisitEditor({FieldVisit? visit}) async {
-    final companyCtrl = TextEditingController(text: visit?.companyName ?? '');
-    final addressCtrl = TextEditingController(text: visit?.address ?? '');
-    final notesCtrl = TextEditingController(text: visit?.notes ?? '');
-    var scheduled = visit?.scheduledAt ??
+    final defaultScheduled = visit?.scheduledAt ??
         DateTime(
           _selectedDay.year,
           _selectedDay.month,
@@ -64,111 +60,26 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
           9,
           0,
         );
-    var status = visit?.status ?? FieldVisitStatus.planned;
 
-    final saved = await showDialog<bool>(
+    final result = await showDialog<_VisitEditorResult>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: Text(visit == null ? 'Nuova visita' : 'Modifica visita'),
-          content: SizedBox(
-            width: 420,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: companyCtrl,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: 'Ragione sociale / debitore',
-                      hintText: 'Es. Verdone Alfio',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  AddressFieldWithScan(
-                    controller: addressCtrl,
-                    companyNameController: companyCtrl,
-                    labelText: 'Indirizzo visita',
-                    hintText: 'Es. Via Roma, 143 - 80100 Napoli',
-                    onScanned: () => setLocal(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Data e ora'),
-                    subtitle: Text(_formatDateTime(scheduled)),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.schedule),
-                      onPressed: () async {
-                        final picked = await pickFieldVisitDateAndTime(
-                          ctx,
-                          initial: scheduled,
-                          excludeVisitId: visit?.id,
-                        );
-                        if (picked == null) return;
-                        setLocal(() => scheduled = picked);
-                      },
-                    ),
-                  ),
-                  DropdownButtonFormField<FieldVisitStatus>(
-                    value: status,
-                    decoration: const InputDecoration(
-                      labelText: 'Stato',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: FieldVisitStatus.values
-                        .map(
-                          (s) => DropdownMenuItem(
-                            value: s,
-                            child: Text(fieldVisitStatusLabel(s)),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) setLocal(() => status = v);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  VoiceNoteField(controller: notesCtrl),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Annulla'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (companyCtrl.text.trim().isEmpty) return;
-                Navigator.pop(ctx, true);
-              },
-              child: const Text('Salva'),
-            ),
-          ],
-        ),
+      builder: (ctx) => _VisitEditorDialog(
+        visit: visit,
+        defaultScheduled: defaultScheduled,
       ),
     );
 
-    if (saved != true || !mounted) {
-      companyCtrl.dispose();
-      addressCtrl.dispose();
-      notesCtrl.dispose();
-      return;
-    }
+    if (result == null || !mounted) return;
 
     setState(() => _busy = true);
     try {
       await FieldVisitService.save(
         id: visit?.id,
-        companyName: companyCtrl.text,
-        address: addressCtrl.text,
-        scheduledAt: scheduled,
-        status: status,
-        notes: notesCtrl.text,
+        companyName: result.companyName,
+        address: result.address,
+        scheduledAt: result.scheduledAt,
+        status: result.status,
+        notes: result.notes,
         creditorId: visit?.creditorId,
         creditorName: visit?.creditorName,
         calculationId: visit?.calculationId,
@@ -184,16 +95,14 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
         SnackBar(content: Text('Salvataggio non riuscito: $e')),
       );
     } finally {
-      companyCtrl.dispose();
-      addressCtrl.dispose();
-      notesCtrl.dispose();
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _importFromCommissions() async {
-    final snap = await FirestoreUserScope.userCalculations().get();
-    final docs = CommissionCollectionsHelper.commissionDocs(snap);
+    final docs = CommissionCollectionsHelper.commissionRecords(
+      await CreditCalcRepository.instance.getCalculationRecords(),
+    );
     if (!mounted) return;
     if (docs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -202,7 +111,7 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
       return;
     }
 
-    final selected = await showDialog<QueryDocumentSnapshot<Map<String, dynamic>>>(
+    final selected = await showDialog<CreditCalcRecord>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Importa da provvigioni'),
@@ -212,8 +121,8 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
           child: ListView.builder(
             itemCount: docs.length,
             itemBuilder: (context, index) {
-              final doc = docs[index];
-              final data = doc.data();
+              final entry = docs[index];
+              final data = entry.data;
               final company = CommissionCollectionsHelper.companyName(data);
               final date = CommissionCollectionsHelper.entryDate(data);
               return ListTile(
@@ -225,7 +134,7 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
                       CommissionCollectionsHelper.formatDate(date),
                   ].where((s) => s.isNotEmpty).join(' · '),
                 ),
-                onTap: () => Navigator.pop(ctx, doc),
+                onTap: () => Navigator.pop(ctx, entry),
               );
             },
           ),
@@ -244,7 +153,7 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
     try {
       await showScheduleFieldVisitDialog(
         context,
-        calculation: selected.data(),
+        calculation: selected.data,
         calculationId: selected.id,
         initialDay: _selectedDay,
       );
@@ -599,6 +508,168 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _VisitEditorResult {
+  const _VisitEditorResult({
+    required this.companyName,
+    required this.address,
+    required this.notes,
+    required this.scheduledAt,
+    required this.status,
+  });
+
+  final String companyName;
+  final String address;
+  final String notes;
+  final DateTime scheduledAt;
+  final FieldVisitStatus status;
+}
+
+class _VisitEditorDialog extends StatefulWidget {
+  const _VisitEditorDialog({
+    required this.visit,
+    required this.defaultScheduled,
+  });
+
+  final FieldVisit? visit;
+  final DateTime defaultScheduled;
+
+  @override
+  State<_VisitEditorDialog> createState() => _VisitEditorDialogState();
+}
+
+class _VisitEditorDialogState extends State<_VisitEditorDialog> {
+  late final TextEditingController _companyCtrl;
+  late final TextEditingController _addressCtrl;
+  late final TextEditingController _notesCtrl;
+  late DateTime _scheduled;
+  late FieldVisitStatus _status;
+
+  @override
+  void initState() {
+    super.initState();
+    final visit = widget.visit;
+    _companyCtrl = TextEditingController(text: visit?.companyName ?? '');
+    _addressCtrl = TextEditingController(text: visit?.address ?? '');
+    _notesCtrl = TextEditingController(text: visit?.notes ?? '');
+    _scheduled = visit?.scheduledAt ?? widget.defaultScheduled;
+    _status = visit?.status ?? FieldVisitStatus.planned;
+  }
+
+  @override
+  void dispose() {
+    _companyCtrl.dispose();
+    _addressCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  String _formatDateTime(DateTime value) {
+    final d = value.day.toString().padLeft(2, '0');
+    final m = value.month.toString().padLeft(2, '0');
+    final h = value.hour.toString().padLeft(2, '0');
+    final min = value.minute.toString().padLeft(2, '0');
+    return '$d/$m/${value.year} $h:$min';
+  }
+
+  void _save() {
+    if (_companyCtrl.text.trim().isEmpty) return;
+    Navigator.pop(
+      context,
+      _VisitEditorResult(
+        companyName: _companyCtrl.text,
+        address: _addressCtrl.text,
+        notes: _notesCtrl.text,
+        scheduledAt: _scheduled,
+        status: _status,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visit = widget.visit;
+
+    return AlertDialog(
+      title: Text(visit == null ? 'Nuova visita' : 'Modifica visita'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _companyCtrl,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Ragione sociale / debitore',
+                  hintText: 'Es. Verdone Alfio',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              AddressFieldWithScan(
+                controller: _addressCtrl,
+                companyNameController: _companyCtrl,
+                labelText: 'Indirizzo visita',
+                hintText: 'Es. Via Roma, 143 - 80100 Napoli',
+                onScanned: () => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Data e ora'),
+                subtitle: Text(_formatDateTime(_scheduled)),
+                trailing: IconButton(
+                  icon: const Icon(Icons.schedule),
+                  onPressed: () async {
+                    final picked = await pickFieldVisitDateAndTime(
+                      context,
+                      initial: _scheduled,
+                      excludeVisitId: visit?.id,
+                    );
+                    if (picked == null || !mounted) return;
+                    setState(() => _scheduled = picked);
+                  },
+                ),
+              ),
+              DropdownButtonFormField<FieldVisitStatus>(
+                value: _status,
+                decoration: const InputDecoration(
+                  labelText: 'Stato',
+                  border: OutlineInputBorder(),
+                ),
+                items: FieldVisitStatus.values
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(fieldVisitStatusLabel(s)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _status = v);
+                },
+              ),
+              const SizedBox(height: 12),
+              VoiceNoteField(controller: _notesCtrl),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Annulla'),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: const Text('Salva'),
+        ),
+      ],
     );
   }
 }

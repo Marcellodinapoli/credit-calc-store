@@ -12,6 +12,8 @@ import 'credit_calc_repository_setup.dart';
 import 'credit_calc_runtime.dart';
 import 'local_itinerary_coordinator.dart';
 import 'repository/credit_calc_repository.dart';
+import 'services/local_data_cipher.dart';
+import 'services/local_database_service.dart';
 import 'services/session_service.dart';
 
 enum _BootstrapStep { loading, startupSlow, ready }
@@ -104,9 +106,20 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     PublicPlanLimitsConfigService.start();
     await PublicPlanLimitsConfigService.ensureLoaded();
 
+    LocalDataCipher.configureBackup(
+      read: () => LocalDatabaseService.instance.getMeta('local_cipher_key_v1'),
+      write: (value) =>
+          LocalDatabaseService.instance.setMeta('local_cipher_key_v1', value),
+      readHistory: () =>
+          LocalDatabaseService.instance.getMeta('local_cipher_key_history_v1'),
+      writeHistory: (value) => LocalDatabaseService.instance
+          .setMeta('local_cipher_key_history_v1', value),
+    );
+
+    await LocalDataCipher.warmUp();
+
     CreditCalcRepositorySetup.apply(userId: userId);
     CreditCalcRuntime.install(sessionService: _sessionService!);
-
     CreditCalcRepositorySetup.notifyDataChanged();
 
     await LocalItineraryCoordinator.start(userId);

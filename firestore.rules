@@ -633,8 +633,17 @@ match /work_codes/{code} {
 }
 
  // ------------------------------------------------------------------
-// SETTINGS
+// SETTINGS — piani pubblici (lettura senza login per prezzi/limiti in app)
 // ------------------------------------------------------------------
+match /settings/plan_limits {
+  allow read: if true;
+  allow create, update, delete: if request.auth != null
+    && request.auth.token.admin == true;
+}
+
+ // ------------------------------------------------------------------
+// SETTINGS
+ // ------------------------------------------------------------------
 match /settings/{docId} {
 
   allow read: if request.auth != null;

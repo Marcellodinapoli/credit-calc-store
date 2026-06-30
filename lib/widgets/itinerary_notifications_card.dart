@@ -27,6 +27,12 @@ class _ItineraryNotificationsCardState extends State<ItineraryNotificationsCard>
     _load();
   }
 
+  @override
+  void activate() {
+    super.activate();
+    _load();
+  }
+
   Future<void> _load() async {
     final uid = _uid;
     if (uid == null) {
@@ -81,6 +87,10 @@ class _ItineraryNotificationsCardState extends State<ItineraryNotificationsCard>
           child: LinearProgressIndicator(),
         ),
       );
+    }
+
+    if (_enabled) {
+      return const SizedBox.shrink();
     }
 
     return Card(

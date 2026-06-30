@@ -85,8 +85,7 @@ class CallAnalysisPracticeData {
         '- Ultima promessa mantenuta: ${lastPromiseKept ? 'Sì' : 'No'}',
       );
     if (consultantNotes != null && consultantNotes!.trim().isNotEmpty) {
-      buffer
-        ..writeln('- Note del consulente: ${consultantNotes!.trim()}');
+      buffer.writeln('- Note del consulente: ${consultantNotes!.trim()}');
     }
     return buffer.toString().trim();
   }

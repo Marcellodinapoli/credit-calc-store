@@ -9,7 +9,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../offline/services/connectivity_service.dart';
 import '../services/biometric_service.dart';
+import 'biometric_lock_gate.dart';
 import 'auth_form_validation.dart';
+import 'auth_gate.dart';
+import 'auth_redirect_feedback.dart';
 import '../widgets/public_page_shell.dart';
 import '../widgets/public_top_menu.dart';
 import 'login_pricing_page.dart';
@@ -26,7 +29,15 @@ import 'waiting_page.dart';
 
 abstract final class AppTheme {
   static const accent = Color(0xFF0A66C2);
-  static const body = Color(0xFFE8E8E8);
+  static const accentDark = Color(0xFF084B8F);
+  static const background = Color(0xFFF7F9FC);
+  static const card = Colors.white;
+  static const border = Color(0xFFE5E7EB);
+  static const fieldFill = Color(0xFFF9FAFB);
+  static const textPrimary = Color(0xFF111827);
+  static const textSecondary = Color(0xFF6B7280);
+  static const radius = 12.0;
+  static const cardRadius = 16.0;
 }
 
 class LoginPage extends StatefulWidget {
@@ -92,6 +103,10 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    final redirectMessage = AuthRedirectFeedback.consumeMessage();
+    if (redirectMessage != null) {
+      _loginNotice = redirectMessage;
+    }
     if (widget.unlockMode) {
       _email.text = FirebaseAuth.instance.currentUser?.email ?? '';
     }
@@ -173,7 +188,13 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     if (widget.unlockMode) {
-      await widget.onUnlocked?.call();
+      BiometricLockGate.markUnlocked();
+      final current = FirebaseAuth.instance.currentUser;
+      if (current != null) {
+        await widget.onUnlocked?.call();
+        return;
+      }
+      await _restoreSessionWithSavedCredentials();
       return;
     }
 
@@ -191,6 +212,7 @@ class _LoginPageState extends State<LoginPage> {
 
     final current = FirebaseAuth.instance.currentUser;
     if (current != null && current.email == email) {
+      await _resumeAuthFlowAfterLogin();
       return;
     }
 
@@ -202,10 +224,17 @@ class _LoginPageState extends State<LoginPage> {
             password: password,
           )
           .timeout(const Duration(seconds: 8));
+      if (!mounted) return;
+      try {
+        await _saveCredentials(email, password);
+        if (mounted) setState(() => _hasSavedCredentials = true);
+      } catch (_) {}
+      await _resumeAuthFlowAfterLogin();
     } on FirebaseAuthException catch (e) {
       if (_isNetworkAuthError(e)) {
         final restored = FirebaseAuth.instance.currentUser;
         if (restored != null && restored.email == email) {
+          await _resumeAuthFlowAfterLogin();
           return;
         }
       }
@@ -218,6 +247,7 @@ class _LoginPageState extends State<LoginPage> {
       });
     } on TimeoutException {
       if (FirebaseAuth.instance.currentUser?.email == email) {
+        await _resumeAuthFlowAfterLogin();
         return;
       }
       if (!mounted) return;
@@ -228,6 +258,7 @@ class _LoginPageState extends State<LoginPage> {
       });
     } catch (_) {
       if (FirebaseAuth.instance.currentUser?.email == email) {
+        await _resumeAuthFlowAfterLogin();
         return;
       }
       if (!mounted) return;
@@ -473,6 +504,80 @@ class _LoginPageState extends State<LoginPage> {
     return List.generate(8, (_) => chars[rnd.nextInt(chars.length)]).join();
   }
 
+  Future<void> _restoreSessionWithSavedCredentials() async {
+    final email = await _secureStorage.read(key: 'credit_calc_email');
+    final password = await _secureStorage.read(key: 'credit_calc_password');
+    if (email == null || password == null) {
+      if (!mounted) return;
+      setState(() {
+        _loginNotice =
+            'Sessione scaduta. Accedi con email e password per continuare.';
+      });
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      if (!await _networkReadyForLogin()) {
+        if (!mounted) return;
+        setState(() {
+          _busy = false;
+          _loginNotice =
+              'Senza connessione non è possibile ripristinare la sessione. '
+              'Riprova quando la rete è disponibile.';
+        });
+        return;
+      }
+
+      await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password)
+          .timeout(const Duration(seconds: 12));
+      if (!mounted) return;
+      await widget.onUnlocked?.call();
+    } on FirebaseAuthException catch (e) {
+      final feedback = await AuthFormValidation.resolveLoginAuthFailure(e, email);
+      if (!mounted) return;
+      setState(() {
+        _loginNotice = feedback.notice;
+        _emailError = feedback.emailError;
+        _passwordError = feedback.passwordError;
+      });
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _loginNotice =
+            'Connessione lenta o non disponibile. Verifica la rete e riprova.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loginNotice =
+            'Impossibile ripristinare la sessione. Accedi con email e password.';
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _resumeAuthFlowAfterLogin() async {
+    if (widget.unlockMode || !mounted) return;
+    BiometricLockGate.markUnlocked();
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    if (context.findAncestorWidgetOfExactType<AuthGate>() != null) {
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) {
+        navigator.pop();
+      }
+      return;
+    }
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const AuthGate()),
+      (route) => false,
+    );
+  }
+
   Future<void> _signIn() async {
     final email = _email.text.trim();
     final password = _password.text;
@@ -541,6 +646,7 @@ class _LoginPageState extends State<LoginPage> {
         await widget.onUnlocked?.call();
         return;
       }
+      await _resumeAuthFlowAfterLogin();
       try {
         await _saveCredentials(email, password);
         if (mounted) setState(() => _hasSavedCredentials = true);
@@ -1007,14 +1113,18 @@ class _LoginPageState extends State<LoginPage> {
             _privacyAccepted
                 ? Icons.check_circle_outline
                 : Icons.privacy_tip_outlined,
-            color: _privacyAccepted ? Colors.green.shade700 : AppTheme.accent,
+            color: _privacyAccepted
+                ? const Color(0xFF15803D)
+                : AppTheme.accent,
           ),
           label: Text(
             _privacyAccepted
                 ? 'Privacy e consensi accettati'
                 : 'Leggi privacy e consensi *',
             style: TextStyle(
-              color: _privacyAccepted ? Colors.green.shade800 : AppTheme.accent,
+              color: _privacyAccepted
+                  ? const Color(0xFF166534)
+                  : AppTheme.accent,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1022,20 +1132,26 @@ class _LoginPageState extends State<LoginPage> {
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
             side: BorderSide(
               color: _privacyAccepted
-                  ? Colors.green.shade400
-                  : AppTheme.accent,
+                  ? const Color(0xFF86EFAC)
+                  : AppTheme.border,
+            ),
+            backgroundColor: _privacyAccepted
+                ? const Color(0xFFF0FDF4)
+                : AppTheme.fieldFill,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radius),
             ),
           ),
         ),
         if (!_privacyAccepted)
-          Padding(
-            padding: const EdgeInsets.only(top: 6, left: 4),
+          const Padding(
+            padding: EdgeInsets.only(top: 8, left: 4),
             child: Text(
               'Obbligatorio: apri il documento, scorri fino in fondo e spunta il consenso.',
               style: TextStyle(
-                color: Colors.grey.shade700,
+                color: AppTheme.textSecondary,
                 fontSize: 12,
-                height: 1.35,
+                height: 1.4,
               ),
             ),
           ),
@@ -1058,18 +1174,237 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildNotice(String text) {
+  Widget _buildNotice(String text, {bool isError = false}) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFFFE082)),
+        color: isError ? const Color(0xFFFEF2F2) : const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(AppTheme.radius),
+        border: Border.all(
+          color: isError ? const Color(0xFFFECACA) : const Color(0xFFFDE68A),
+        ),
       ),
-      child: Text(
-        text,
-        style: const TextStyle(color: Color(0xFF5D4037), height: 1.4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isError ? Icons.error_outline : Icons.info_outline,
+            size: 18,
+            color: isError ? const Color(0xFFB91C1C) : const Color(0xFFB45309),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: isError
+                    ? const Color(0xFF991B1B)
+                    : const Color(0xFF92400E),
+                height: 1.45,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration({
+    required String label,
+    String? errorText,
+    Widget? suffixIcon,
+  }) {
+    OutlineInputBorder border(Color color, {double width = 1}) =>
+        OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radius),
+          borderSide: BorderSide(color: color, width: width),
+        );
+
+    return InputDecoration(
+      labelText: label,
+      errorText: errorText,
+      filled: true,
+      fillColor: AppTheme.fieldFill,
+      suffixIcon: suffixIcon,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      border: border(AppTheme.border),
+      enabledBorder: border(AppTheme.border),
+      focusedBorder: border(AppTheme.accent, width: 1.5),
+      errorBorder: border(const Color(0xFFFCA5A5)),
+      focusedErrorBorder: border(const Color(0xFFEF4444), width: 1.5),
+      labelStyle: const TextStyle(
+        color: AppTheme.textSecondary,
+        fontSize: 14,
+      ),
+    );
+  }
+
+  ButtonStyle get _primaryButtonStyle => FilledButton.styleFrom(
+        backgroundColor: AppTheme.accent,
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: AppTheme.accent.withValues(alpha: 0.45),
+        minimumSize: const Size(double.infinity, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radius),
+        ),
+        textStyle: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.15,
+        ),
+      );
+
+  Widget _buildBrandHeader() {
+    final subtitle = widget.unlockMode
+        ? 'Scegli come sbloccare l\'app: password o biometria.'
+        : _isLogin
+            ? 'Accedi al tuo workspace CreditCore.'
+            : 'Crea il tuo account in pochi passaggi.';
+
+    return Column(
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppTheme.accent.withValues(alpha: 0.14),
+                AppTheme.accent.withValues(alpha: 0.05),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.accent.withValues(alpha: 0.18)),
+          ),
+          child: const Icon(
+            Icons.shield_outlined,
+            color: AppTheme.accent,
+            size: 26,
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text.rich(
+          TextSpan(
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.textPrimary,
+              letterSpacing: -0.5,
+              height: 1.1,
+            ),
+            children: const [
+              TextSpan(text: 'Credit'),
+              TextSpan(text: 'Core', style: TextStyle(color: AppTheme.accent)),
+            ],
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          subtitle,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 14,
+            height: 1.45,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAuthModeSelector() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppTheme.fieldFill,
+        borderRadius: BorderRadius.circular(AppTheme.radius),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _AuthModeTab(
+              label: 'Accedi',
+              selected: _isLogin,
+              onTap: _busy
+                  ? null
+                  : () {
+                      if (_isLogin) return;
+                      setState(() {
+                        _isLogin = true;
+                        _registerType = null;
+                        _registerPlan = null;
+                        _clearCompanyLink();
+                        _clearRegistrationCoupon();
+                        _resetPrivacyAcceptance();
+                        _clearRegisterFeedback();
+                      });
+                    },
+            ),
+          ),
+          Expanded(
+            child: _AuthModeTab(
+              label: 'Registrati',
+              selected: !_isLogin,
+              onTap: _busy
+                  ? null
+                  : () async {
+                      if (!_isLogin) return;
+                      final type = await _showRegisterTypePopup();
+                      if (type == null || !mounted) return;
+                      setState(() {
+                        _registerType = type;
+                        _registerPlan = 'free';
+                        _clearCompanyLink();
+                        _clearRegistrationCoupon();
+                        _isLogin = false;
+                        _resetPrivacyAcceptance();
+                        _clearLoginFeedback();
+                        _clearRegisterFeedback();
+                      });
+                    },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _buildRegisterTypeBadge() {
+    if (_isLogin || _registerType == null) return null;
+    final isCompany = _registerType == 'company';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isCompany ? Icons.business_center_outlined : Icons.person_outline,
+            size: 16,
+            color: AppTheme.accent,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isCompany ? 'Registrazione azienda' : 'Registrazione utente',
+            style: const TextStyle(
+              color: AppTheme.accentDark,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1090,20 +1425,17 @@ class _LoginPageState extends State<LoginPage> {
       keyboardType: keyboardType,
       autofillHints: autofillHints,
       onSubmitted: onSubmitted,
-      style: const TextStyle(fontSize: 14),
-      decoration: InputDecoration(
-        labelText: label,
-        isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        border: const OutlineInputBorder(),
+      style: const TextStyle(fontSize: 15, color: AppTheme.textPrimary),
+      decoration: _inputDecoration(
+        label: label,
         errorText: errorText,
         suffixIcon: toggleObscure == null
             ? null
             : IconButton(
                 icon: Icon(
-                  obscure ? Icons.visibility : Icons.visibility_off,
+                  obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                   size: 20,
+                  color: AppTheme.textSecondary,
                 ),
                 onPressed: toggleObscure,
               ),
@@ -1122,22 +1454,28 @@ class _LoginPageState extends State<LoginPage> {
 
     final loginCard = ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxCardWidth),
-      child: Card(
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: Color(0xFFE0E0E0)),
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: const Border(
-              left: BorderSide(color: AppTheme.accent, width: 4),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+          border: Border.all(color: AppTheme.border),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.accent.withValues(alpha: 0.07),
+              blurRadius: 28,
+              offset: const Offset(0, 10),
             ),
-          ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: screenWidth < 400 ? 16 : 20,
-            vertical: screenWidth < 400 ? 14 : 18,
+            horizontal: screenWidth < 400 ? 18 : 24,
+            vertical: screenWidth < 400 ? 20 : 28,
           ),
           child: _buildLoginForm(),
         ),
@@ -1146,7 +1484,7 @@ class _LoginPageState extends State<LoginPage> {
 
     if (widget.unlockMode) {
       return Scaffold(
-        backgroundColor: AppTheme.body,
+        backgroundColor: AppTheme.background,
         body: SafeArea(
           child: _buildResponsiveLoginBody(loginCard),
         ),
@@ -1221,351 +1559,340 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildLoginForm() {
+    final registerBadge = _buildRegisterTypeBadge();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-                      Text.rich(
-                        TextSpan(
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF111111),
+        _buildBrandHeader(),
+        if (!widget.unlockMode) ...[
+          const SizedBox(height: 22),
+          _buildAuthModeSelector(),
+        ],
+        if (registerBadge != null) ...[
+          const SizedBox(height: 16),
+          Center(child: registerBadge),
+        ],
+        const SizedBox(height: 22),
+        const Divider(height: 1, color: AppTheme.border),
+        const SizedBox(height: 22),
+
+        if (_isLogin && _loginNotice != null) ...[
+          _buildNotice(_loginNotice!),
+          const SizedBox(height: 16),
+        ],
+        if (!_isLogin && _registerNotice != null) ...[
+          _buildNotice(_registerNotice!),
+          const SizedBox(height: 16),
+        ],
+        if (!_isLogin && _regError('privacy') != null) ...[
+          _buildNotice(_regError('privacy')!, isError: true),
+          const SizedBox(height: 16),
+        ],
+
+        if (!_isLogin && _registerType == 'public') ...[
+          _field(
+            controller: _name,
+            label: 'Nome',
+            errorText: _regError('name'),
+          ),
+          const SizedBox(height: 14),
+          _field(
+            controller: _surname,
+            label: 'Cognome',
+            errorText: _regError('surname'),
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        if (!_isLogin && _registerType == 'company') ...[
+          _field(
+            controller: _companyName,
+            label: 'Ragione sociale',
+            errorText: _regError('companyName'),
+          ),
+          const SizedBox(height: 14),
+          _field(
+            controller: _piva,
+            label: 'Partita IVA',
+            keyboardType: TextInputType.number,
+            errorText: _regError('piva'),
+          ),
+          const SizedBox(height: 14),
+          _field(
+            controller: _phone,
+            label: 'Telefono',
+            keyboardType: TextInputType.phone,
+            errorText: _regError('phone'),
+          ),
+          const SizedBox(height: 14),
+          _field(
+            controller: _refPerson,
+            label: 'Persona di riferimento',
+            errorText: _regError('refPerson'),
+          ),
+          const SizedBox(height: 14),
+          _field(
+            controller: _refRole,
+            label: 'Ruolo',
+            errorText: _regError('refRole'),
+          ),
+          const SizedBox(height: 14),
+          _field(
+            controller: _website,
+            label: 'Sito internet',
+            errorText: _regError('website'),
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        if (!_isLogin && _registerType == 'public') ...[
+          RegistrationCompanyCodeField(
+            controller: _companyCode,
+            validating: _validatingCompanyCode,
+            linked: _companyLinkActive,
+            linkedCompanyName: _companyLinkContext?.companyName,
+            errorText: _companyCodeError,
+            onValidate: _validateCompanyCode,
+            onClear: () {
+              setState(() {
+                _clearCompanyLink();
+                _registerPlan ??= 'free';
+              });
+            },
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        if (!_isLogin &&
+            _registerType != null &&
+            !_companyLinkActive) ...[
+          RegistrationPlanField(
+            registerType: _registerType!,
+            selectedPlanId: _registerPlan,
+            errorText: _regError('plan'),
+            onPlanSelected: (planId) {
+              setState(() {
+                _registerPlan = planId;
+                _registerFieldErrors.remove('plan');
+                if (_appliedCoupon?.restrictedPlan != null &&
+                    _appliedCoupon!.restrictedPlan != planId) {
+                  _clearRegistrationCoupon();
+                }
+              });
+            },
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        _field(
+          controller: _email,
+          label: 'Email',
+          keyboardType: TextInputType.emailAddress,
+          autofillHints: const [AutofillHints.email],
+          errorText: _isLogin ? _emailError : _regError('email'),
+        ),
+        const SizedBox(height: 14),
+        _field(
+          controller: _password,
+          label: 'Password',
+          obscure: _obscure,
+          autofillHints: const [AutofillHints.password],
+          errorText: _isLogin ? _passwordError : _regError('password'),
+          toggleObscure: () => setState(() => _obscure = !_obscure),
+          onSubmitted: (_) {
+            if (!_busy) {
+              _isLogin ? _signIn() : _register();
+            }
+          },
+        ),
+
+        if (_isLogin && !widget.unlockMode) ...[
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _busy ? null : _resetPassword,
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.accent,
+                textStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              child: const Text('Password dimenticata?'),
+            ),
+          ),
+        ],
+
+        if (!_isLogin) ...[
+          const SizedBox(height: 4),
+          _field(
+            controller: _confirmPassword,
+            label: 'Conferma password',
+            obscure: true,
+            errorText: _regError('confirmPassword'),
+          ),
+          const SizedBox(height: 16),
+          if (!_companyLinkActive)
+            RegistrationCouponSection(
+              controller: _couponController,
+              checking: _couponChecking,
+              error: _couponError,
+              applied: _couponActive,
+              appliedCode: _appliedCoupon?.code,
+              onApply: _applyCoupon,
+              onClear: _clearCoupon,
+            ),
+          if (!_companyLinkActive) const SizedBox(height: 16),
+          _buildPrivacyConsentRow(),
+        ],
+
+        const SizedBox(height: 20),
+        if (_isLogin && (_showBiometricButton || widget.unlockMode))
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  onPressed: _busy ? null : _signIn,
+                  style: _primaryButtonStyle,
+                  child: _busy
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
                           ),
-                          children: const [
-                            TextSpan(
-                              text: 'Credit',
-                              style: TextStyle(color: Colors.black),
-                            ),
-                            TextSpan(
-                              text: 'Core',
-                              style: TextStyle(color: AppTheme.accent),
-                            ),
-                          ],
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        widget.unlockMode
-                            ? 'Scegli come sbloccare l\'app: inserisci la password '
-                                'e premi Accedi, oppure usa il pulsante Biometria.'
-                            : _isLogin
-                                ? 'Accedi o registrati con le credenziali CreditCore.'
-                                : 'Crea un account CreditCore.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.grey.shade700,
-                          fontSize: 13,
-                          height: 1.3,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      if (_isLogin && _loginNotice != null) ...[
-                        _buildNotice(_loginNotice!),
-                        const SizedBox(height: 16),
-                      ],
-                      if (!_isLogin && _registerNotice != null) ...[
-                        _buildNotice(_registerNotice!),
-                        const SizedBox(height: 16),
-                      ],
-                      if (!_isLogin && _regError('privacy') != null) ...[
-                        _buildNotice(_regError('privacy')!),
-                        const SizedBox(height: 16),
-                      ],
-
-                      if (!_isLogin && _registerType == 'public') ...[
-                        _field(
-                          controller: _name,
-                          label: 'Nome',
-                          errorText: _regError('name'),
-                        ),
-                        const SizedBox(height: 12),
-                        _field(
-                          controller: _surname,
-                          label: 'Cognome',
-                          errorText: _regError('surname'),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-
-                      if (!_isLogin && _registerType == 'company') ...[
-                        _field(
-                          controller: _companyName,
-                          label: 'Ragione sociale',
-                          errorText: _regError('companyName'),
-                        ),
-                        const SizedBox(height: 12),
-                        _field(
-                          controller: _piva,
-                          label: 'Partita IVA',
-                          keyboardType: TextInputType.number,
-                          errorText: _regError('piva'),
-                        ),
-                        const SizedBox(height: 12),
-                        _field(
-                          controller: _phone,
-                          label: 'Telefono',
-                          keyboardType: TextInputType.phone,
-                          errorText: _regError('phone'),
-                        ),
-                        const SizedBox(height: 12),
-                        _field(
-                          controller: _refPerson,
-                          label: 'Persona di riferimento',
-                          errorText: _regError('refPerson'),
-                        ),
-                        const SizedBox(height: 12),
-                        _field(
-                          controller: _refRole,
-                          label: 'Ruolo',
-                          errorText: _regError('refRole'),
-                        ),
-                        const SizedBox(height: 12),
-                        _field(
-                          controller: _website,
-                          label: 'Sito internet',
-                          errorText: _regError('website'),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-
-                      if (!_isLogin && _registerType == 'public') ...[
-                        RegistrationCompanyCodeField(
-                          controller: _companyCode,
-                          validating: _validatingCompanyCode,
-                          linked: _companyLinkActive,
-                          linkedCompanyName: _companyLinkContext?.companyName,
-                          errorText: _companyCodeError,
-                          onValidate: _validateCompanyCode,
-                          onClear: () {
-                            setState(() {
-                              _clearCompanyLink();
-                              _registerPlan ??= 'free';
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-
-                      if (!_isLogin &&
-                          _registerType != null &&
-                          !_companyLinkActive) ...[
-                        RegistrationPlanField(
-                          registerType: _registerType!,
-                          selectedPlanId: _registerPlan,
-                          errorText: _regError('plan'),
-                          onPlanSelected: (planId) {
-                            setState(() {
-                              _registerPlan = planId;
-                              _registerFieldErrors.remove('plan');
-                              if (_appliedCoupon?.restrictedPlan != null &&
-                                  _appliedCoupon!.restrictedPlan != planId) {
-                                _clearRegistrationCoupon();
-                              }
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-
-                      _field(
-                        controller: _email,
-                        label: 'Email',
-                        keyboardType: TextInputType.emailAddress,
-                        autofillHints: const [AutofillHints.email],
-                        errorText: _isLogin ? _emailError : _regError('email'),
-                      ),
-                      const SizedBox(height: 8),
-                      _field(
-                        controller: _password,
-                        label: 'Password',
-                        obscure: _obscure,
-                        autofillHints: const [AutofillHints.password],
-                        errorText:
-                            _isLogin ? _passwordError : _regError('password'),
-                        toggleObscure: () => setState(() => _obscure = !_obscure),
-                        onSubmitted: (_) {
-                          if (!_busy) {
-                            _isLogin ? _signIn() : _register();
-                          }
-                        },
-                      ),
-
-                      if (_isLogin && !widget.unlockMode) ...[
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: _busy ? null : _resetPassword,
-                            child: const Text(
-                              'Password dimenticata?',
-                              style: TextStyle(color: AppTheme.accent),
-                            ),
-                          ),
-                        ),
-                      ],
-
-                      if (!_isLogin) ...[
-                        const SizedBox(height: 12),
-                        _field(
-                          controller: _confirmPassword,
-                          label: 'Conferma password',
-                          obscure: true,
-                          errorText: _regError('confirmPassword'),
-                        ),
-                        const SizedBox(height: 16),
-                        if (!_companyLinkActive)
-                          RegistrationCouponSection(
-                          controller: _couponController,
-                          checking: _couponChecking,
-                          error: _couponError,
-                          applied: _couponActive,
-                          appliedCode: _appliedCoupon?.code,
-                          onApply: _applyCoupon,
-                          onClear: _clearCoupon,
-                        ),
-                        if (!_companyLinkActive) const SizedBox(height: 16),
-                        _buildPrivacyConsentRow(),
-                      ],
-
-                      const SizedBox(height: 14),
-                      if (_isLogin && _showBiometricButton)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: FilledButton(
-                                onPressed: _busy ? null : _signIn,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppTheme.accent,
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                                child: _busy
-                                    ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : const Text('Accedi'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: FilledButton(
-                                onPressed: _busy ? null : _signInBiometric,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppTheme.accent,
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 10),
-                                ),
-                                child: const Text('Biometria'),
-                              ),
-                            ),
-                          ],
                         )
-                      else
-                        FilledButton(
-                          onPressed: _busy
-                              ? null
-                              : (_isLogin ? _signIn : _register),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: AppTheme.accent,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                          child: _busy
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Text(_isLogin ? 'Accedi' : 'Registrati'),
+                      : const Text('Accedi'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _busy ? null : _signInBiometric,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.accent,
+                    minimumSize: const Size(0, 48),
+                    side: const BorderSide(color: AppTheme.accent),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radius),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  child: const Text('Biometria'),
+                ),
+              ),
+            ],
+          )
+        else
+          FilledButton(
+            onPressed: _busy ? null : (_isLogin ? _signIn : _register),
+            style: _primaryButtonStyle,
+            child: _busy
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Text(_isLogin ? 'Accedi' : 'Crea account'),
+          ),
+        if (_isLogin &&
+            _showBiometricButton &&
+            !_hasSavedCredentials &&
+            !widget.unlockMode) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Per attivare la biometria, accedi prima con email e password.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ],
+        if (!widget.unlockMode && _isLogin) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton(
+              onPressed: _busy
+                  ? null
+                  : () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const LoginPricingPage(),
                         ),
-                      if (_isLogin &&
-                          _showBiometricButton &&
-                          !_hasSavedCredentials &&
-                          !widget.unlockMode) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          'Per attivare la biometria, accedi prima con email e password.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.grey.shade700,
-                            fontSize: 13,
-                            height: 1.35,
-                          ),
-                        ),
-                      ],
-                      if (!widget.unlockMode && _isLogin) ...[
-                        const SizedBox(height: 4),
-                        Center(
-                          child: TextButton(
-                            onPressed: _busy
-                                ? null
-                                : () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const LoginPricingPage(),
-                                      ),
-                                    );
-                                  },
-                            child: const Text(
-                              'Consulta piani e prezzi',
-                              style: TextStyle(color: AppTheme.accent),
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (!widget.unlockMode) ...[
-                        const SizedBox(height: 4),
-                        Center(
-                          child: TextButton(
-                            onPressed: _busy
-                                ? null
-                                : () async {
-                                  if (_isLogin) {
-                                    final type = await _showRegisterTypePopup();
-                                    if (type == null || !mounted) return;
-                                    setState(() {
-                                      _registerType = type;
-                                      _registerPlan = 'free';
-                                      _clearCompanyLink();
-                                      _clearRegistrationCoupon();
-                                      _isLogin = false;
-                                      _resetPrivacyAcceptance();
-                                      _clearLoginFeedback();
-                                      _clearRegisterFeedback();
-                                    });
-                                  } else {
-                                    setState(() {
-                                      _isLogin = true;
-                                      _registerType = null;
-                                      _registerPlan = null;
-                                      _clearCompanyLink();
-                                      _clearRegistrationCoupon();
-                                      _resetPrivacyAcceptance();
-                                      _clearRegisterFeedback();
-                                    });
-                                  }
-                                },
-                          child: Text(
-                            _isLogin
-                                ? 'Non hai un account? Registrati'
-                                : 'Hai già un account? Accedi',
-                            style: const TextStyle(color: AppTheme.accent),
-                          ),
-                        ),
-                      ),
-                      if (!_isLogin) const SizedBox(height: 8),
-                      ],
-                    ],
+                      );
+                    },
+              style: TextButton.styleFrom(foregroundColor: AppTheme.accent),
+              child: const Text('Consulta piani e prezzi'),
+            ),
+          ),
+        ],
+        if (!widget.unlockMode) ...[
+          const SizedBox(height: 4),
+          Center(
+            child: Text(
+              _isLogin
+                  ? 'Non hai un account? Usa la scheda Registrati in alto.'
+                  : 'Hai già un account? Usa la scheda Accedi in alto.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+        if (!_isLogin) const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+class _AuthModeTab extends StatelessWidget {
+  const _AuthModeTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? Colors.white : Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      elevation: selected ? 1 : 0,
+      shadowColor: Colors.black.withValues(alpha: 0.08),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? AppTheme.accent : AppTheme.textSecondary,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

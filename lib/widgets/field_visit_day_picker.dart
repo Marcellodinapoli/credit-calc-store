@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../models/field_visit.dart';
 import '../services/field_visit_service.dart';
+import '../utils/itinerary_date_time.dart';
 
 const _pickerHeaderBackground = Color(0xFF1565C0);
 const _pickerHeaderForeground = Colors.white;
@@ -61,10 +61,8 @@ Future<DateTime?> pickFieldVisitDateAndTime(
   );
   if (time == null) return null;
 
-  final scheduled = DateTime(
-    date.year,
-    date.month,
-    date.day,
+  final scheduled = ItineraryDateTime.combineDateAndTime(
+    date,
     time.hour,
     time.minute,
   );
@@ -110,12 +108,16 @@ class _FieldVisitDayPickerDialogState extends State<FieldVisitDayPickerDialog> {
 
   late DateTime _selectedDate;
   late DateTime _displayedMonth;
+  late final Future<Map<String, int>> _visitCountsFuture;
 
   @override
   void initState() {
     super.initState();
     _selectedDate = widget.initialDate;
     _displayedMonth = DateTime(_selectedDate.year, _selectedDate.month);
+    _visitCountsFuture = FieldVisitService.fetchAllForUser().then(
+      FieldVisitService.visitCountsByDayId,
+    );
   }
 
   bool _isSelectable(DateTime day) =>
@@ -143,15 +145,11 @@ class _FieldVisitDayPickerDialogState extends State<FieldVisitDayPickerDialog> {
     return Dialog(
       clipBehavior: Clip.antiAlias,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      child: StreamBuilder<List<FieldVisit>>(
-        stream: FieldVisitService.watchAllForUser(),
+      child: FutureBuilder<Map<String, int>>(
+        future: _visitCountsFuture,
         builder: (context, snapshot) {
-          final counts = FieldVisitService.visitCountsByDayId(
-            snapshot.data ?? const [],
-          );
-          final loading =
-              snapshot.connectionState == ConnectionState.waiting &&
-                  !snapshot.hasData;
+          final counts = snapshot.data ?? const {};
+          final loading = snapshot.connectionState == ConnectionState.waiting;
 
           final calendar = _CalendarPanel(
             displayedMonth: _displayedMonth,
@@ -172,19 +170,21 @@ class _FieldVisitDayPickerDialogState extends State<FieldVisitDayPickerDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IntrinsicHeight(
-                  child: wide
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _HeaderPanel(
-                              selectedDate: _selectedDate,
-                              calendarDelegate: _calendar,
-                            ),
-                            Expanded(child: calendar),
-                          ],
-                        )
-                      : calendar,
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: wide
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _HeaderPanel(
+                                selectedDate: _selectedDate,
+                                calendarDelegate: _calendar,
+                              ),
+                              Expanded(child: calendar),
+                            ],
+                          )
+                        : calendar,
+                  ),
                 ),
                 Material(
                   color: colorScheme.surface,
@@ -265,6 +265,7 @@ class _HeaderPanel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 24, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
             'Seleziona data',
@@ -273,7 +274,7 @@ class _HeaderPanel extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const Spacer(),
+          const SizedBox(height: 24),
           Text(
             localizations.narrowWeekdays[selectedDate.weekday % 7],
             style: textTheme.titleMedium?.copyWith(
@@ -404,47 +405,48 @@ class _CalendarPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          if (loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else
-            SizedBox(
-              height: gridHeight,
-              child: GridView.builder(
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 7,
-                  mainAxisExtent: _dayCellHeight,
-                ),
-                itemCount: firstDayOffset + daysInMonth,
-                itemBuilder: (context, index) {
-                if (index < firstDayOffset) return const SizedBox.shrink();
+          SizedBox(
+            height: gridHeight,
+            child: loading
+                ? const Center(child: CircularProgressIndicator())
+                : GridView.builder(
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 7,
+                      mainAxisExtent: _dayCellHeight,
+                    ),
+                    itemCount: firstDayOffset + daysInMonth,
+                    itemBuilder: (context, index) {
+                      if (index < firstDayOffset) {
+                        return const SizedBox.shrink();
+                      }
 
-                final day = index - firstDayOffset + 1;
-                final date = _calendar.getDay(
-                  displayedMonth.year,
-                  displayedMonth.month,
-                  day,
-                );
-                final count = visitCounts[FieldVisitService.visitDayKeyId(date)] ?? 0;
-                final selected = _calendar.isSameDay(date, selectedDate);
-                final isToday = _calendar.isSameDay(date, today);
-                final enabled =
-                    !date.isBefore(firstDate) && !date.isAfter(lastDate);
+                      final day = index - firstDayOffset + 1;
+                      final date = _calendar.getDay(
+                        displayedMonth.year,
+                        displayedMonth.month,
+                        day,
+                      );
+                      final count = visitCounts[
+                              FieldVisitService.visitDayKeyId(date)] ??
+                          0;
+                      final selected = _calendar.isSameDay(date, selectedDate);
+                      final isToday = _calendar.isSameDay(date, today);
+                      final enabled = !date.isBefore(firstDate) &&
+                          !date.isAfter(lastDate);
 
-                return _DayCell(
-                  day: day,
-                  count: count,
-                  selected: selected,
-                  isToday: isToday,
-                  enabled: enabled,
-                  onTap: () => onDaySelected(date),
-                );
-              },
-              ),
-            ),
+                      return _DayCell(
+                        day: day,
+                        count: count,
+                        selected: selected,
+                        isToday: isToday,
+                        enabled: enabled,
+                        onTap: () => onDaySelected(date),
+                      );
+                    },
+                  ),
+          ),
         ],
       ),
     );
@@ -490,7 +492,7 @@ class _DayCell extends StatelessWidget {
           height: _dayCellHeight,
           child: Stack(
             alignment: Alignment.center,
-            clipBehavior: Clip.none,
+            clipBehavior: Clip.hardEdge,
             children: [
               Container(
                 width: 36,

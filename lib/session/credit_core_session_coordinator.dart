@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../offline/credit_calc_runtime.dart';
 import '../offline/services/session_service.dart';
 import 'credit_core_session_runtime.dart';
 
@@ -43,6 +44,7 @@ class _CreditCoreSessionCoordinatorState
   void _onAuthChanged(User? user) {
     if (user == null) {
       CreditCoreSessionRuntime.clear();
+      CreditCalcRuntime.clear();
       if (!mounted) return;
       setState(() {
         _user = null;

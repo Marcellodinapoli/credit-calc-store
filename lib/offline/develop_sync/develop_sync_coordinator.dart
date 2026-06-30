@@ -44,7 +44,12 @@ abstract final class DevelopSyncCoordinator {
 
     await stop();
 
-    _store = DevelopSyncSqliteStore(userId);
+    if (LocalItineraryCoordinator.isActive &&
+        LocalItineraryCoordinator.store?.userId == userId) {
+      _store = LocalItineraryCoordinator.store;
+    } else {
+      _store = DevelopSyncSqliteStore(userId);
+    }
     if (!LocalItineraryCoordinator.isActive) {
       _itineraryRepository = DevelopItineraryRepository(_store!);
       ItineraryStorage.instance =
@@ -71,7 +76,8 @@ abstract final class DevelopSyncCoordinator {
       unawaited(FieldVisitNotificationService.syncAllForCurrentUser());
       unawaited(FieldReminderNotificationService.syncAllForCurrentUser());
     };
-    MigratedDataFirestorePolicy.isLocalPrimary = () => _active;
+    MigratedDataFirestorePolicy.isLocalPrimary = () =>
+        LocalItineraryCoordinator.isActive || _active;
     await DevelopSyncService.instance.start(_store!);
     _active = true;
 
@@ -84,7 +90,8 @@ abstract final class DevelopSyncCoordinator {
   static Future<void> stop() async {
     await DevelopSyncService.instance.stop();
     if (_active) {
-      MigratedDataFirestorePolicy.isLocalPrimary = null;
+      MigratedDataFirestorePolicy.isLocalPrimary = () =>
+          LocalItineraryCoordinator.isActive;
       DevelopSyncCrypto.clearCache(_store?.userId);
     }
     if (!LocalItineraryCoordinator.isActive) {

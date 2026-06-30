@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
@@ -7,8 +8,6 @@ import '../models/sync_record_status.dart';
 import '../sqflite_desktop_init.dart';
 import '../utils/firestore_json_codec.dart';
 import 'local_data_cipher.dart';
-
-/// Database SQLite locale per CreditCalc offline.
 class LocalDatabaseService {
   LocalDatabaseService._();
   static final LocalDatabaseService instance = LocalDatabaseService._();
@@ -99,7 +98,8 @@ class LocalDatabaseService {
     );
     final out = <Map<String, dynamic>>[];
     for (final row in rows) {
-      out.add(await _rowToRecord(row));
+      final record = await _tryRowToRecord(row);
+      if (record != null) out.add(record);
     }
     return out;
   }
@@ -117,7 +117,8 @@ class LocalDatabaseService {
     );
     final out = <Map<String, dynamic>>[];
     for (final row in rows) {
-      out.add(await _rowToRecord(row));
+      final record = await _tryRowToRecord(row);
+      if (record != null) out.add(record);
     }
     return out;
   }
@@ -131,7 +132,8 @@ class LocalDatabaseService {
     );
     final out = <Map<String, dynamic>>[];
     for (final row in rows) {
-      out.add(await _rowToRecord(row));
+      final record = await _tryRowToRecord(row);
+      if (record != null) out.add(record);
     }
     return out;
   }
@@ -148,7 +150,7 @@ class LocalDatabaseService {
       limit: 1,
     );
     if (rows.isEmpty) return null;
-    return _rowToRecord(rows.first);
+    return _tryRowToRecord(rows.first);
   }
 
   Future<void> deleteRecord({
@@ -210,43 +212,88 @@ class LocalDatabaseService {
     );
   }
 
+  /// True se esistono payload cifrati (v1) nel database locale.
+  Future<bool> hasEncryptedPayloads() async {
+    final db = await database;
+    final rows = await db.query('local_records', limit: 32);
+    for (final row in rows) {
+      final raw = row['payload'] as String?;
+      if (raw == null || raw.isEmpty) continue;
+      if (raw.contains('"v":1') && raw.contains('"data"')) return true;
+    }
+    return false;
+  }
+
   Future<String> _encodePayload(Map<String, dynamic> payload) async {
     final safe = FirestoreJsonCodec.encodeMap(payload);
     return LocalDataCipher.encryptJson(jsonEncode(safe));
   }
 
+  static bool _looksLikeCipherEnvelope(Map<String, dynamic> map) =>
+      map.containsKey('v') &&
+      map.containsKey('iv') &&
+      map.containsKey('data') &&
+      !map.containsKey('userId') &&
+      !map.containsKey('companyName') &&
+      !map.containsKey('title');
+
   Future<Map<String, dynamic>> _decodePayload(String raw) async {
     try {
-      final asMap = jsonDecode(raw);
-      if (asMap is Map<String, dynamic> &&
-          asMap.containsKey('v') &&
-          asMap.containsKey('data')) {
-        final plain = await LocalDataCipher.decryptJson(raw);
-        final decoded = jsonDecode(plain) as Map<String, dynamic>;
-        return FirestoreJsonCodec.decodeMap(decoded);
+      final decoded = await _decodePayloadOnce(raw);
+      if (_looksLikeCipherEnvelope(decoded)) {
+        throw const FormatException('Payload itinerario ancora cifrato');
       }
-      if (asMap is Map<String, dynamic>) {
-        return FirestoreJsonCodec.decodeMap(asMap);
-      }
-    } catch (_) {}
-    final decoded = jsonDecode(raw) as Map<String, dynamic>;
-    return FirestoreJsonCodec.decodeMap(decoded);
+      return decoded;
+    } catch (e) {
+      throw StateError('Decodifica payload locale fallita: $e');
+    }
   }
 
-  Future<Map<String, dynamic>> _rowToRecord(Map<String, Object?> row) async {
-    final payload = await _decodePayload(row['payload']! as String);
-    return {
-      'id': row['id'],
-      'collection': row['collection'],
-      'userId': row['user_id'],
-      'payload': payload,
-      'createdAt': DateTime.fromMillisecondsSinceEpoch(row['created_at']! as int),
-      'updatedAt': DateTime.fromMillisecondsSinceEpoch(row['updated_at']! as int),
-      'serverUpdatedAt': row['server_updated_at'] == null
-          ? null
-          : DateTime.fromMillisecondsSinceEpoch(row['server_updated_at']! as int),
-      'syncStatus': SyncRecordStatusCodec.fromStorage(row['sync_status'] as String?),
-      'origin': row['origin'],
-    };
+  Future<Map<String, dynamic>?> _tryRowToRecord(Map<String, Object?> row) async {
+    try {
+      final payload = await _decodePayload(row['payload']! as String);
+      return {
+        'id': row['id'],
+        'collection': row['collection'],
+        'userId': row['user_id'],
+        'payload': payload,
+        'createdAt':
+            DateTime.fromMillisecondsSinceEpoch(row['created_at']! as int),
+        'updatedAt':
+            DateTime.fromMillisecondsSinceEpoch(row['updated_at']! as int),
+        'serverUpdatedAt': row['server_updated_at'] == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(
+                row['server_updated_at']! as int,
+              ),
+        'syncStatus':
+            SyncRecordStatusCodec.fromStorage(row['sync_status'] as String?),
+        'origin': row['origin'],
+      };
+    } catch (e, st) {
+      debugPrint(
+        'LocalDatabaseService: salto record '
+        '${row['collection']}/${row['id']}: $e\n$st',
+      );
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> _decodePayloadOnce(String raw) async {
+    final asMap = jsonDecode(raw);
+    if (asMap is! Map<String, dynamic>) {
+      throw const FormatException('Payload non è un oggetto JSON');
+    }
+
+    if (asMap.containsKey('v') && asMap.containsKey('data')) {
+      final plain = await LocalDataCipher.decryptJson(raw);
+      final decoded = jsonDecode(plain);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Payload decifrato non valido');
+      }
+      return FirestoreJsonCodec.decodeMap(decoded);
+    }
+
+    return FirestoreJsonCodec.decodeMap(asMap);
   }
 }

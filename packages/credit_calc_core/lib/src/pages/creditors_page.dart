@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
@@ -136,7 +136,6 @@ class CreditorsPage extends StatelessWidget {
                           itemBuilder: (context, index) {
                             final record = records[index];
                             final data = record.data;
-                            final name = (data['name'] ?? '').toString();
                             final notes = (data['notes'] ?? '').toString();
                             final maxAgeRaw = data['maxAge'];
                             final maxAge = maxAgeRaw is int

@@ -5,6 +5,7 @@ import 'package:credit_calc_core/credit_calc_core.dart';
 
 import '../models/sync_record_status.dart';
 import '../services/local_database_service.dart';
+import '../../services/practice_data_propagation_service.dart';
 
 class CreditCalcRecord {
   final String id;
@@ -101,7 +102,13 @@ class CreditCalcRepository {
     required String id,
     required Map<String, dynamic> data,
     bool isNew = false,
+    bool skipPracticePropagation = false,
   }) async {
+    Map<String, dynamic>? previous;
+    if (!isNew) {
+      previous = (await getCreditor(id))?.data;
+    }
+
     data = Map<String, dynamic>.from(data);
     if (!isNew) {
       final existing = await getCreditor(id);
@@ -128,6 +135,13 @@ class CreditCalcRepository {
     );
     notifyCreditorsChanged();
     PublicUsageLocalDataAccess.instance?.notifyChanged();
+    if (!skipPracticePropagation) {
+      await PracticeDataPropagationService.afterCreditorSaved(
+        creditorId: id,
+        data: data,
+        previous: previous,
+      );
+    }
   }
 
   Future<void> deleteCreditor(String id) async {
@@ -197,7 +211,13 @@ class CreditCalcRepository {
     required String id,
     required Map<String, dynamic> data,
     bool isNew = false,
+    bool skipPracticePropagation = false,
   }) async {
+    Map<String, dynamic>? previous;
+    if (!isNew) {
+      previous = (await getCalculation(id))?.data;
+    }
+
     data = Map<String, dynamic>.from(data);
     if (!isNew) {
       final existing = await getCalculation(id);
@@ -223,6 +243,13 @@ class CreditCalcRepository {
       origin: 'local',
     );
     notifyCalculationsChanged();
+    if (!skipPracticePropagation) {
+      await PracticeDataPropagationService.afterCommissionEntrySaved(
+        entryId: id,
+        data: data,
+        previous: previous,
+      );
+    }
   }
 
   Future<void> deleteCalculation(String id) async {

@@ -21,31 +21,35 @@ class _VoiceNoteFieldState extends State<VoiceNoteField> {
   final SpeechToText _speech = SpeechToText();
   bool _ready = false;
   bool _listening = false;
+  bool _initializing = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _initSpeech();
-  }
+  Future<bool> _ensureSpeechReady() async {
+    if (_ready) return true;
+    if (_initializing) return false;
 
-  Future<void> _initSpeech() async {
-    final ok = await _speech.initialize(
-      onError: (error) {
-        if (!mounted) return;
-        setState(() => _listening = false);
-        final msg = error.errorMsg;
-        if (msg == 'error_no_match' || msg == 'error_speech_timeout') {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Nessun audio riconosciuto. Parla più vicino al microfono e riprova.',
+    setState(() => _initializing = true);
+    try {
+      final ok = await _speech.initialize(
+        onError: (error) {
+          if (!mounted) return;
+          setState(() => _listening = false);
+          final msg = error.errorMsg;
+          if (msg == 'error_no_match' || msg == 'error_speech_timeout') {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Nessun audio riconosciuto. Parla più vicino al microfono e riprova.',
+                ),
               ),
-            ),
-          );
-        }
-      },
-    );
-    if (mounted) setState(() => _ready = ok);
+            );
+          }
+        },
+      );
+      if (mounted) setState(() => _ready = ok);
+      return ok;
+    } finally {
+      if (mounted) setState(() => _initializing = false);
+    }
   }
 
   @override
@@ -55,14 +59,21 @@ class _VoiceNoteFieldState extends State<VoiceNoteField> {
   }
 
   Future<void> _toggleListening() async {
+    if (_initializing) return;
+
     if (!_ready) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Dettatura vocale non disponibile su questo dispositivo.'),
-        ),
-      );
-      return;
+      final ok = await _ensureSpeechReady();
+      if (!ok) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Dettatura vocale non disponibile su questo dispositivo.',
+            ),
+          ),
+        );
+        return;
+      }
     }
 
     if (_listening) {
@@ -99,11 +110,17 @@ class _VoiceNoteFieldState extends State<VoiceNoteField> {
         border: const OutlineInputBorder(),
         suffixIcon: IconButton(
           tooltip: _listening ? 'Ferma dettatura' : 'Detta nota',
-          onPressed: _toggleListening,
-          icon: Icon(
-            _listening ? Icons.mic : Icons.mic_none_outlined,
-            color: _listening ? Colors.red : null,
-          ),
+          onPressed: _initializing ? null : _toggleListening,
+          icon: _initializing
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  _listening ? Icons.mic : Icons.mic_none_outlined,
+                  color: _listening ? Colors.red : null,
+                ),
         ),
       ),
       maxLines: widget.maxLines,

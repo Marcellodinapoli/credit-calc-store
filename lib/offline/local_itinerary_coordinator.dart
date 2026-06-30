@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:credit_calc_core/credit_calc_core.dart';
+
 import '../../services/field_reminder_notification_service.dart';
 import '../../services/field_visit_notification_service.dart';
 import '../../services/firestore_itinerary_storage.dart';
@@ -5,6 +9,7 @@ import '../../services/itinerary_storage.dart';
 import 'develop_sync/develop_itinerary_repository.dart';
 import 'develop_sync/develop_itinerary_storage.dart';
 import 'develop_sync/develop_sync_sqlite_store.dart';
+import 'services/local_data_cipher.dart';
 
 /// Itinerario sul dispositivo (visite, attività, promemoria).
 abstract final class LocalItineraryCoordinator {
@@ -26,13 +31,18 @@ abstract final class LocalItineraryCoordinator {
     _repository = DevelopItineraryRepository(_store!);
     ItineraryStorage.instance = DevelopItineraryStorage(_repository!);
     _active = true;
+    MigratedDataFirestorePolicy.isLocalPrimary = () => _active;
 
-    await FieldVisitNotificationService.syncAllForCurrentUser();
-    await FieldReminderNotificationService.syncAllForCurrentUser();
+    await LocalDataCipher.warmUp();
+
+    unawaited(_repository!.backfillStableDateFieldsIfNeeded());
+    unawaited(FieldVisitNotificationService.syncAllForCurrentUser());
+    unawaited(FieldReminderNotificationService.syncAllForCurrentUser());
   }
 
   static Future<void> stop() async {
     if (!_active) return;
+    MigratedDataFirestorePolicy.isLocalPrimary = null;
     ItineraryStorage.instance = FirestoreItineraryStorage();
     _repository = null;
     _store = null;

@@ -93,6 +93,7 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
             const SizedBox(height: 12),
             DropdownButtonFormField<CommissionMonthKey?>(
               value: _selectedMonth,
+              isExpanded: true,
               decoration: appFormFieldDecoration('Mese'),
               hint: const Text('Nessun incasso registrato'),
               items: [
@@ -158,6 +159,7 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String?>(
               value: _paymentFilter,
+              isExpanded: true,
               decoration: appFormFieldDecoration('Tipologia provvigione'),
               items: [
                 const DropdownMenuItem<String?>(
@@ -167,8 +169,14 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
                 ...paymentLabels.map(
                   (label) => DropdownMenuItem<String?>(
                     value: label,
-                    child: Text(label),
+                    child: Text(label, overflow: TextOverflow.ellipsis),
                   ),
+                ),
+              ],
+              selectedItemBuilder: (context) => [
+                const Text('Tutte le tipologie'),
+                ...paymentLabels.map(
+                  (label) => Text(label, overflow: TextOverflow.ellipsis),
                 ),
               ],
               onChanged: (value) => setState(() => _paymentFilter = value),
@@ -363,6 +371,7 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
             child: const Text('Elimina'),
           ),
         ],
+        actionsOverflowButtonSpacing: 8,
       ),
     );
 
@@ -441,8 +450,10 @@ class _CommissionCollectionsPageState extends State<CommissionCollectionsPage> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 4,
+            runSpacing: 4,
             children: [
               if (CommissionCollectionsHostConfig.scheduleFieldVisit != null)
                 TextButton.icon(

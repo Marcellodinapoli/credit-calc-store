@@ -146,49 +146,81 @@ List<PublicPlanLimitFieldSpec> publicPlanLimitFieldsForArea(
 ) =>
     publicPlanLimitFieldSpecs.where((s) => s.area == area).toList();
 
-/// Testo marketing sintetico dai limiti numerici (per descrizione piano).
-String buildPublicPlanDescriptionFromLimits(
+/// Righe elenco limiti per card piano (ordine fasi CreditForm → CreditCalc → CreditJob).
+List<String> buildPublicPlanLimitListItems(
   PublicPlanLimits limits,
   String planId,
 ) {
   if (limits.enforcement == PublicPlanEnforcement.fairUse) {
-    return 'Uso intensivo quasi senza limiti operativi.\n\n'
-        'Corsi, quiz, Warm-up, Roleplay, contestazioni, piani di '
-        'rientro, saldi/stralci, itinerari, creditori, provvigioni e '
-        'candidature illimitati (fair use).'
-        '${limits.advancedCommissionAnalytics ? ' Analytics provvigioni avanzate.' : ''}';
+    return [
+      'Corsi, quiz, Warm-up, Roleplay e contestazioni illimitati',
+      'Piani di rientro, saldi/stralci e itinerari illimitati',
+      'Creditori, provvigioni e candidature illimitati (fair use)',
+      if (limits.advancedCommissionAnalytics) 'Analytics provvigioni avanzate',
+    ];
   }
 
-  final intro = switch (planId) {
-    'plus' => 'Uso personale completo con limiti medi-alti.',
-    'enterprise' => 'Uso intensivo quasi senza limiti operativi.',
-    _ => 'Uso base per testare la piattaforma.',
-  };
-
-  final parts = <String>[];
+  final items = <String>[];
   for (final spec in publicPlanLimitFieldSpecs) {
     final value = spec.readValue(limits);
     if (value == null) continue;
     final label = spec.descriptionLabel ?? spec.label.toLowerCase();
     if (spec.key == 'monthlyRepaymentPlan' && planId == 'free' && value == 1) {
-      parts.add('1 piano di rientro (simulazione)');
+      items.add('1 piano di rientro (simulazione)');
     } else if (spec.key == 'activeCourses' && planId == 'plus') {
-      parts.add('Fino a $value $label');
+      items.add('Fino a $value $label');
     } else {
-      parts.add('$value $label');
+      items.add('$value $label');
     }
   }
 
   if (limits.unlimitedCommissionHistory) {
-    parts.add('storico provvigioni completo');
+    items.add('Storico provvigioni completo');
   }
 
-  final body = parts.join(' · ');
-  final softNote = limits.enforcement == PublicPlanEnforcement.soft
-      ? '\n\nAvviso al raggiungimento dell\'80% dei limiti.'
-      : '';
+  return items;
+}
 
-  return '$intro\n\n$body.$softNote';
+/// Descrizione piano: intro + elenco puntato (sempre, ovunque viene mostrata).
+String formatPublicPlanDescriptionList({
+  required String intro,
+  required List<String> items,
+  PublicPlanEnforcement enforcement = PublicPlanEnforcement.hard,
+}) {
+  final buffer = StringBuffer(intro.trim());
+  if (items.isNotEmpty) {
+    buffer.writeln();
+    buffer.writeln();
+    for (final item in items) {
+      buffer.writeln('• $item');
+    }
+  }
+  if (enforcement == PublicPlanEnforcement.soft) {
+    buffer
+      ..writeln()
+      ..write('Avviso al raggiungimento dell\'80% dei limiti.');
+  }
+  return buffer.toString();
+}
+
+/// Testo marketing dai limiti numerici (intro + elenco puntato).
+String buildPublicPlanDescriptionFromLimits(
+  PublicPlanLimits limits,
+  String planId,
+) {
+  final intro = switch (planId) {
+    'plus' => 'Uso personale completo con limiti medi-alti.',
+    'enterprise' => 'Uso intensivo quasi senza limiti operativi.',
+    _ => limits.enforcement == PublicPlanEnforcement.fairUse
+        ? 'Uso intensivo quasi senza limiti operativi.'
+        : 'Uso base per testare la piattaforma.',
+  };
+
+  return formatPublicPlanDescriptionList(
+    intro: intro,
+    items: buildPublicPlanLimitListItems(limits, planId),
+    enforcement: limits.enforcement,
+  );
 }
 
 /// Metriche conteggiate per i piani individuali (public).
@@ -322,17 +354,11 @@ extension PublicPlanLimitsFirestore on PublicPlanLimits {
         if (monthlyRoleplay != null) 'monthlyRoleplay': monthlyRoleplay,
         if (monthlyContestation != null) 'monthlyContestation': monthlyContestation,
         if (monthlyRepaymentPlan != null) 'monthlyRepaymentPlan': monthlyRepaymentPlan,
-        if (monthlyBalanceWriteOff != null) {
-          'monthlyBalanceWriteOff': monthlyBalanceWriteOff,
-        },
+        if (monthlyBalanceWriteOff != null) 'monthlyBalanceWriteOff': monthlyBalanceWriteOff,
         if (monthlyItinerary != null) 'monthlyItinerary': monthlyItinerary,
         if (totalCreditors != null) 'totalCreditors': totalCreditors,
-        if (totalCommissionSchemas != null) {
-          'totalCommissionSchemas': totalCommissionSchemas,
-        },
-        if (monthlyJobApplications != null) {
-          'monthlyJobApplications': monthlyJobApplications,
-        },
+        if (totalCommissionSchemas != null) 'totalCommissionSchemas': totalCommissionSchemas,
+        if (monthlyJobApplications != null) 'monthlyJobApplications': monthlyJobApplications,
         'unlimitedCommissionHistory': unlimitedCommissionHistory,
         'advancedCommissionAnalytics': advancedCommissionAnalytics,
       };

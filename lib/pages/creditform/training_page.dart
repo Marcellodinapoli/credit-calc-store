@@ -9,7 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:credit_calc_core/credit_calc_core.dart';
+import 'package:credit_calc_core/credit_calc_core.dart' hide AppCardTheme;
 
 import '../../core/theme/app_card_theme.dart';
 import 'quiz_tab.dart';

@@ -1,23 +1,28 @@
 import '../core/firestore_user_scope.dart';
 import '../models/field_visit.dart';
+import '../utils/itinerary_date_time.dart';
 import 'creditor_visit_address_service.dart';
 import 'field_visit_notification_service.dart';
 import 'geocoding_service.dart';
 import 'itinerary_storage.dart';
+import 'itinerary_storage_access.dart';
+import 'practice_data_propagation_service.dart';
 
 abstract final class FieldVisitService {
-  static ItineraryStorage get _storage => ItineraryStorage.instance;
+  static ItineraryStorage get _storage => ItineraryStorageAccess.instance;
 
   static bool _isSameLocalDay(DateTime a, DateTime day) =>
-      a.year == day.year && a.month == day.month && a.day == day.day;
+      ItineraryDateTime.isSameCalendarDay(a, day);
 
   static DateTime localDayKey(DateTime value) =>
-      DateTime(value.year, value.month, value.day);
+      ItineraryDateTime.calendarDay(value);
 
-  static String visitDayKeyId(DateTime value) =>
-      '${value.year.toString().padLeft(4, '0')}-'
-      '${value.month.toString().padLeft(2, '0')}-'
-      '${value.day.toString().padLeft(2, '0')}';
+  static String visitDayKeyId(DateTime value) {
+    final day = ItineraryDateTime.calendarDay(value);
+    return '${day.year.toString().padLeft(4, '0')}-'
+        '${day.month.toString().padLeft(2, '0')}-'
+        '${day.day.toString().padLeft(2, '0')}';
+  }
 
   static bool hasAppointmentAt(
     List<FieldVisit> visits,
@@ -126,10 +131,22 @@ abstract final class FieldVisitService {
     String? notes,
     int? routeOrder,
     bool geocodeIfNeeded = true,
+    bool skipPracticePropagation = false,
   }) async {
     final userId = FirestoreUserScope.uid;
     if (userId == null) {
       throw StateError('Utente non autenticato');
+    }
+
+    FieldVisit? previousVisit;
+    if (!skipPracticePropagation && id != null && id.isNotEmpty) {
+      final existingVisits = await _storage.fetchAllVisits();
+      for (final visit in existingVisits) {
+        if (visit.id == id) {
+          previousVisit = visit;
+          break;
+        }
+      }
     }
 
     var lat = latitude;
@@ -184,6 +201,27 @@ abstract final class FieldVisitService {
           notes: visit.notes,
           routeOrder: visit.routeOrder,
         ),
+      );
+    }
+
+    if (!skipPracticePropagation) {
+      await PracticeDataPropagationService.afterFieldVisitSaved(
+        visit: FieldVisit(
+          id: savedId,
+          userId: userId,
+          companyName: visit.companyName,
+          address: visit.address,
+          scheduledAt: visit.scheduledAt,
+          status: visit.status,
+          latitude: visit.latitude,
+          longitude: visit.longitude,
+          creditorId: visit.creditorId,
+          creditorName: visit.creditorName,
+          calculationId: visit.calculationId,
+          notes: visit.notes,
+          routeOrder: visit.routeOrder,
+        ),
+        previous: previousVisit,
       );
     }
 

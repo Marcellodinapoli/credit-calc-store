@@ -105,6 +105,7 @@ class BackofficePendingPlansPage extends StatelessWidget {
     bool autoOpenCommissionExport = false,
   }) async {
     await BackofficePendingPlanHostConfig.ensureDataReady?.call();
+    if (!context.mounted) return;
 
     final request = BackofficePlanEditorRequest(
       pendingPlanId: plan.id,

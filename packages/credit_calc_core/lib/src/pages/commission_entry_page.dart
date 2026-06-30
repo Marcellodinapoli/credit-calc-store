@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'commission_entry_data_access.dart';
 import '../core/euro_format.dart';
+import '../core/theme/app_action_styles.dart';
 import '../core/theme/app_card_theme.dart';
 import '../core/theme/app_form_fields.dart';
 import '../layout/credit_calc_page_host.dart';
@@ -528,6 +529,7 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
               const SizedBox(height: 8),
               DropdownButtonFormField<CommissionPaymentOption>(
                 value: _selectedPayment,
+                isExpanded: true,
                 decoration: appFormFieldDecoration('Seleziona modalità'),
                 items: _paymentOptions
                     .map(
@@ -535,7 +537,16 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
                         value: option,
                         child: Text(
                           '${option.label} (${_formatPercent(option.rate)})',
+                          overflow: TextOverflow.ellipsis,
                         ),
+                      ),
+                    )
+                    .toList(),
+                selectedItemBuilder: (context) => _paymentOptions
+                    .map(
+                      (option) => Text(
+                        '${option.label} (${_formatPercent(option.rate)})',
+                        overflow: TextOverflow.ellipsis,
                       ),
                     )
                     .toList(),
@@ -636,27 +647,43 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
             _summaryRow('Data dell\'incasso', _formatDate(_collectionDate)),
             if (_showSaveButton) ...[
               const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _saving || !_canSubmit ? null : _submit,
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.green.shade700,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                icon: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.check),
-                label: Text(
-                  _saving
-                      ? (_isEditing ? 'Salvataggio...' : 'Inserimento...')
-                      : (_isEditing ? 'Salva modifiche' : 'Inserisci'),
-                ),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.end,
+                children: [
+                  if (_isEditing)
+                    OutlinedButton(
+                      onPressed: _saving ? null : () => Navigator.pop(context),
+                      style: AppActionStyles.cancelOutlined,
+                      child: const Text('Annulla'),
+                    ),
+                  FilledButton.icon(
+                    onPressed: _saving || !_canSubmit ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green.shade700,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 14,
+                        horizontal: 20,
+                      ),
+                    ),
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.check),
+                    label: Text(
+                      _saving
+                          ? (_isEditing ? 'Salvataggio...' : 'Inserimento...')
+                          : (_isEditing ? 'Salva modifiche' : 'Inserisci'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ],

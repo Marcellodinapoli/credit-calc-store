@@ -45,14 +45,8 @@ class DevelopItineraryStorage implements ItineraryStorage {
   }
 
   @override
-  Future<void> saveVisitRouteOrder(List<FieldVisit> ordered) async {
-    for (var i = 0; i < ordered.length; i++) {
-      await _repository.saveVisit(
-        id: ordered[i].id,
-        visit: ordered[i].copyWith(routeOrder: i),
-        isNew: false,
-      );
-    }
+  Future<void> saveVisitRouteOrder(List<FieldVisit> ordered) {
+    return _repository.saveVisitRouteOrder(ordered);
   }
 
   @override

@@ -18,36 +18,79 @@ abstract final class UserSubscriptionService {
           (map['subscriptionStatus'] ?? 'active').toString(),
       'couponCode': couponRaw.isEmpty ? null : couponRaw,
       'lifetimeAccess': map['lifetimeAccess'] == true,
+      'couponAppliedAt': map['couponAppliedAt'],
+      'subscriptionExpiresAt': map['subscriptionExpiresAt'],
       'subscriptionCancelledAt': map['subscriptionCancelledAt'],
     };
   }
 
-  /// Se il profilo non ha `couponCode`, recupera il coupon usato in registrazione.
+  /// Arricchisce abbonamento con dati dal coupon collegato (`couponCode` o uso).
   static Future<Map<String, dynamic>> _enrichSubscriptionFromCouponUsage(
     String uid,
     Map<String, dynamic> subscription,
   ) async {
     final enriched = Map<String, dynamic>.from(subscription);
-    final existing = (enriched['couponCode'] ?? '').toString().trim();
-    if (existing.isNotEmpty) return enriched;
+    var code = (enriched['couponCode'] ?? '').toString().trim();
+
+    if (code.isEmpty) {
+      try {
+        final snap = await _firestore
+            .collection('coupons')
+            .where('lastUsedBy', isEqualTo: uid)
+            .limit(1)
+            .get();
+        if (snap.docs.isEmpty) return enriched;
+
+        final doc = snap.docs.first;
+        code = doc.id;
+        enriched['couponCode'] = code;
+        final data = doc.data();
+        if (enriched['lifetimeAccess'] != true) {
+          enriched['lifetimeAccess'] = data['lifetimeFree'] as bool? ?? true;
+        }
+        _mergeCouponUsageDates(uid, data, enriched);
+      } catch (_) {}
+      return _reconcileLifetimeAccess(enriched);
+    }
 
     try {
-      final snap = await _firestore
-          .collection('coupons')
-          .where('lastUsedBy', isEqualTo: uid)
-          .limit(1)
-          .get();
-      if (snap.docs.isEmpty) return enriched;
-
-      final doc = snap.docs.first;
-      final data = doc.data();
-      enriched['couponCode'] = doc.id;
-      if (enriched['lifetimeAccess'] != true) {
-        enriched['lifetimeAccess'] = data['lifetimeFree'] as bool? ?? true;
+      final couponSnap = await _firestore.collection('coupons').doc(code).get();
+      if (couponSnap.exists) {
+        _mergeCouponUsageDates(uid, couponSnap.data() ?? {}, enriched);
       }
     } catch (_) {}
 
+    return _reconcileLifetimeAccess(enriched);
+  }
+
+  static Map<String, dynamic> _reconcileLifetimeAccess(
+    Map<String, dynamic> enriched,
+  ) {
+    if (enriched['subscriptionExpiresAt'] is Timestamp) {
+      enriched['lifetimeAccess'] = false;
+    }
     return enriched;
+  }
+
+  static void _mergeCouponUsageDates(
+    String uid,
+    Map<String, dynamic> couponData,
+    Map<String, dynamic> enriched,
+  ) {
+    final lastUsedBy = (couponData['lastUsedBy'] ?? '').toString().trim();
+    if (lastUsedBy == uid && enriched['couponAppliedAt'] == null) {
+      final lastUsedAt = couponData['lastUsedAt'];
+      if (lastUsedAt is Timestamp) {
+        enriched['couponAppliedAt'] = lastUsedAt;
+      }
+    }
+
+    if (enriched['subscriptionExpiresAt'] == null) {
+      final benefitExpiresAt = couponData['benefitExpiresAt'];
+      if (benefitExpiresAt is Timestamp) {
+        enriched['subscriptionExpiresAt'] = benefitExpiresAt;
+      }
+    }
   }
 
   static Future<_SubscriptionContext> _resolveContext(String uid) async {
@@ -109,10 +152,12 @@ abstract final class UserSubscriptionService {
     final sub = ctx.subscription;
     final cancelledAt = sub['subscriptionCancelledAt'];
     return UserSubscriptionSnapshot(
-      planId: sub['subscriptionPlan'] as String,
+      planId: _effectiveDisplayPlanId(sub),
       subscriptionStatus: sub['subscriptionStatus'] as String,
       couponCode: sub['couponCode']?.toString(),
       lifetimeAccess: sub['lifetimeAccess'] as bool,
+      couponAppliedAt: _timestampToDate(sub['couponAppliedAt']),
+      limitsEffectExpiresAt: _timestampToDate(sub['subscriptionExpiresAt']),
       registerType: ctx.registerType,
       canManage: ctx.canManage,
       cancelledAt: cancelledAt is Timestamp ? cancelledAt.toDate() : null,
@@ -170,7 +215,7 @@ abstract final class UserSubscriptionService {
       );
     }
 
-    final currentPlan = ctx.subscription['subscriptionPlan'] as String;
+    final currentPlan = _effectiveDisplayPlanId(ctx.subscription);
     if (currentPlan == newPlanId) return;
 
     if (SubscriptionBillingService.planUsesStripeCheckout(newPlanId)) {
@@ -245,6 +290,19 @@ abstract final class UserSubscriptionService {
       batch.update(ctx.companyRef!, updates);
     }
     await batch.commit();
+  }
+
+  static DateTime? _timestampToDate(dynamic value) =>
+      value is Timestamp ? value.toDate() : null;
+
+  /// Allinea il piano mostrato a quello usato per i limiti dopo scadenza effetto.
+  static String _effectiveDisplayPlanId(Map<String, dynamic> sub) {
+    var planId = (sub['subscriptionPlan'] ?? 'free').toString();
+    final expires = sub['subscriptionExpiresAt'];
+    if (expires is Timestamp && expires.toDate().isBefore(DateTime.now())) {
+      planId = 'free';
+    }
+    return planId;
   }
 
   static Future<String> _resolveCompanyCode(_SubscriptionContext ctx) async {

@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../offline/utils/firestore_json_codec.dart';
+import '../utils/itinerary_date_time.dart';
+
 enum FieldVisitStatus { planned, completed, cancelled }
 
 FieldVisitStatus fieldVisitStatusFrom(String? raw) {
@@ -71,25 +74,30 @@ class FieldVisit {
   }
 
   factory FieldVisit.fromMap(String id, Map<String, dynamic> data) {
-    final scheduled = data['scheduledAt'];
+    final normalized = FirestoreJsonCodec.decodeMap(
+      Map<String, dynamic>.from(data),
+    );
     return FieldVisit(
       id: id,
-      userId: (data['userId'] ?? '').toString(),
-      companyName: (data['companyName'] ?? '').toString().trim(),
-      address: (data['address'] ?? '').toString().trim(),
-      scheduledAt: scheduled is Timestamp
-          ? scheduled.toDate()
-          : scheduled is DateTime
-              ? scheduled
-              : DateTime.now(),
-      status: fieldVisitStatusFrom(data['status'] as String?),
-      latitude: _asDouble(data['latitude']),
-      longitude: _asDouble(data['longitude']),
-      creditorId: data['creditorId']?.toString(),
-      creditorName: data['creditorName']?.toString(),
-      calculationId: data['calculationId']?.toString(),
-      notes: data['notes']?.toString(),
-      routeOrder: data['routeOrder'] is int ? data['routeOrder'] as int : null,
+      userId: (normalized['userId'] ?? '').toString(),
+      companyName: (normalized['companyName'] ?? '').toString().trim(),
+      address: (normalized['address'] ?? '').toString().trim(),
+      scheduledAt: _readDateTime(
+        normalized,
+        data,
+        'scheduledAt',
+        recordId: id,
+      ),
+      status: fieldVisitStatusFrom(normalized['status'] as String?),
+      latitude: _asDouble(normalized['latitude']),
+      longitude: _asDouble(normalized['longitude']),
+      creditorId: normalized['creditorId']?.toString(),
+      creditorName: normalized['creditorName']?.toString(),
+      calculationId: normalized['calculationId']?.toString(),
+      notes: normalized['notes']?.toString(),
+      routeOrder: normalized['routeOrder'] is num
+          ? (normalized['routeOrder'] as num).toInt()
+          : null,
     );
   }
 
@@ -100,6 +108,7 @@ class FieldVisit {
       'companyName': companyName,
       'address': address,
       'scheduledAt': Timestamp.fromDate(scheduledAt),
+      'scheduledAtMs': scheduledAt.millisecondsSinceEpoch,
       'status': status.name,
       if (latitude != null) 'latitude': latitude,
       if (longitude != null) 'longitude': longitude,
@@ -137,5 +146,23 @@ class FieldVisit {
   static double? _asDouble(dynamic raw) {
     if (raw is num) return raw.toDouble();
     return double.tryParse(raw?.toString().replaceAll(',', '.') ?? '');
+  }
+
+  static DateTime _readDateTime(
+    Map<String, dynamic> normalized,
+    Map<String, dynamic> raw,
+    String field, {
+    required String recordId,
+  }) {
+    final msField = '${field}Ms';
+    final ms = normalized[msField] ?? raw[msField];
+    if (ms is num) {
+      return DateTime.fromMillisecondsSinceEpoch(ms.toInt(), isUtc: true).toLocal();
+    }
+
+    final parsed = ItineraryDateTime.parseStored(normalized[field]) ??
+        ItineraryDateTime.parseStored(raw[field]);
+    if (parsed != null) return parsed;
+    throw FormatException('$field non valido per record $recordId');
   }
 }

@@ -5,8 +5,9 @@ import '../auth/public_info_pages.dart';
 import '../auth/login_page.dart';
 import '../auth/login_pricing_page.dart';
 
-/// Pagine pubbliche dell'app (senza landing).
+/// Pagine pubbliche dell'app.
 enum PublicPage {
+  home,
   login,
   about,
   contacts,
@@ -26,11 +27,24 @@ class PublicTopBar extends StatelessWidget {
   static const primaryBlue = Color(0xFF0A66C2);
   static const headerBorder = Color(0xFFE0E0E0);
 
-  static void goLogin(BuildContext context) {
-    Navigator.of(context).pushAndRemoveUntil(
+  static void goHome(BuildContext context) {
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  static void openLogin(BuildContext context) {
+    Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const LoginPage()),
-      (route) => false,
     );
+  }
+
+  static void goLogin(BuildContext context) {
+    goHome(context);
+    openLogin(context);
+  }
+
+  void _goHome(BuildContext context) {
+    if (current == PublicPage.home) return;
+    goHome(context);
   }
 
   void _goLogin(BuildContext context) {
@@ -59,6 +73,11 @@ class PublicTopBar extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        _MenuItem(
+          label: 'Home',
+          active: current == PublicPage.home,
+          onTap: current == PublicPage.home ? null : () => _goHome(context),
+        ),
         _MenuItem(
           label: 'Accedi',
           active: current == PublicPage.login,
@@ -107,6 +126,11 @@ class PublicTopBar extends StatelessWidget {
   List<PopupMenuEntry<_PublicMobileMenuAction>> _mobileMenuItems() {
     return [
       CheckedPopupMenuItem<_PublicMobileMenuAction>(
+        value: _PublicMobileMenuAction.home,
+        checked: current == PublicPage.home,
+        child: const Text('Home'),
+      ),
+      CheckedPopupMenuItem<_PublicMobileMenuAction>(
         value: _PublicMobileMenuAction.login,
         checked: current == PublicPage.login,
         child: const Text('Accedi'),
@@ -152,6 +176,9 @@ class PublicTopBar extends StatelessWidget {
     _PublicMobileMenuAction value,
   ) {
     switch (value) {
+      case _PublicMobileMenuAction.home:
+        _goHome(context);
+        break;
       case _PublicMobileMenuAction.login:
         _goLogin(context);
         break;
@@ -200,7 +227,7 @@ class PublicTopBar extends StatelessWidget {
               children: [
                 Flexible(
                   child: GestureDetector(
-                    onTap: () => _goLogin(context),
+                    onTap: () => _goHome(context),
                     child: Text(
                       'CreditCore',
                       maxLines: 1,
@@ -224,6 +251,7 @@ class PublicTopBar extends StatelessWidget {
                         tooltip: 'Menu',
                         position: PopupMenuPosition.under,
                         initialValue: switch (current) {
+                          PublicPage.home => _PublicMobileMenuAction.home,
                           PublicPage.login => _PublicMobileMenuAction.login,
                           PublicPage.about => _PublicMobileMenuAction.about,
                           PublicPage.contacts => _PublicMobileMenuAction.contacts,
@@ -263,6 +291,7 @@ class PublicTopBar extends StatelessWidget {
 }
 
 enum _PublicMobileMenuAction {
+  home,
   login,
   about,
   contacts,

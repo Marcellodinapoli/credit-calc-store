@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:encrypt/encrypt.dart' as enc;
 
+import '../utils/firestore_json_codec.dart';
+
 /// Chiave AES condivisa tra i dispositivi dell'utente (solo in Firestore privato).
 abstract final class DevelopSyncCrypto {
   static final _firestore = FirebaseFirestore.instance;
@@ -61,7 +63,9 @@ abstract final class DevelopSyncCrypto {
   ) async {
     final parsed = jsonDecode(stored);
     if (parsed is! Map || parsed['v'] != 1) {
-      if (parsed is Map<String, dynamic>) return parsed;
+      if (parsed is Map<String, dynamic>) {
+        return FirestoreJsonCodec.decodeMap(parsed);
+      }
       throw FormatException('Payload sync non valido');
     }
 
@@ -69,7 +73,8 @@ abstract final class DevelopSyncCrypto {
     final iv = enc.IV(base64Decode(parsed['iv'] as String));
     final aes = enc.Encrypter(enc.AES(key));
     final plain = aes.decrypt64(parsed['data'] as String, iv: iv);
-    return jsonDecode(plain) as Map<String, dynamic>;
+    final decoded = jsonDecode(plain) as Map<String, dynamic>;
+    return FirestoreJsonCodec.decodeMap(decoded);
   }
 
   static void clearCache([String? userId]) {

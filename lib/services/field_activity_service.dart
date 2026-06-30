@@ -1,9 +1,10 @@
 import '../core/firestore_user_scope.dart';
 import '../models/field_activity.dart';
 import 'itinerary_storage.dart';
+import 'itinerary_storage_access.dart';
 
 abstract final class FieldActivityService {
-  static ItineraryStorage get _storage => ItineraryStorage.instance;
+  static ItineraryStorage get _storage => ItineraryStorageAccess.instance;
 
   static Stream<List<FieldActivity>> watchAll() => _storage.watchAllActivities();
 
