@@ -1,7 +1,47 @@
-﻿FILE UNICO DA DISTRIBUIRE
-=========================
+﻿CreditCalc per Windows — file pronti (senza Flutter)
+====================================================
 
-  C:\FlutterProjects\credit-calc-store\dist\CreditCalc-1.0.13-Setup.exe
+ATTENZIONE — installer 1.0.13 in questa cartella
+------------------------------------------------
+L'installer CreditCalc-1.0.13-Setup.exe e' stato creato PRIMA delle correzioni
+SQLite (30/06/2026 ore 08:45). Non include i fix per il database locale su PC.
 
-Cartella applicazione (sviluppo/test):
-  C:\FlutterProjects\credit-calc-store\dist\CreditCalc-1.0.13-win64\CreditCalc.exe
+Usa la versione 1.0.14 (o successiva) appena disponibile.
+
+Versione in sviluppo: 1.0.14
+
+FILE CONSIGLIATO (da dare agli utenti)
+--------------------------------------
+  CreditCalc-1.0.14-Setup.exe   (dopo build CI o locale)
+
+ALTERNATIVE
+-----------
+  INSTALLA-CREDITCALC.bat
+  CreditCalc-1.0.14-win64.zip   (portable)
+  CreditCalc-1.0.14-win64\
+
+PERCORSO COMPLETO SU QUESTO PC
+------------------------------
+  c:\Users\271\Desktop\Marcello\Esiti test\credit-calc-store\dist\
+
+SCARICARE UNA BUILD NUOVA SENZA FLUTTER
+---------------------------------------
+  1. GitHub -> credit-calc-store -> Actions -> Build Windows (ultima verde)
+  2. Scarica l'artifact "CreditCalc-Windows"
+  3. Estrai CreditCalc-*-Setup.exe in questa cartella dist\
+
+  Oppure da PowerShell nella cartella del progetto:
+    powershell -ExecutionPolicy Bypass -File .\scripts\scarica_installer_pc.ps1
+
+RICOMPILARE IN LOCALE (solo sviluppatori)
+-----------------------------------------
+  1. Abilita "Modalita' sviluppatore" in Impostazioni Windows
+     (start ms-settings:developers)
+  2. Flutter + Visual Studio C++ + Inno Setup
+  3. Script: scripts\build_windows_release.bat
+
+DOPO L'INSTALLAZIONE
+--------------------
+  - Disinstalla la versione precedente prima di installare la nuova
+  - I dati sul PC sono separati da quelli del telefono (stesso account, memoria diversa)
+  - Il database locale si trova in: %APPDATA%\CreditCalc\databases\

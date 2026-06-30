@@ -114,6 +114,9 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
         }
       });
       _tryRestorePendingPlan(options);
+    }, onError: (_) {
+      if (!mounted) return;
+      setState(() => _creditorOptions = const []);
     });
     _sessionCommissionDocIds.addAll(RepaymentPlanSessionStorage.readIds());
     if (widget.initialCommissionDocIds.isNotEmpty) {

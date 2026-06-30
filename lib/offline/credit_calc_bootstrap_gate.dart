@@ -107,7 +107,11 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     await PublicPlanLimitsConfigService.ensureLoaded();
 
     // Dati operativi solo su questo dispositivo (PC ≠ telefono).
-    await LocalDatabaseService.instance.database;
+    try {
+      await LocalDatabaseService.instance.database;
+    } catch (e, st) {
+      debugPrint('CreditCalcBootstrapGate: database locale non disponibile: $e\n$st');
+    }
 
     LocalDataCipher.configureBackup(
       read: () => LocalDatabaseService.instance.getMeta('local_cipher_key_v1'),

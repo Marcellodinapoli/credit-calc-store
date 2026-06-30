@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../models/sync_record_status.dart';
 import '../sqflite_desktop_init.dart';
@@ -20,9 +21,8 @@ class LocalDatabaseService {
     await ensureSqfliteDesktopInitialized();
     final existing = _db;
     if (existing != null) return existing;
-    final path = await _dbPath();
-    _db = await openDatabase(
-      path,
+
+    final options = OpenDatabaseOptions(
       version: 1,
       onCreate: (db, version) async {
         await db.execute('''
@@ -53,26 +53,79 @@ class LocalDatabaseService {
         );
       },
     );
-    return _db!;
+
+    Object? lastError;
+    for (final path in await _dbPathCandidates()) {
+      try {
+        debugPrint('LocalDatabaseService: apertura database in $path');
+        final Database db;
+        if (isSqfliteDesktopPlatform) {
+          db = await databaseFactoryFfi.openDatabase(path, options: options);
+        } else {
+          db = await openDatabase(
+            path,
+            version: options.version,
+            onCreate: options.onCreate,
+          );
+        }
+        _db = db;
+        return db;
+      } catch (e, st) {
+        lastError = e;
+        debugPrint(
+          'LocalDatabaseService: apertura fallita ($path): $e\n$st',
+        );
+      }
+    }
+
+    throw StateError(
+      'Impossibile aprire il database locale: $lastError',
+    );
   }
 
-  Future<String> _dbPath() async {
-    if (isSqfliteDesktopPlatform) {
-      // Store desktop: percorso scrivibile in AppData (non dipende dalla cwd).
-      final supportDir = await getApplicationSupportDirectory();
-      final dbDir = Directory(p.join(supportDir.path, 'databases'));
-      if (!await dbDir.exists()) {
-        await dbDir.create(recursive: true);
+  Future<List<String>> _dbPathCandidates() async {
+    if (!isSqfliteDesktopPlatform) {
+      final base = await getDatabasesPath();
+      final dir = Directory(base);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
       }
-      return p.join(dbDir.path, 'credit_calc_offline.db');
+      return [p.join(base, 'credit_calc_offline.db')];
     }
 
-    final base = await getDatabasesPath();
-    final dir = Directory(base);
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
+    final dirs = <Directory>[];
+    final appData = Platform.environment['APPDATA'];
+    if (appData != null && appData.isNotEmpty) {
+      dirs.add(Directory(p.join(appData, 'CreditCalc', 'databases')));
     }
-    return p.join(base, 'credit_calc_offline.db');
+    final localAppData = Platform.environment['LOCALAPPDATA'];
+    if (localAppData != null && localAppData.isNotEmpty) {
+      dirs.add(Directory(p.join(localAppData, 'CreditCalc', 'databases')));
+    }
+    try {
+      final supportDir = await getApplicationSupportDirectory();
+      dirs.add(Directory(p.join(supportDir.path, 'databases')));
+    } catch (e) {
+      debugPrint('LocalDatabaseService: getApplicationSupportDirectory: $e');
+    }
+
+    final paths = <String>[];
+    for (final dir in dirs) {
+      try {
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+        final testFile = File(p.join(dir.path, '.write_test'));
+        await testFile.writeAsString('ok', flush: true);
+        await testFile.delete();
+        paths.add(p.join(dir.path, 'credit_calc_offline.db'));
+      } catch (e) {
+        debugPrint(
+          'LocalDatabaseService: cartella non scrivibile ${dir.path}: $e',
+        );
+      }
+    }
+    return paths;
   }
 
   Future<void> upsertRecord({

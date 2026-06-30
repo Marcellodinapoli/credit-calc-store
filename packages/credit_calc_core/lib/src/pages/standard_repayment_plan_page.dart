@@ -1446,6 +1446,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     _creditorsSub =
         CreditorsListDataAccess.instance.watchCreditors().listen(
       _applyCreditorsList,
+      onError: (_) => _applyCreditorsList(const []),
     );
     _sessionCommissionDocIds.addAll(RepaymentPlanSessionStorage.readIds());
     if (widget.initialCommissionDocIds.isNotEmpty) {

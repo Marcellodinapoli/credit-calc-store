@@ -97,16 +97,9 @@ class CreditorsPage extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Errore nel caricamento creditori:\n${snapshot.error}',
-                textAlign: TextAlign.center,
-              ),
-            );
-          }
-
-          final docs = snapshot.data ?? const [];
+          final docs = snapshot.hasError
+              ? const <CreditCalcRecord>[]
+              : (snapshot.data ?? const []);
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
