@@ -92,25 +92,6 @@ class LoginPricingPage extends StatelessWidget {
                         );
                       },
                     ),
-                    const SizedBox(height: 32),
-                    Divider(color: Colors.grey.shade300),
-                    const SizedBox(height: 32),
-                    const _SectionLabel(
-                      title: 'Per aziende e team',
-                      subtitle:
-                          'Workspace dedicato con ruoli, recruiting e monitoraggio performance',
-                    ),
-                    const SizedBox(height: 16),
-                    const _EnterprisePlanCard(
-                      name: 'AZIENDA',
-                      price: 'Prezzo su richiesta',
-                      description:
-                          'Soluzione completa per team e organizzazioni.\n\n'
-                          'Workspace aziendale con gestione ruoli · '
-                          'Pubblicazione offerte di lavoro · Gestione candidati · '
-                          'Assegnazione attività · Dashboard dedicate ai supervisor · '
-                          'Monitoraggio performance del team.',
-                    ),
                   ],
                 ),
               ),
@@ -232,74 +213,6 @@ class _PlanCard extends StatelessWidget {
           _PlanDescriptionList(
             description: description,
             fontSize: 15,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EnterprisePlanCard extends StatelessWidget {
-  final String name;
-  final String price;
-  final String description;
-
-  const _EnterprisePlanCard({
-    required this.name,
-    required this.price,
-    required this.description,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: _PricingPageTheme.accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'Soluzione per organizzazioni',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: _PricingPageTheme.accent,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            name,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            price,
-            style: const TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w700,
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _PlanDescriptionList(
-            description: description,
-            fontSize: 16,
           ),
         ],
       ),

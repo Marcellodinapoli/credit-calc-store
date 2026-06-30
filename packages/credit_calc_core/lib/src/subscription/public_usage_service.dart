@@ -7,6 +7,7 @@ import 'public_plan_limits.dart';
 import 'public_plan_limits_config_service.dart';
 import 'platform_admin.dart';
 import 'public_usage_local_data_access.dart';
+import 'user_subscription_service.dart';
 
 class PublicUsageCheckResult {
   const PublicUsageCheckResult({
@@ -103,26 +104,9 @@ abstract final class PublicUsageService {
     return publicPlanLimitsForPlan(planId);
   }
 
-  /// Piano effettivo per i limiti: dopo [subscriptionExpiresAt] torna Gratis.
-  static String _effectivePlanId(Map<String, dynamic> data) {
-    var planId = (data['subscriptionPlan'] ?? 'free').toString();
-    final expires = data['subscriptionExpiresAt'];
-    if (expires is Timestamp && expires.toDate().isBefore(DateTime.now())) {
-      planId = 'free';
-    }
-    return planId;
-  }
-
-  /// Coupon backoffice attivo: limiti illimitati fino a scadenza effetto.
-  static bool _isCouponBenefitActive(Map<String, dynamic> data) {
-    final code = (data['couponCode'] ?? '').toString().trim();
-    if (code.isEmpty) return false;
-
-    final expires = data['subscriptionExpiresAt'];
-    if (expires is Timestamp) {
-      return !expires.toDate().isBefore(DateTime.now());
-    }
-    return data['lifetimeAccess'] == true;
+  /// Piano effettivo per i limiti: dopo scadenza effetto coupon torna il piano base.
+  static String _effectivePlanId(Map<String, dynamic> subscription) {
+    return UserSubscriptionService.effectivePlanIdForLimits(subscription);
   }
 
   static Future<({String type, String planId, bool couponBenefitActive})?>
@@ -132,10 +116,13 @@ abstract final class PublicUsageService {
     final snap = await _firestore.collection('users').doc(uid).get();
     final data = snap.data() ?? {};
     final type = (data['type'] ?? 'public').toString().trim().toLowerCase();
+    final subscription =
+        await UserSubscriptionService.loadEnrichedSubscription(uid);
     return (
       type: type,
-      planId: _effectivePlanId(data),
-      couponBenefitActive: _isCouponBenefitActive(data),
+      planId: _effectivePlanId(subscription),
+      couponBenefitActive:
+          UserSubscriptionService.isCouponBenefitActive(subscription),
     );
   }
 
@@ -498,11 +485,13 @@ abstract final class PublicUsageService {
         yield const <PlanUsageItem>[];
         return;
       }
-      if (_isCouponBenefitActive(data)) {
+      final subscription =
+          await UserSubscriptionService.loadEnrichedSubscription(uid);
+      if (UserSubscriptionService.isCouponBenefitActive(subscription)) {
         yield _couponBenefitUsageItems;
         return;
       }
-      final planId = _effectivePlanId(data);
+      final planId = _effectivePlanId(subscription);
       yield* watchUsageForPlan(planId);
     });
   }

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
@@ -14,6 +15,8 @@ class ClassicCalculatorPage extends StatefulWidget {
 }
 
 class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
+  final _focusNode = FocusNode(debugLabel: 'classicCalculator');
+
   String _display = '0';
   String? _pendingOp;
   double? _operand1;
@@ -22,6 +25,121 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
   bool _hasMemory = false;
 
   double get _value => _parse(_display);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  String? _digitForKey(LogicalKeyboardKey key) => switch (key) {
+        LogicalKeyboardKey.digit0 || LogicalKeyboardKey.numpad0 => '0',
+        LogicalKeyboardKey.digit1 || LogicalKeyboardKey.numpad1 => '1',
+        LogicalKeyboardKey.digit2 || LogicalKeyboardKey.numpad2 => '2',
+        LogicalKeyboardKey.digit3 || LogicalKeyboardKey.numpad3 => '3',
+        LogicalKeyboardKey.digit4 || LogicalKeyboardKey.numpad4 => '4',
+        LogicalKeyboardKey.digit5 || LogicalKeyboardKey.numpad5 => '5',
+        LogicalKeyboardKey.digit6 || LogicalKeyboardKey.numpad6 => '6',
+        LogicalKeyboardKey.digit7 || LogicalKeyboardKey.numpad7 => '7',
+        LogicalKeyboardKey.digit8 || LogicalKeyboardKey.numpad8 => '8',
+        LogicalKeyboardKey.digit9 || LogicalKeyboardKey.numpad9 => '9',
+        _ => null,
+      };
+
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final digit = _digitForKey(event.logicalKey);
+    if (digit != null) {
+      _inputDigit(digit);
+      _refocusKeyboard();
+      return KeyEventResult.handled;
+    }
+
+    final key = event.logicalKey;
+    final char = event.character;
+
+    if (key == LogicalKeyboardKey.period ||
+        key == LogicalKeyboardKey.comma ||
+        key == LogicalKeyboardKey.numpadDecimal) {
+      _inputDecimal();
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.backspace) {
+      _backspace();
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.delete) {
+      _clearEntry();
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.escape) {
+      _clearAll();
+      return KeyEventResult.handled;
+    }
+
+    if (char == '%') {
+      _percent();
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.numpadAdd || char == '+') {
+      _setOperation('+');
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.minus ||
+        key == LogicalKeyboardKey.numpadSubtract ||
+        char == '-') {
+      _setOperation('-');
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.asterisk ||
+        key == LogicalKeyboardKey.numpadMultiply ||
+        char == '*') {
+      _setOperation('×');
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.slash ||
+        key == LogicalKeyboardKey.numpadDivide ||
+        char == '/') {
+      _setOperation('÷');
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
+        char == '=') {
+      _equals();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  void _refocusKeyboard() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  VoidCallback _btn(VoidCallback action) => () {
+        action();
+        _refocusKeyboard();
+      };
 
   double _parse(String raw) {
     final normalized = raw.replaceAll('.', '').replaceAll(',', '.');
@@ -241,89 +359,94 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
       secondary: true,
       pageTitle: 'Calcolatrice',
       current: CreditCalcNavItem.develop,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Card(
-            elevation: 2,
-            color: const Color(0xFFF3F3F3),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      'Standard',
-                      style: TextStyle(
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w600,
+      body: Focus(
+        focusNode: _focusNode,
+        autofocus: true,
+        onKeyEvent: _handleKey,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Card(
+              elevation: 2,
+              color: const Color(0xFFF3F3F3),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        'Standard',
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 20,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      _display,
-                      textAlign: TextAlign.right,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 40,
-                        fontWeight: FontWeight.w400,
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 20,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        _display,
+                        textAlign: TextAlign.right,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 40,
+                          fontWeight: FontWeight.w400,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  _memoryRow(),
-                  const SizedBox(height: 4),
-                  _buttonRow([
-                    _CalcBtn('%', onTap: _percent),
-                    _CalcBtn('CE', onTap: _clearEntry),
-                    _CalcBtn('C', onTap: _clearAll),
-                    _CalcBtn('⌫', onTap: _backspace, icon: Icons.backspace_outlined),
-                  ]),
-                  _buttonRow([
-                    _CalcBtn('¹/x', onTap: () => _applyUnary((v) => v == 0 ? double.nan : 1 / v)),
-                    _CalcBtn('x²', onTap: () => _applyUnary((v) => v * v)),
-                    _CalcBtn('²√x', onTap: () => _applyUnary((v) => v < 0 ? double.nan : math.sqrt(v))),
-                    _CalcBtn('÷', onTap: () => _setOperation('÷'), accent: true),
-                  ]),
-                  _buttonRow([
-                    _CalcBtn('7', onTap: () => _inputDigit('7')),
-                    _CalcBtn('8', onTap: () => _inputDigit('8')),
-                    _CalcBtn('9', onTap: () => _inputDigit('9')),
-                    _CalcBtn('×', onTap: () => _setOperation('×'), accent: true),
-                  ]),
-                  _buttonRow([
-                    _CalcBtn('4', onTap: () => _inputDigit('4')),
-                    _CalcBtn('5', onTap: () => _inputDigit('5')),
-                    _CalcBtn('6', onTap: () => _inputDigit('6')),
-                    _CalcBtn('−', onTap: () => _setOperation('-'), accent: true),
-                  ]),
-                  _buttonRow([
-                    _CalcBtn('1', onTap: () => _inputDigit('1')),
-                    _CalcBtn('2', onTap: () => _inputDigit('2')),
-                    _CalcBtn('3', onTap: () => _inputDigit('3')),
-                    _CalcBtn('+', onTap: () => _setOperation('+'), accent: true),
-                  ]),
-                  _buttonRow([
-                    _CalcBtn('±', onTap: _toggleSign),
-                    _CalcBtn('0', onTap: () => _inputDigit('0')),
-                    _CalcBtn(',', onTap: _inputDecimal),
-                    _CalcBtn('=', onTap: _equals, equals: true),
-                  ]),
-                ],
+                    const SizedBox(height: 8),
+                    _memoryRow(),
+                    const SizedBox(height: 4),
+                    _buttonRow([
+                      _CalcBtn('%', onTap: _btn(_percent)),
+                      _CalcBtn('CE', onTap: _btn(_clearEntry)),
+                      _CalcBtn('C', onTap: _btn(_clearAll)),
+                      _CalcBtn('⌫', onTap: _btn(_backspace), icon: Icons.backspace_outlined),
+                    ]),
+                    _buttonRow([
+                      _CalcBtn('¹/x', onTap: _btn(() => _applyUnary((v) => v == 0 ? double.nan : 1 / v))),
+                      _CalcBtn('x²', onTap: _btn(() => _applyUnary((v) => v * v))),
+                      _CalcBtn('²√x', onTap: _btn(() => _applyUnary((v) => v < 0 ? double.nan : math.sqrt(v)))),
+                      _CalcBtn('÷', onTap: _btn(() => _setOperation('÷')), accent: true),
+                    ]),
+                    _buttonRow([
+                      _CalcBtn('7', onTap: _btn(() => _inputDigit('7'))),
+                      _CalcBtn('8', onTap: _btn(() => _inputDigit('8'))),
+                      _CalcBtn('9', onTap: _btn(() => _inputDigit('9'))),
+                      _CalcBtn('×', onTap: _btn(() => _setOperation('×')), accent: true),
+                    ]),
+                    _buttonRow([
+                      _CalcBtn('4', onTap: _btn(() => _inputDigit('4'))),
+                      _CalcBtn('5', onTap: _btn(() => _inputDigit('5'))),
+                      _CalcBtn('6', onTap: _btn(() => _inputDigit('6'))),
+                      _CalcBtn('−', onTap: _btn(() => _setOperation('-')), accent: true),
+                    ]),
+                    _buttonRow([
+                      _CalcBtn('1', onTap: _btn(() => _inputDigit('1'))),
+                      _CalcBtn('2', onTap: _btn(() => _inputDigit('2'))),
+                      _CalcBtn('3', onTap: _btn(() => _inputDigit('3'))),
+                      _CalcBtn('+', onTap: _btn(() => _setOperation('+')), accent: true),
+                    ]),
+                    _buttonRow([
+                      _CalcBtn('±', onTap: _btn(_toggleSign)),
+                      _CalcBtn('0', onTap: _btn(() => _inputDigit('0'))),
+                      _CalcBtn(',', onTap: _btn(_inputDecimal)),
+                      _CalcBtn('=', onTap: _btn(_equals), equals: true),
+                    ]),
+                  ],
+                ),
               ),
             ),
           ),

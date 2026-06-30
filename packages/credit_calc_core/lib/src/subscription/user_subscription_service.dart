@@ -295,6 +295,32 @@ abstract final class UserSubscriptionService {
   static DateTime? _timestampToDate(dynamic value) =>
       value is Timestamp ? value.toDate() : null;
 
+  /// Abbonamento utente con date/scadenza coupon da documento `coupons/{codice}`.
+  static Future<Map<String, dynamic>> loadEnrichedSubscription(
+    String uid,
+  ) async {
+    final ctx = await _resolveContext(uid);
+    return _enrichSubscriptionFromCouponUsage(uid, ctx.subscription);
+  }
+
+  /// Piano effettivo per limiti e UI dopo scadenza effetto coupon.
+  static String effectivePlanIdForLimits(Map<String, dynamic> subscription) {
+    return _effectiveDisplayPlanId(subscription);
+  }
+
+  /// Coupon con limiti Enterprise/fair use ancora attivo.
+  static bool isCouponBenefitActive(Map<String, dynamic> subscription) {
+    final sub = _reconcileLifetimeAccess(Map<String, dynamic>.from(subscription));
+    final code = (sub['couponCode'] ?? '').toString().trim();
+    if (code.isEmpty) return false;
+
+    final expires = sub['subscriptionExpiresAt'];
+    if (expires is Timestamp) {
+      return !expires.toDate().isBefore(DateTime.now());
+    }
+    return sub['lifetimeAccess'] == true;
+  }
+
   /// Allinea il piano mostrato a quello usato per i limiti dopo scadenza effetto.
   static String _effectiveDisplayPlanId(Map<String, dynamic> sub) {
     var planId = (sub['subscriptionPlan'] ?? 'free').toString();

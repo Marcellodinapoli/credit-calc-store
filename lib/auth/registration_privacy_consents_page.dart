@@ -31,6 +31,7 @@ class _RegistrationPrivacyConsentsPageState
   bool _loading = true;
   bool _reachedBottom = false;
   bool _accepted = false;
+  String? _loadError;
   String _text = '';
   String _version = '';
 
@@ -42,6 +43,13 @@ class _RegistrationPrivacyConsentsPageState
   }
 
   Future<void> _loadDocument() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
+
     if (widget.text != null && widget.version != null) {
       _text = widget.text!;
       _version = widget.version!;
@@ -50,36 +58,34 @@ class _RegistrationPrivacyConsentsPageState
       return;
     }
 
-    final document = await RegistrationConsentsService.loadCurrent();
-    if (!mounted) return;
+    try {
+      final document = await RegistrationConsentsService.loadCurrent();
+      if (!mounted) return;
 
-    if (document == null) {
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Documento non disponibile'),
-          content: const Text(
-            'I consensi di registrazione non sono al momento disponibili. '
-            'Riprova più tardi o contatta l\'amministratore.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Chiudi'),
-            ),
-          ],
-        ),
-      );
-      if (mounted) Navigator.pop(context);
-      return;
+      if (document == null) {
+        setState(() {
+          _loading = false;
+          _loadError =
+              'Impossibile caricare l\'informativa privacy e consensi. '
+              'Verifica la connessione a Internet e riprova.';
+        });
+        return;
+      }
+
+      setState(() {
+        _text = document.text;
+        _version = document.version;
+        _loading = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onScroll());
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError =
+            'Errore durante il caricamento. Verifica la connessione e riprova.';
+      });
     }
-
-    setState(() {
-      _text = document.text;
-      _version = document.version;
-      _loading = false;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _onScroll());
   }
 
   @override
@@ -122,7 +128,48 @@ class _RegistrationPrivacyConsentsPageState
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            : _loadError != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.cloud_off_outlined,
+                            size: 48,
+                            color: Colors.grey.shade600,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _loadError!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.grey.shade800,
+                              height: 1.45,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          FilledButton.icon(
+                            onPressed: _loadDocument,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Riprova'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _RegistrationLegalTheme.accent,
+                            ),
+                          ),
+                          if (!widget.mandatory) ...[
+                            const SizedBox(height: 12),
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Torna alla registrazione'),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  )
+                : Column(
                 children: [
                   Expanded(
                     child: Scrollbar(

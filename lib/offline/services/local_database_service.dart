@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/sync_record_status.dart';
@@ -55,7 +57,21 @@ class LocalDatabaseService {
   }
 
   Future<String> _dbPath() async {
+    if (isSqfliteDesktopPlatform) {
+      // Store desktop: percorso scrivibile in AppData (non dipende dalla cwd).
+      final supportDir = await getApplicationSupportDirectory();
+      final dbDir = Directory(p.join(supportDir.path, 'databases'));
+      if (!await dbDir.exists()) {
+        await dbDir.create(recursive: true);
+      }
+      return p.join(dbDir.path, 'credit_calc_offline.db');
+    }
+
     final base = await getDatabasesPath();
+    final dir = Directory(base);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
     return p.join(base, 'credit_calc_offline.db');
   }
 

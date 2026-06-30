@@ -68,20 +68,24 @@ class CreditCalcRepository {
   }
 
   Future<List<CreditCalcRecord>> _loadLocalCreditors() async {
-    final rows = await LocalDatabaseService.instance.recordsForUser(
-      userId: _userId,
-      collection: 'creditors',
-    );
-    final records = rows
-        .where((r) => r['payload']['_deleted'] != true)
-        .map(
-          (r) => CreditCalcRecord(
-            id: r['id'] as String,
-            data: Map<String, dynamic>.from(r['payload'] as Map),
-          ),
-        )
-        .toList();
-    return _sortCreditorRecords(records);
+    try {
+      final rows = await LocalDatabaseService.instance.recordsForUser(
+        userId: _userId,
+        collection: 'creditors',
+      );
+      final records = rows
+          .where((r) => r['payload']['_deleted'] != true)
+          .map(
+            (r) => CreditCalcRecord(
+              id: r['id'] as String,
+              data: Map<String, dynamic>.from(r['payload'] as Map),
+            ),
+          )
+          .toList();
+      return _sortCreditorRecords(records);
+    } catch (_) {
+      return const [];
+    }
   }
 
   List<CreditCalcRecord> _sortCreditorRecords(List<CreditCalcRecord> records) {
@@ -192,19 +196,23 @@ class CreditCalcRepository {
       _loadLocalCalculations();
 
   Future<List<CreditCalcRecord>> _loadLocalCalculations() async {
-    final rows = await LocalDatabaseService.instance.recordsForUser(
-      userId: _userId,
-      collection: 'calculations',
-    );
-    return rows
-        .where((r) => r['payload']['_deleted'] != true)
-        .map(
-          (r) => CreditCalcRecord(
-            id: r['id'] as String,
-            data: Map<String, dynamic>.from(r['payload'] as Map),
-          ),
-        )
-        .toList();
+    try {
+      final rows = await LocalDatabaseService.instance.recordsForUser(
+        userId: _userId,
+        collection: 'calculations',
+      );
+      return rows
+          .where((r) => r['payload']['_deleted'] != true)
+          .map(
+            (r) => CreditCalcRecord(
+              id: r['id'] as String,
+              data: Map<String, dynamic>.from(r['payload'] as Map),
+            ),
+          )
+          .toList();
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> saveCalculation({

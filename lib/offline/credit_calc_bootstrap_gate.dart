@@ -106,6 +106,9 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     PublicPlanLimitsConfigService.start();
     await PublicPlanLimitsConfigService.ensureLoaded();
 
+    // Dati operativi solo su questo dispositivo (PC ≠ telefono).
+    await LocalDatabaseService.instance.database;
+
     LocalDataCipher.configureBackup(
       read: () => LocalDatabaseService.instance.getMeta('local_cipher_key_v1'),
       write: (value) =>

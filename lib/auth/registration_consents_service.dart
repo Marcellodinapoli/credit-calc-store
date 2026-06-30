@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'auth_redirect_feedback.dart';
@@ -21,30 +24,43 @@ class RegistrationConsentsService {
   static const settingsDocId = 'registration_consents';
   static const userVersionField = 'registrationConsentsAcceptedVersion';
   static const userAcceptedAtField = 'registrationConsentsAcceptedAt';
+  static const _loadTimeout = Duration(seconds: 20);
 
   static Future<RegistrationConsentsDocument?> loadCurrent() async {
-    final firestore = FirebaseFirestore.instance;
-    final rulesDoc =
-        await firestore.collection('settings').doc(settingsDocId).get();
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final rulesDoc = await firestore
+          .collection('settings')
+          .doc(settingsDocId)
+          .get()
+          .timeout(_loadTimeout);
 
-    if (!rulesDoc.exists) return null;
+      if (!rulesDoc.exists) return null;
 
-    final data = rulesDoc.data() ?? {};
-    final version = (data['version'] ?? '1.0.0').toString();
+      final data = rulesDoc.data() ?? {};
+      final version = (data['version'] ?? '1.0.0').toString();
 
-    final versionDoc = await firestore
-        .collection('settings')
-        .doc(settingsDocId)
-        .collection('versions')
-        .doc(version)
-        .get();
+      final versionDoc = await firestore
+          .collection('settings')
+          .doc(settingsDocId)
+          .collection('versions')
+          .doc(version)
+          .get()
+          .timeout(_loadTimeout);
 
-    final versionData = versionDoc.data();
-    final text = (versionData?['text'] ?? data['text'] ?? '').toString();
+      final versionData = versionDoc.data();
+      final text = (versionData?['text'] ?? data['text'] ?? '').toString();
 
-    if (text.isEmpty) return null;
+      if (text.isEmpty) return null;
 
-    return RegistrationConsentsDocument(version: version, text: text);
+      return RegistrationConsentsDocument(version: version, text: text);
+    } on TimeoutException catch (e, stack) {
+      debugPrint('RegistrationConsentsService.loadCurrent timeout: $e\n$stack');
+      return null;
+    } catch (e, stack) {
+      debugPrint('RegistrationConsentsService.loadCurrent failed: $e\n$stack');
+      return null;
+    }
   }
 
   static Future<String?> getAcceptedVersion({
