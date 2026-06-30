@@ -578,6 +578,22 @@ match /companies/{companyId}/registration_consents_history/{docId} {
           && request.auth.token.admin == true;
       }
 
+      /// Trasferimento una tantum tra dispositivi (ponte effimero).
+      match /device_transfer/{transferId} {
+        allow read, create, update, delete: if request.auth != null
+          && request.auth.uid == userId;
+
+        match /chunks/{chunkId} {
+          allow read, create, update, delete: if request.auth != null
+            && request.auth.uid == userId;
+        }
+      }
+
+      match /device_transfer_presence/{deviceId} {
+        allow read, create, update, delete: if request.auth != null
+          && request.auth.uid == userId;
+      }
+
       match /pdr_schedules/{docId} {
         allow read: if request.auth != null
           && request.auth.uid == userId

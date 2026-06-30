@@ -29,7 +29,7 @@ class ItineraryHubPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final shell = ItineraryPageShell(personalArea: personalArea);
 
-    return shell.secondary(
+    return shell.primary(
       pageTitle: 'Itinerario',
       body: ListView(
         padding: ItineraryPageShell.listPadding(context),

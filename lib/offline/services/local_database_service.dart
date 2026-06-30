@@ -157,6 +157,61 @@ class LocalDatabaseService {
     );
   }
 
+  Future<int> countRecordsForUser(String userId) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM local_records WHERE user_id = ?',
+      [userId],
+    );
+    final raw = rows.first['c'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return 0;
+  }
+
+  Future<int> maxUpdatedAtMsForUser(String userId) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT MAX(updated_at) AS m FROM local_records WHERE user_id = ?',
+      [userId],
+    );
+    final raw = rows.first['m'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return 0;
+  }
+
+  Future<int> countChangesSince(String userId, int sinceMs) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS c FROM local_records WHERE user_id = ? AND updated_at > ?',
+      [userId, sinceMs],
+    );
+    final raw = rows.first['c'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return 0;
+  }
+
+  Future<List<Map<String, dynamic>>> recordsChangedSince(
+    String userId,
+    int sinceMs,
+  ) async {
+    final db = await database;
+    final rows = await db.query(
+      'local_records',
+      where: 'user_id = ? AND updated_at > ?',
+      whereArgs: [userId, sinceMs],
+      orderBy: 'updated_at ASC',
+    );
+    final out = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      final record = await _tryRowToRecord(row);
+      if (record != null) out.add(record);
+    }
+    return out;
+  }
+
   Future<List<Map<String, dynamic>>> listAllRecordsForUser(String userId) async {
     final db = await database;
     final rows = await db.query(
@@ -279,6 +334,111 @@ class LocalDatabaseService {
       where: 'user_id = ?',
       whereArgs: [userId],
     );
+  }
+
+  Future<Map<String, String>> listAllMeta() async {
+    final db = await database;
+    final rows = await db.query('app_meta');
+    return {
+      for (final row in rows)
+        row['key']! as String: row['value']! as String,
+    };
+  }
+
+  Future<void> clearAppMeta({Iterable<String>? exceptKeys}) async {
+    final db = await database;
+    final keep = exceptKeys?.toSet() ?? const {};
+    if (keep.isEmpty) {
+      await db.delete('app_meta');
+      return;
+    }
+    final rows = await db.query('app_meta');
+    final batch = db.batch();
+    for (final row in rows) {
+      final key = row['key']! as String;
+      if (!keep.contains(key)) {
+        batch.delete('app_meta', where: 'key = ?', whereArgs: [key]);
+      }
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Import bulk per trasferimento dispositivo (sostituzione totale).
+  Future<void> importTransferRecords({
+    required String userId,
+    required List<Map<String, dynamic>> records,
+  }) async {
+    final db = await database;
+    final batch = db.batch();
+    for (final record in records) {
+      final payload = record['payload'];
+      if (payload is! Map<String, dynamic>) continue;
+      final encoded = await _encodePayload(payload);
+      batch.insert(
+        'local_records',
+        {
+          'id': record['id'],
+          'collection': record['collection'],
+          'user_id': userId,
+          'payload': encoded,
+          'created_at': record['createdAtMs'],
+          'updated_at': record['updatedAtMs'],
+          'server_updated_at': record['serverUpdatedAtMs'],
+          'sync_status': record['syncStatus'] ?? SyncRecordStatus.synced.storageValue,
+          'origin': record['origin'] ?? 'device_transfer',
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Unisce record in arrivo (delta): last-write-wins su updated_at.
+  Future<int> mergeTransferRecords({
+    required String userId,
+    required List<Map<String, dynamic>> records,
+  }) async {
+    var applied = 0;
+    final db = await database;
+    for (final record in records) {
+      final collection = record['collection'] as String?;
+      final id = record['id'] as String?;
+      final payload = record['payload'];
+      if (collection == null || id == null || payload is! Map<String, dynamic>) {
+        continue;
+      }
+
+      final incomingMs = record['updatedAtMs'] as int? ?? 0;
+      final local = await recordById(collection: collection, id: id);
+      if (local != null) {
+        final localMs = (local['updatedAt'] as DateTime).millisecondsSinceEpoch;
+        if (incomingMs < localMs) continue;
+      }
+
+      final encoded = await _encodePayload(payload);
+      final createdAtMs = record['createdAtMs'] as int?;
+      final localCreatedMs = local != null
+          ? (local['createdAt'] as DateTime).millisecondsSinceEpoch
+          : null;
+      await db.insert(
+        'local_records',
+        {
+          'id': id,
+          'collection': collection,
+          'user_id': userId,
+          'payload': encoded,
+          'created_at': createdAtMs ?? localCreatedMs ?? incomingMs,
+          'updated_at': incomingMs,
+          'server_updated_at': record['serverUpdatedAtMs'],
+          'sync_status':
+              record['syncStatus'] ?? SyncRecordStatus.synced.storageValue,
+          'origin': record['origin'] ?? 'device_transfer',
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      applied++;
+    }
+    return applied;
   }
 
   /// True se esistono payload cifrati (v1) nel database locale.

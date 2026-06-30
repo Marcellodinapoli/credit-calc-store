@@ -11,6 +11,7 @@ import '../pages/bk/bk_warmup_contestations_page.dart';
 import '../pages/bk/bk_normative_search_page.dart';
 import '../pages/bk/bk_call_analysis_page.dart';
 import '../pages/bk/bk_plan_limits_page.dart';
+import '../pages/creditcalc/device_sync_page.dart';
 import '../ui/layout/page_shell.dart';
 import '../pages/creditform/personal_form_menu.dart';
 import '../pages/creditjob/personal_job_menu.dart';
@@ -423,6 +424,18 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                   onTap: () =>
                       _closeAndArea(PersonalAreaMenuItem.subscription),
                 ),
+              _item(
+                icon: Icons.sync_alt,
+                title: 'Sincronizza',
+                iconColor: _areaColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const DeviceSyncPage(),
+                    ),
+                  );
+                }),
+              ),
               _item(
                 icon: Icons.groups_outlined,
                 title: PersonalAreaMenuItem.community.title,
