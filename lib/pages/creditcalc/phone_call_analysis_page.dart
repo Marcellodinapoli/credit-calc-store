@@ -1,9 +1,9 @@
+import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/maintenance_service.dart';
 import '../../models/call_analysis_practice_data.dart';
-import '../../services/call_analysis_config_service.dart';
 import '../../services/call_analysis_service.dart';
 import '../../ui/layout/page_shell.dart';
 import '../../widgets/maintenance_section_gate.dart';

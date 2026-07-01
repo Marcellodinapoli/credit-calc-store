@@ -1,7 +1,7 @@
+import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/maintenance_service.dart';
-import '../../services/normative_search_config_service.dart';
 import '../../services/normative_search_service.dart';
 import '../../ui/layout/page_shell.dart';
 import '../../widgets/maintenance_section_gate.dart';

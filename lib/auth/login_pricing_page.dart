@@ -72,16 +72,7 @@ class LoginPricingPage extends StatelessWidget {
                           'i limiti indicano quante operazioni puoi svolgere.',
                     ),
                     const SizedBox(height: 16),
-                    for (var i = 0; i < creditCoreEcosystemSections.length; i++) ...[
-                      if (i > 0) const SizedBox(height: 12),
-                      EcosystemSectionCard(
-                        section: creditCoreEcosystemSections[i],
-                        onTap: () => showCreditCoreEcosystemSectionDetail(
-                          context,
-                          creditCoreEcosystemSections[i],
-                        ),
-                      ),
-                    ],
+                    const EcosystemSectionsList(),
                     const SizedBox(height: 32),
                     const _SectionLabel(
                       title: 'Confronto piani',

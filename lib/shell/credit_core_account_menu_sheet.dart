@@ -10,6 +10,7 @@ import '../pages/bk/bk_coupons_page.dart';
 import '../pages/bk/bk_warmup_contestations_page.dart';
 import '../pages/bk/bk_normative_search_page.dart';
 import '../pages/bk/bk_call_analysis_page.dart';
+import '../pages/bk/bk_ecosystem_sections_page.dart';
 import '../pages/bk/bk_plan_limits_page.dart';
 import '../pages/creditcalc/device_sync_page.dart';
 import '../ui/layout/page_shell.dart';
@@ -490,6 +491,18 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const BkPlanLimitsPage(),
+                    ),
+                  );
+                }),
+              ),
+              _item(
+                icon: Icons.view_module_outlined,
+                title: 'Sezioni ecosistema',
+                iconColor: _areaColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BkEcosystemSectionsPage(),
                     ),
                   );
                 }),

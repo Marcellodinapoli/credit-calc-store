@@ -4,15 +4,15 @@ import 'package:flutter/material.dart';
 import '../../core/admin/bk_admin_service.dart';
 import '../area/personal_area_shell.dart';
 
-/// Backoffice app — prompt AI Ricerca normativa.
-class BkNormativeSearchPage extends StatelessWidget {
-  const BkNormativeSearchPage({super.key});
+/// Backoffice app — testi card descrittive ecosistema (CreditForm / Calc / Job).
+class BkEcosystemSectionsPage extends StatelessWidget {
+  const BkEcosystemSectionsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return PersonalAreaShell(
-      pageTitle: 'Prompt ricerca normativa',
-      body: NormativeSearchAdminBody(
+      pageTitle: 'Sezioni ecosistema',
+      body: EcosystemSectionsAdminBody(
         verifyAdmin: BkAdminService.isAdmin,
       ),
     );

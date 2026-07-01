@@ -1,3 +1,4 @@
+import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/public_page_shell.dart';
@@ -7,81 +8,41 @@ abstract final class _DetailTheme {
   static const accent = Color(0xFF0A66C2);
 }
 
-class CreditCoreEcosystemSection {
-  final String id;
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final List<String> highlights;
-  final String body;
+CreditCoreEcosystemSection? creditCoreEcosystemSectionForId(String id) =>
+    EcosystemSectionsConfigService.sectionForId(id);
 
-  const CreditCoreEcosystemSection({
-    required this.id,
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.highlights,
-    required this.body,
+/// Elenco card sezioni ecosistema (testi da BackOffice o predefiniti).
+class EcosystemSectionsList extends StatelessWidget {
+  const EcosystemSectionsList({
+    super.key,
+    this.spacing = 12,
   });
-}
 
-const creditCoreEcosystemSections = <CreditCoreEcosystemSection>[
-  CreditCoreEcosystemSection(
-    id: 'creditform',
-    title: 'CreditForm',
-    subtitle: 'Formazione digitale',
-    icon: Icons.school_outlined,
-    color: Color(0xFFFFA726),
-    highlights: [
-      'Corsi e video formativi',
-      'Quiz e listening',
-      'Warm-Up AI e Roleplay AI',
-      'Training contestazioni',
-    ],
-    body:
-        'Percorsi formativi strutturati con video, quiz, listening e role play '
-        'per misurare i progressi e allenare le competenze operative nel credito.',
-  ),
-  CreditCoreEcosystemSection(
-    id: 'creditcalc',
-    title: 'CreditCalc',
-    subtitle: 'Strumenti operativi',
-    icon: Icons.calculate_outlined,
-    color: Color(0xFF00B0FF),
-    highlights: [
-      'Creditori e anagrafiche',
-      'Piani di rientro e saldo/stralcio',
-      'Provvigioni e incassi',
-      'Itinerario e agenda attività',
-    ],
-    body:
-        'Simulazioni, calcoli e strumenti per gestire creditori, piani di rientro, '
-        'provvigioni e attività sul territorio con dati salvati sul profilo.',
-  ),
-  CreditCoreEcosystemSection(
-    id: 'creditjob',
-    title: 'CreditJob',
-    subtitle: 'Opportunità professionali',
-    icon: Icons.work_outline,
-    color: Color(0xFF00C4B3),
-    highlights: [
-      'Offerte di lavoro',
-      'Candidature e salvataggio annunci',
-      'Monitoraggio selezioni',
-    ],
-    body:
-        'Collegamenti tra aziende e professionisti: ricerca offerte, candidature '
-        'e monitoraggio dello stato delle selezioni in un unico ambiente.',
-  ),
-];
+  final double spacing;
 
-CreditCoreEcosystemSection? creditCoreEcosystemSectionForId(String id) {
-  for (final section in creditCoreEcosystemSections) {
-    if (section.id == id) return section;
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<CreditCoreEcosystemSection>>(
+      stream: EcosystemSectionsConfigService.watchSections(),
+      builder: (context, snapshot) {
+        final sections =
+            snapshot.data ?? EcosystemSectionsConfigService.sectionsForDisplay();
+
+        return Column(
+          children: [
+            for (var i = 0; i < sections.length; i++) ...[
+              if (i > 0) SizedBox(height: spacing),
+              EcosystemSectionCard(
+                section: sections[i],
+                onTap: () =>
+                    showCreditCoreEcosystemSectionDetail(context, sections[i]),
+              ),
+            ],
+          ],
+        );
+      },
+    );
   }
-  return null;
 }
 
 Future<void> showCreditCoreEcosystemSectionDetail(
