@@ -19,7 +19,7 @@ abstract final class BingWebSearchService {
       'www.bing.com',
       '/search',
       {
-        'q': '"$query" telefono elenco',
+        'q': BuildingResidentsAddressUtil.webSearchQuery(query),
         'cc': 'it',
         'setlang': 'it',
       },

@@ -1,23 +1,24 @@
-﻿CreditCalc 1.0.17 — versione portable (senza installer)
+﻿CreditCalc 1.0.18 — versione portable (senza installer)
 ========================================================
 
 File da scaricare / distribuire:
 
-  dist\CreditCalc-1.0.17-win64.zip
+  dist\CreditCalc-1.0.18-win64.zip
 
 Dopo l'estrazione, avvia:
 
-  CreditCalc-1.0.17-win64\CreditCalc.exe
+  CreditCalc-1.0.18-win64\CreditCalc.exe
 
 Copia sul Desktop:
 
-  C:\Users\271\Desktop\CreditCalc-1.0.17-win64.zip
+  C:\Users\271\Desktop\CreditCalc-1.0.18-win64.zip
 
 Nota: CreditCalc.exe va eseguito dalla cartella win64 (contiene DLL e dati).
 Non basta copiare solo l'exe senza il resto della cartella.
 
-Novità 1.0.17:
-- Ricerca per indirizzo: filtro rigoroso su via, civico e città (meno falsi positivi)
-- Ricerca Telextra (1188, elenchi telefonici) integrata negli elenchi consultati
+Novità 1.0.18:
+- Ricerca per indirizzo: integrazione Pagine Gialle
+- URL esterni corretti (via/civico + città separati)
+- Match migliorato su descrizione elenchi (civico nel testo)
 
 Build: GitHub Actions (commit in corso)

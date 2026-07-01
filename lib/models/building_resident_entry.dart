@@ -28,6 +28,7 @@ class BuildingResidentEntry {
       'paginebianche_privati' => 'Pagine Bianche (privati)',
       'paginebianche_indirizzo' => 'Pagine Bianche (indirizzo)',
       'paginebianche_aziende' => 'Pagine Bianche (aziende)',
+      'paginegialle' => 'Pagine Gialle',
       'duckduckgo' => 'DuckDuckGo',
       'bing' => 'Bing',
       _ => source,

@@ -1,9 +1,11 @@
 import '../config/building_residents_backend_config.dart';
 import '../models/building_resident_entry.dart';
 import '../utils/building_residents_address_util.dart';
+import '../utils/directory_web_uri_util.dart';
 import 'building_residents_dedup.dart';
 import 'directory/bing_web_search_service.dart';
 import 'directory/duckduckgo_web_search_service.dart';
+import 'directory/pagine_gialle_directory_service.dart';
 import 'directory/pagine_bianche_directory_service.dart';
 import 'directory/telextra_directory_service.dart';
 
@@ -13,6 +15,7 @@ abstract final class BuildingResidentsLookupService {
     'Pagine Bianche — indirizzo',
     'Pagine Bianche — privati',
     'Pagine Bianche — aziende',
+    'Pagine Gialle',
     'Telextra — 1188 / elenchi telefonici',
     'Telextra — ricerca web',
     'DuckDuckGo (elenchi web)',
@@ -29,6 +32,7 @@ abstract final class BuildingResidentsLookupService {
       PagineBiancheDirectoryService.searchByAddress(query, tab: 'indirizzo'),
       PagineBiancheDirectoryService.searchByAddress(query, tab: 'privati'),
       PagineBiancheDirectoryService.searchByAddress(query, tab: 'aziende'),
+      PagineGialleDirectoryService.searchByAddress(query),
       TelextraDirectoryService.searchAddress(query),
       DuckDuckGoWebSearchService.searchAddress(query),
       BingWebSearchService.searchAddress(query),
@@ -37,9 +41,10 @@ abstract final class BuildingResidentsLookupService {
     final pbIndirizzo = _filterRelevant(query, results[0]);
     final pbPrivati = _filterRelevant(query, results[1]);
     final pbAziende = _filterRelevant(query, results[2]);
-    final telextra = _filterRelevant(query, results[3]);
-    final ddg = _filterRelevant(query, results[4]);
-    final bing = _filterRelevant(query, results[5]);
+    final pagineGialle = _filterRelevant(query, results[3]);
+    final telextra = _filterRelevant(query, results[4]);
+    final ddg = _filterRelevant(query, results[5]);
+    final bing = _filterRelevant(query, results[6]);
 
     final searchedSources = <String>[];
     void markIfHit(String label, List<BuildingResidentEntry> entries) {
@@ -49,6 +54,7 @@ abstract final class BuildingResidentsLookupService {
     markIfHit('Pagine Bianche — indirizzo', pbIndirizzo);
     markIfHit('Pagine Bianche — privati', pbPrivati);
     markIfHit('Pagine Bianche — aziende', pbAziende);
+    markIfHit('Pagine Gialle', pagineGialle);
     markIfHit('Telextra', telextra);
     markIfHit('DuckDuckGo (elenchi web)', ddg);
     markIfHit('Bing (elenchi web)', bing);
@@ -57,6 +63,7 @@ abstract final class BuildingResidentsLookupService {
       ...pbIndirizzo,
       ...pbPrivati,
       ...pbAziende,
+      ...pagineGialle,
       ...telextra,
       ...ddg,
       ...bing,
@@ -67,7 +74,7 @@ abstract final class BuildingResidentsLookupService {
       notes =
           'Nessun nominativo trovato al civico indicato negli elenchi consultati. '
           'Gli elenchi online spesso non pubblicano i privati residenziali: '
-          'prova ad aprire Pagine Bianche o 1188 (Telextra) dal link in basso, oppure verifica '
+          'prova ad aprire Pagine Gialle o Pagine Bianche dal link in basso, oppure verifica '
           'in sede (campanello, portiere).';
     } else if (pbIndirizzo.isEmpty && pbPrivati.isEmpty) {
       notes =
@@ -101,6 +108,7 @@ abstract final class BuildingResidentsLookupService {
           (entry) => BuildingResidentsAddressUtil.matchesListingAddress(
             query,
             entry.address,
+            extraText: entry.category,
           ),
         )
         .toList();
@@ -133,11 +141,15 @@ abstract final class BuildingResidentsLookupService {
     return TelextraDirectoryService.webSearchUri(address);
   }
 
+  static Uri pagineGialleWebUri(String address) {
+    return PagineGialleDirectoryService.searchUri(address);
+  }
+
   static Uri pagineBiancheWebUri(String address) {
-    return Uri.https(
+    return DirectoryWebUriUtil.italiaOnlineRicerca(
       'www.paginebianche.it',
-      '/ricerca',
-      {'qs': address.trim(), 'tab': 'indirizzo'},
+      address,
+      tab: 'indirizzo',
     );
   }
 
@@ -146,7 +158,7 @@ abstract final class BuildingResidentsLookupService {
       'www.bing.com',
       '/search',
       {
-        'q': '"${address.trim()}" telefono elenco',
+        'q': BuildingResidentsAddressUtil.webSearchQuery(address),
         'cc': 'it',
       },
     );
@@ -156,7 +168,7 @@ abstract final class BuildingResidentsLookupService {
     return Uri.https(
       'www.google.com',
       '/search',
-      {'q': '"${address.trim()}" telefono elenco'},
+      {'q': BuildingResidentsAddressUtil.webSearchQuery(address)},
     );
   }
 }

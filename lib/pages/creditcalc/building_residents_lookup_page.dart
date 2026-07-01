@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/maintenance_service.dart';
 import '../../models/building_resident_entry.dart';
 import '../../services/building_residents_lookup_service.dart';
+import '../../services/directory/pagine_gialle_directory_service.dart';
 import '../../services/directory/telextra_directory_service.dart';
 import '../../ui/layout/page_shell.dart';
 import '../../widgets/address_field_with_scan.dart';
@@ -60,8 +61,11 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
   }
 
   Future<void> _openUri(Uri Function(String) builder) async {
-    final address = _addressCtrl.text.trim();
-    if (address.isEmpty) return;
+    final address = (_result?.queryAddress ?? _addressCtrl.text).trim();
+    if (address.length < 5) {
+      setState(() => _error = 'Inserisci via, civico e città prima di aprire il sito.');
+      return;
+    }
     await launchUrl(
       builder(address),
       mode: LaunchMode.externalApplication,
@@ -80,7 +84,7 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
           children: [
               Text(
                 'Inserisci via, numero civico e città. CreditCalc consulta '
-                'Pagine Bianche, Telextra (1188, elenchi telefonici) e altri '
+                'Pagine Bianche, Pagine Gialle, Telextra (1188) e altri '
                 'motori web pubblici (DuckDuckGo, Bing) per trovare nominativi '
                 'collegati all\'indirizzo. Non vengono usati dati delle tue pratiche.',
                 style: TextStyle(color: Colors.grey.shade700, height: 1.45),
@@ -121,6 +125,15 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
                             ),
                     icon: const Icon(Icons.open_in_new, size: 18),
                     label: const Text('Pagine Bianche'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _loading
+                        ? null
+                        : () => _openUri(
+                              PagineGialleDirectoryService.searchUri,
+                            ),
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: const Text('Pagine Gialle'),
                   ),
                   OutlinedButton.icon(
                     onPressed: _loading

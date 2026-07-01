@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../utils/building_residents_address_util.dart';
 import '../../models/building_resident_entry.dart';
 import 'directory_html_utils.dart';
 import 'italia_online_listing_parser.dart';
@@ -21,7 +22,7 @@ abstract final class ItaliaOnlineDirectoryService {
     final uri = Uri.https(
       host,
       '/ricerca',
-      {'qs': query, 'tab': tab},
+      BuildingResidentsAddressUtil.italiaOnlineQueryParams(query, tab: tab),
     );
 
     try {

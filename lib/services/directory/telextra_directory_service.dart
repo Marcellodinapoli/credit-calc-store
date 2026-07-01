@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../utils/directory_web_uri_util.dart';
 import '../../config/telextra_directory_config.dart';
 import '../../models/building_resident_entry.dart';
 import 'duckduckgo_web_search_service.dart';
@@ -129,10 +130,10 @@ abstract final class TelextraDirectoryService {
   }
 
   static Uri webSearchUri(String address) {
-    return Uri.https(
+    return DirectoryWebUriUtil.italiaOnlineRicerca(
       'www.1188.it',
-      '/ricerca',
-      {'qs': address.trim(), 'tab': 'indirizzo'},
+      address,
+      tab: 'indirizzo',
     );
   }
 }

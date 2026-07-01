@@ -51,6 +51,9 @@ abstract final class ItaliaOnlineListingParser {
       if (!BuildingResidentsAddressUtil.matchesListingAddress(
         queryAddress,
         cleanAddress,
+        extraText: category != null
+            ? DirectoryHtmlUtils.decodeHtmlEntities(category)
+            : null,
       )) {
         continue;
       }

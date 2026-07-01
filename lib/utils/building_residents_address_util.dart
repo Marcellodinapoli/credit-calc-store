@@ -23,6 +23,95 @@ abstract final class BuildingResidentsAddressUtil {
     'traversa',
   };
 
+  /// Via/civico e città separati per elenchi ItaliaOnline (Pagine Bianche, 1188, …).
+  static ({String streetQuery, String? cityQuery}) splitForDirectorySearch(
+    String address,
+  ) {
+    final trimmed = address.trim();
+    if (trimmed.isEmpty) {
+      return (streetQuery: '', cityQuery: null);
+    }
+
+    final city = extractCity(trimmed);
+    if (city == null) {
+      return (streetQuery: trimmed, cityQuery: null);
+    }
+
+    var street = trimmed;
+    if (trimmed.contains(',')) {
+      final rawParts = trimmed
+          .split(',')
+          .map((part) => part.trim())
+          .where((part) => part.isNotEmpty)
+          .toList();
+      if (rawParts.length >= 2) {
+        var lastPart = rawParts.last;
+        lastPart = lastPart.replaceAll(RegExp(r'^\d+[a-zA-Z]?\s*'), '').trim();
+        lastPart = lastPart
+            .replaceAll(
+              RegExp('\\b${RegExp.escape(city)}\\b', caseSensitive: false),
+              '',
+            )
+            .trim();
+        if (lastPart.isEmpty) {
+          street = rawParts.sublist(0, rawParts.length - 1).join(', ');
+        } else {
+          final head = rawParts.sublist(0, rawParts.length - 1).join(', ');
+          street = head.isEmpty ? lastPart : '$head, $lastPart';
+        }
+      }
+    } else {
+      street = trimmed
+          .replaceAll(
+            RegExp('\\b${RegExp.escape(city)}\\s*\$', caseSensitive: false),
+            '',
+          )
+          .trim();
+    }
+
+    street = street.replaceAll(RegExp(r'\s+'), ' ').trim();
+    street = street.replaceAll(RegExp(r'[,\s-]+$'), '').trim();
+    if (street.isEmpty) street = trimmed;
+
+    return (streetQuery: street, cityQuery: city);
+  }
+
+  /// Parametri query per /ricerca su portali ItaliaOnline.
+  static Map<String, String> italiaOnlineQueryParams(
+    String address, {
+    String tab = 'indirizzo',
+  }) {
+    final trimmed = address.trim();
+    final parts = splitForDirectorySearch(trimmed);
+    final params = <String, String>{'tab': tab};
+
+    if (tab == 'indirizzo') {
+      // Tab indirizzo: testo completo (via, civico, città) nel campo di ricerca.
+      params['qs'] = trimmed;
+      if (parts.cityQuery != null && parts.cityQuery!.isNotEmpty) {
+        params['dv'] = parts.cityQuery!;
+      }
+      return params;
+    }
+
+    if (parts.cityQuery != null && parts.cityQuery!.isNotEmpty) {
+      params['qs'] = parts.streetQuery;
+      params['dv'] = parts.cityQuery!;
+    } else {
+      params['qs'] = parts.streetQuery;
+    }
+    return params;
+  }
+
+  /// Query testuale per motori web (Bing, Google).
+  static String webSearchQuery(String address) {
+    final parts = splitForDirectorySearch(address);
+    if (parts.cityQuery != null && parts.cityQuery!.isNotEmpty) {
+      return '"${parts.streetQuery}" ${parts.cityQuery} telefono elenco';
+    }
+    return '"${address.trim()}" telefono elenco';
+  }
+
   static String normalize(String raw) {
     return raw
         .toLowerCase()
@@ -97,9 +186,25 @@ abstract final class BuildingResidentsAddressUtil {
         .toList();
   }
 
-  /// Filtro rigoroso: l'indirizzo dell'elenco deve coincidere con via, civico e città.
-  static bool matchesListingAddress(String query, String listingAddress) {
-    final candidate = listingAddress.trim();
+  static bool matchesQuery(String query, String candidate) {
+    return matchesListingAddress(query, candidate);
+  }
+
+  /// Filtro rigoroso: via, civico e città nella riga indirizzo o nel testo descrittivo.
+  static bool matchesListingAddress(
+    String query,
+    String listingAddress, {
+    String? extraText,
+  }) {
+    if (_matchesListingAddressCore(query, listingAddress)) return true;
+    if (extraText != null && extraText.trim().isNotEmpty) {
+      return _matchesListingAddressCore(query, extraText);
+    }
+    return false;
+  }
+
+  static bool _matchesListingAddressCore(String query, String text) {
+    final candidate = text.trim();
     if (candidate.isEmpty) return false;
 
     final normalizedCandidate = normalize(candidate);
@@ -124,12 +229,7 @@ abstract final class BuildingResidentsAddressUtil {
       return true;
     }
 
-    // Pagine Bianche spesso omette la città nella riga indirizzo: basta via + civico.
     return civic != null;
-  }
-
-  static bool matchesQuery(String query, String candidate) {
-    return matchesListingAddress(query, candidate);
   }
 
   static bool _containsCivic(String text, String civic) {
