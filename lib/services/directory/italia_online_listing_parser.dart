@@ -48,6 +48,11 @@ abstract final class ItaliaOnlineListingParser {
           .replaceAll(RegExp(r'\s*-\s*$'), '')
           .trim();
       if (cleanAddress.isEmpty) continue;
+
+      final category = DirectoryHtmlUtils.firstMatch(block, [
+        RegExp(r'class="list-element__category[^"]*"[^>]*>([^<]+)'),
+      ]);
+
       if (!BuildingResidentsAddressUtil.matchesListingAddress(
         queryAddress,
         cleanAddress,
@@ -63,10 +68,6 @@ abstract final class ItaliaOnlineListingParser {
         RegExp(r'href="tel:([^"]+)"'),
       ]) ??
           DirectoryHtmlUtils.extractPhone(block);
-
-      final category = DirectoryHtmlUtils.firstMatch(block, [
-        RegExp(r'class="list-element__category[^"]*"[^>]*>([^<]+)'),
-      ]);
 
       final cleanName = DirectoryHtmlUtils.decodeHtmlEntities(name)
           .replaceAll(RegExp(r'\s+'), ' ')
