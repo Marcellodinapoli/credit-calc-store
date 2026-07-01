@@ -42,6 +42,8 @@ abstract final class DirectoryHtmlUtils {
       'paginebianche',
       'paginegialle',
       '1188.it',
+      'elenchitelefonici',
+      'telextra',
       'virgilio.it',
       'libero.it',
       'paginemail',

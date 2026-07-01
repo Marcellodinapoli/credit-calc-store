@@ -15,6 +15,15 @@ class BuildingResidentEntry {
   final String? category;
 
   String get sourceLabel {
+    if (source.startsWith('telextra_')) {
+      return switch (source) {
+        'telextra_backend' => 'Telextra',
+        'telextra_ddg' => 'Telextra (web)',
+        _ when source.contains('1188') => 'Telextra / 1188',
+        _ when source.contains('elenchi') => 'Telextra / Elenchi telefonici',
+        _ => 'Telextra',
+      };
+    }
     return switch (source) {
       'paginebianche_privati' => 'Pagine Bianche (privati)',
       'paginebianche_indirizzo' => 'Pagine Bianche (indirizzo)',

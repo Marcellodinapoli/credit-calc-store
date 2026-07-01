@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/maintenance_service.dart';
 import '../../models/building_resident_entry.dart';
 import '../../services/building_residents_lookup_service.dart';
+import '../../services/directory/telextra_directory_service.dart';
 import '../../ui/layout/page_shell.dart';
 import '../../widgets/address_field_with_scan.dart';
 import '../../widgets/maintenance_section_gate.dart';
@@ -79,9 +80,9 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
           children: [
               Text(
                 'Inserisci via, numero civico e città. CreditCalc consulta '
-                'Pagine Bianche e altri motori web pubblici (DuckDuckGo, Bing) '
-                'per trovare nominativi collegati all\'indirizzo. '
-                'Non vengono usati dati delle tue pratiche.',
+                'Pagine Bianche, Telextra (1188, elenchi telefonici) e altri '
+                'motori web pubblici (DuckDuckGo, Bing) per trovare nominativi '
+                'collegati all\'indirizzo. Non vengono usati dati delle tue pratiche.',
                 style: TextStyle(color: Colors.grey.shade700, height: 1.45),
               ),
               const SizedBox(height: 8),
@@ -120,6 +121,13 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
                             ),
                     icon: const Icon(Icons.open_in_new, size: 18),
                     label: const Text('Pagine Bianche'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _loading
+                        ? null
+                        : () => _openUri(TelextraDirectoryService.webSearchUri),
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: const Text('1188 / Telextra'),
                   ),
                   OutlinedButton.icon(
                     onPressed: _loading

@@ -28,12 +28,32 @@ abstract final class DuckDuckGoWebSearchService {
     final out = <BuildingResidentEntry>[];
     for (final q in queries) {
       try {
-        out.addAll(await _searchQuery(q, query));
+        out.addAll(await searchRawQuery(q, query));
       } catch (e, st) {
         debugPrint('DuckDuckGoWebSearchService: $q -> $e\n$st');
       }
     }
     return out;
+  }
+
+  static Future<List<BuildingResidentEntry>> searchRawQuery(
+    String searchQuery,
+    String queryAddress, {
+    String source = 'duckduckgo',
+  }) async {
+    final hits = await _searchQuery(searchQuery, queryAddress);
+    if (source == 'duckduckgo') return hits;
+    return hits
+        .map(
+          (entry) => BuildingResidentEntry(
+            displayName: entry.displayName,
+            address: entry.address,
+            source: source,
+            phone: entry.phone,
+            category: entry.category,
+          ),
+        )
+        .toList();
   }
 
   static Future<List<BuildingResidentEntry>> _searchQuery(
@@ -90,6 +110,15 @@ abstract final class DuckDuckGoWebSearchService {
 
       if (!_isRelevant(queryAddress, combined, url)) continue;
 
+      final extractedAddress = _extractAddress(cleanSnippet);
+      if (extractedAddress == null) continue;
+      if (!BuildingResidentsAddressUtil.matchesListingAddress(
+        queryAddress,
+        extractedAddress,
+      )) {
+        continue;
+      }
+
       final phone =
           DirectoryHtmlUtils.extractPhone(combined)?.replaceAll(RegExp(r'\s+'), '');
       final name = _extractDisplayName(cleanTitle, cleanSnippet);
@@ -97,7 +126,7 @@ abstract final class DuckDuckGoWebSearchService {
       out.add(
         BuildingResidentEntry(
           displayName: name,
-          address: _extractAddress(cleanSnippet, queryAddress),
+          address: extractedAddress,
           source: 'duckduckgo',
           phone: phone,
           category: cleanSnippet.length > 120
@@ -110,12 +139,18 @@ abstract final class DuckDuckGoWebSearchService {
   }
 
   static bool _isRelevant(String queryAddress, String text, String url) {
-    if (DirectoryHtmlUtils.isDirectoryHost(url) ||
-        DirectoryHtmlUtils.isDirectoryHost(text)) {
-      return BuildingResidentsAddressUtil.matchesQuery(queryAddress, text) ||
-          text.toLowerCase().contains('telefono');
+    if (!DirectoryHtmlUtils.isDirectoryHost(url) &&
+        !DirectoryHtmlUtils.isDirectoryHost(text)) {
+      return false;
     }
-    return BuildingResidentsAddressUtil.matchesQuery(queryAddress, text);
+    final extracted = _extractAddress(text);
+    if (extracted != null) {
+      return BuildingResidentsAddressUtil.matchesListingAddress(
+        queryAddress,
+        extracted,
+      );
+    }
+    return BuildingResidentsAddressUtil.matchesListingAddress(queryAddress, text);
   }
 
   static String _extractDisplayName(String title, String snippet) {
@@ -131,12 +166,12 @@ abstract final class DuckDuckGoWebSearchService {
     return cleaned.isNotEmpty ? cleaned : title;
   }
 
-  static String _extractAddress(String snippet, String fallback) {
+  static String? _extractAddress(String snippet) {
     final match = RegExp(
-      r'(Via|Viale|Piazza|Corso|Largo|Vicolo)[^.,\n]{3,80}\d+[a-zA-Z]?',
+      r'((?:Via|Viale|Piazza|Corso|Largo|Vicolo|Strada|Frazione|Località)[^.,\n]{3,80}\d+[a-zA-Z]?)',
       caseSensitive: false,
     ).firstMatch(snippet);
-    if (match != null) return match.group(0)!.trim();
-    return fallback;
+    if (match == null) return null;
+    return match.group(1)!.trim();
   }
 }

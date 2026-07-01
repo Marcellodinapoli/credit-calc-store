@@ -1,33 +1,23 @@
-﻿CreditCalc per Windows — file pronti (senza Flutter)
-====================================================
+﻿CreditCalc 1.0.17 — versione portable (senza installer)
+========================================================
 
-Versione: 1.0.14
+File da scaricare / distribuire:
 
-FILE CONSIGLIATO (da dare agli utenti)
---------------------------------------
-  CreditCalc-1.0.14-Setup.exe
-  Doppio click per installare come un programma normale.
+  dist\CreditCalc-1.0.17-win64.zip
 
-ALTERNATIVE
------------
-  INSTALLA-CREDITCALC.bat          Avvia l'installer (o la versione portable)
-  CreditCalc-1.0.14-win64.zip      Estrai e avvia CreditCalc.exe (portable)
-  CreditCalc-1.0.14-win64\         Cartella già estratta
+Dopo l'estrazione, avvia:
 
-PERCORSO COMPLETO SU QUESTO PC
-------------------------------
-  c:\Users\271\Desktop\Marcello\Esiti test\credit-calc-store\dist\
+  CreditCalc-1.0.17-win64\CreditCalc.exe
 
-COPIA SUL DESKTOP
------------------
-  c:\Users\271\Desktop\CreditCalc-1.0.14-Setup.exe
+Copia sul Desktop:
 
-SCARICARE UNA BUILD NUOVA SENZA FLUTTER
----------------------------------------
-  powershell -ExecutionPolicy Bypass -File .\scripts\scarica_installer_pc.ps1
+  C:\Users\271\Desktop\CreditCalc-1.0.17-win64.zip
 
-DOPO L'INSTALLAZIONE
---------------------
-  - Disinstalla la versione precedente prima di installare la nuova
-  - I dati sul PC sono separati da quelli del telefono (stesso account, memoria diversa)
-  - Il database locale si trova in: %APPDATA%\CreditCalc\databases\
+Nota: CreditCalc.exe va eseguito dalla cartella win64 (contiene DLL e dati).
+Non basta copiare solo l'exe senza il resto della cartella.
+
+Novità 1.0.17:
+- Ricerca per indirizzo: filtro rigoroso su via, civico e città (meno falsi positivi)
+- Ricerca Telextra (1188, elenchi telefonici) integrata negli elenchi consultati
+
+Build: GitHub Actions (commit in corso)

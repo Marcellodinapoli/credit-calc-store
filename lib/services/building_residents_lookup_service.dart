@@ -1,9 +1,11 @@
 import '../config/building_residents_backend_config.dart';
 import '../models/building_resident_entry.dart';
+import '../utils/building_residents_address_util.dart';
 import 'building_residents_dedup.dart';
 import 'directory/bing_web_search_service.dart';
 import 'directory/duckduckgo_web_search_service.dart';
 import 'directory/pagine_bianche_directory_service.dart';
+import 'directory/telextra_directory_service.dart';
 
 /// Ricerca nominativi a un civico tramite elenchi pubblici web (senza dati CreditCalc).
 abstract final class BuildingResidentsLookupService {
@@ -11,6 +13,8 @@ abstract final class BuildingResidentsLookupService {
     'Pagine Bianche — indirizzo',
     'Pagine Bianche — privati',
     'Pagine Bianche — aziende',
+    'Telextra — 1188 / elenchi telefonici',
+    'Telextra — ricerca web',
     'DuckDuckGo (elenchi web)',
     'Bing (elenchi web)',
   ];
@@ -25,15 +29,17 @@ abstract final class BuildingResidentsLookupService {
       PagineBiancheDirectoryService.searchByAddress(query, tab: 'indirizzo'),
       PagineBiancheDirectoryService.searchByAddress(query, tab: 'privati'),
       PagineBiancheDirectoryService.searchByAddress(query, tab: 'aziende'),
+      TelextraDirectoryService.searchAddress(query),
       DuckDuckGoWebSearchService.searchAddress(query),
       BingWebSearchService.searchAddress(query),
     ]);
 
-    final pbIndirizzo = results[0];
-    final pbPrivati = results[1];
-    final pbAziende = results[2];
-    final ddg = results[3];
-    final bing = results[4];
+    final pbIndirizzo = _filterRelevant(query, results[0]);
+    final pbPrivati = _filterRelevant(query, results[1]);
+    final pbAziende = _filterRelevant(query, results[2]);
+    final telextra = _filterRelevant(query, results[3]);
+    final ddg = _filterRelevant(query, results[4]);
+    final bing = _filterRelevant(query, results[5]);
 
     final searchedSources = <String>[];
     void markIfHit(String label, List<BuildingResidentEntry> entries) {
@@ -43,6 +49,7 @@ abstract final class BuildingResidentsLookupService {
     markIfHit('Pagine Bianche — indirizzo', pbIndirizzo);
     markIfHit('Pagine Bianche — privati', pbPrivati);
     markIfHit('Pagine Bianche — aziende', pbAziende);
+    markIfHit('Telextra', telextra);
     markIfHit('DuckDuckGo (elenchi web)', ddg);
     markIfHit('Bing (elenchi web)', bing);
 
@@ -50,6 +57,7 @@ abstract final class BuildingResidentsLookupService {
       ...pbIndirizzo,
       ...pbPrivati,
       ...pbAziende,
+      ...telextra,
       ...ddg,
       ...bing,
     ]);
@@ -57,10 +65,10 @@ abstract final class BuildingResidentsLookupService {
     String? notes;
     if (merged.isEmpty) {
       notes =
-          'Nessun nominativo trovato negli elenchi consultati. '
-          'Prova con via, numero civico e città completi, oppure apri '
-          'una ricerca web dal link in basso. Per un elenco certo servono '
-          'anagrafe comunale o indagini sul posto (campanello, portiere).';
+          'Nessun nominativo trovato al civico indicato negli elenchi consultati. '
+          'Gli elenchi online spesso non pubblicano i privati residenziali: '
+          'prova ad aprire Pagine Bianche o 1188 (Telextra) dal link in basso, oppure verifica '
+          'in sede (campanello, portiere).';
     } else if (pbIndirizzo.isEmpty && pbPrivati.isEmpty) {
       notes =
           'Trovate solo attività/uffici o risultati web generici. I privati '
@@ -84,6 +92,28 @@ abstract final class BuildingResidentsLookupService {
     );
   }
 
+  static List<BuildingResidentEntry> _filterRelevant(
+    String query,
+    List<BuildingResidentEntry> entries,
+  ) {
+    final filtered = entries
+        .where(
+          (entry) => BuildingResidentsAddressUtil.matchesListingAddress(
+            query,
+            entry.address,
+          ),
+        )
+        .toList();
+
+    filtered.sort((a, b) {
+      final aHasPhone = a.phone != null && a.phone!.length >= 9;
+      final bHasPhone = b.phone != null && b.phone!.length >= 9;
+      if (aHasPhone != bHasPhone) return aHasPhone ? -1 : 1;
+      return a.displayName.compareTo(b.displayName);
+    });
+    return filtered;
+  }
+
   static Future<String?> _optionalAiSummary({
     required String queryAddress,
     required List<BuildingResidentEntry> residents,
@@ -97,6 +127,10 @@ abstract final class BuildingResidentsLookupService {
     } catch (_) {
       return null;
     }
+  }
+
+  static Uri telextraWebUri(String address) {
+    return TelextraDirectoryService.webSearchUri(address);
   }
 
   static Uri pagineBiancheWebUri(String address) {

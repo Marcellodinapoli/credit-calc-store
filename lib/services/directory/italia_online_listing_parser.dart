@@ -1,4 +1,5 @@
 import '../../models/building_resident_entry.dart';
+import '../../utils/building_residents_address_util.dart';
 import 'directory_html_utils.dart';
 
 /// Parser condiviso per elenchi ItaliaOnline (Pagine Bianche e siti affini).
@@ -20,6 +21,10 @@ abstract final class ItaliaOnlineListingParser {
 
       final name = DirectoryHtmlUtils.firstMatch(block, [
         RegExp(
+          r'class="list-element__title[^"]*"[^>]*>.*?<a[^>]*>([^<]+)',
+          dotAll: true,
+        ),
+        RegExp(
           r'class="list-element__title[^"]*"[^>]*>.*?>([^<]+)',
           dotAll: true,
         ),
@@ -30,10 +35,25 @@ abstract final class ItaliaOnlineListingParser {
       final address = DirectoryHtmlUtils.firstMatch(block, [
         RegExp(r'class="[^"]*street-address[^"]*"[^>]*>([^<]+)'),
         RegExp(
+          r'class="[^"]*list-element__address[^"]*"[^>]*>.*?street-address[^>]*>([^<]+)',
+          dotAll: true,
+        ),
+        RegExp(
           r'class="[^"]*adr[^"]*"[^>]*>.*?<span[^>]*>([^<]+)',
           dotAll: true,
         ),
       ]);
+
+      final cleanAddress = DirectoryHtmlUtils.decodeHtmlEntities(address ?? '')
+          .replaceAll(RegExp(r'\s*-\s*$'), '')
+          .trim();
+      if (cleanAddress.isEmpty) continue;
+      if (!BuildingResidentsAddressUtil.matchesListingAddress(
+        queryAddress,
+        cleanAddress,
+      )) {
+        continue;
+      }
 
       final phone = DirectoryHtmlUtils.firstMatch(block, [
         RegExp(r'class="[^"]*phone-numbers__number[^"]*"[^>]*>([^<]+)'),
@@ -45,13 +65,14 @@ abstract final class ItaliaOnlineListingParser {
         RegExp(r'class="list-element__category[^"]*"[^>]*>([^<]+)'),
       ]);
 
-      final cleanName = DirectoryHtmlUtils.decodeHtmlEntities(name);
-      final cleanAddress = DirectoryHtmlUtils.decodeHtmlEntities(address ?? '');
+      final cleanName = DirectoryHtmlUtils.decodeHtmlEntities(name)
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
 
       out.add(
         BuildingResidentEntry(
           displayName: cleanName,
-          address: cleanAddress.isNotEmpty ? cleanAddress : queryAddress,
+          address: cleanAddress,
           source: source,
           phone: phone?.replaceAll(RegExp(r'\s+'), ''),
           category: category != null

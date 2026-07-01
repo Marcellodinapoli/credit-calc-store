@@ -74,13 +74,22 @@ abstract final class BingWebSearchService {
 
       if (!_isRelevant(queryAddress, combined, url)) continue;
 
+      final extractedAddress = _extractAddress(combined);
+      if (extractedAddress == null) continue;
+      if (!BuildingResidentsAddressUtil.matchesListingAddress(
+        queryAddress,
+        extractedAddress,
+      )) {
+        continue;
+      }
+
       final phone =
           DirectoryHtmlUtils.extractPhone(combined)?.replaceAll(RegExp(r'\s+'), '');
 
       out.add(
         BuildingResidentEntry(
           displayName: cleanTitle,
-          address: queryAddress,
+          address: extractedAddress,
           source: 'bing',
           phone: phone,
           category: cleanSnippet.length > 120
@@ -93,13 +102,26 @@ abstract final class BingWebSearchService {
   }
 
   static bool _isRelevant(String queryAddress, String text, String url) {
-    if (DirectoryHtmlUtils.isDirectoryHost(url) ||
-        DirectoryHtmlUtils.isDirectoryHost(text)) {
-      return BuildingResidentsAddressUtil.matchesQuery(queryAddress, text) ||
-          DirectoryHtmlUtils.extractPhone(text) != null;
+    if (!DirectoryHtmlUtils.isDirectoryHost(url) &&
+        !DirectoryHtmlUtils.isDirectoryHost(text)) {
+      return false;
     }
-    return BuildingResidentsAddressUtil.matchesQuery(queryAddress, text) &&
-        (DirectoryHtmlUtils.extractPhone(text) != null ||
-            text.toLowerCase().contains('telefono'));
+    final extracted = _extractAddress(text);
+    if (extracted != null) {
+      return BuildingResidentsAddressUtil.matchesListingAddress(
+        queryAddress,
+        extracted,
+      );
+    }
+    return BuildingResidentsAddressUtil.matchesListingAddress(queryAddress, text);
+  }
+
+  static String? _extractAddress(String text) {
+    final match = RegExp(
+      r'((?:Via|Viale|Piazza|Corso|Largo|Vicolo|Strada|Frazione|Località)[^.,\n]{3,80}\d+[a-zA-Z]?)',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (match == null) return null;
+    return match.group(1)!.trim();
   }
 }
