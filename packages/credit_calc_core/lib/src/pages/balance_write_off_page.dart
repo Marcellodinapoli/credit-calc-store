@@ -43,6 +43,7 @@ class BalanceWriteOffPage extends StatefulWidget {
     super.key,
     this.pendingPlanId,
     this.initialFormData,
+    this.initialPrefillAmount,
     this.skipInitialUsageGuard = false,
     this.autoOpenCommissionExport = false,
     this.initialCommissionDocIds = const [],
@@ -51,6 +52,7 @@ class BalanceWriteOffPage extends StatefulWidget {
 
   final String? pendingPlanId;
   final Map<String, dynamic>? initialFormData;
+  final double? initialPrefillAmount;
   final bool skipInitialUsageGuard;
   final bool autoOpenCommissionExport;
   final List<String> initialCommissionDocIds;
@@ -121,6 +123,10 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     _sessionCommissionDocIds.addAll(RepaymentPlanSessionStorage.readIds());
     if (widget.initialCommissionDocIds.isNotEmpty) {
       _sessionCommissionDocIds.addAll(widget.initialCommissionDocIds);
+    }
+    final prefill = widget.initialPrefillAmount;
+    if (prefill != null) {
+      _debitoCtrl.text = EuroFormat.format(prefill);
     }
   }
 

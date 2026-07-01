@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
+import 'balance_write_off_page.dart';
+import 'commission_entry_page.dart';
+import 'standard_repayment_plan_page.dart';
 
 /// Calcolatrice standard (stile Windows) — memoria, percentuali, √, x², 1/x.
 class ClassicCalculatorPage extends StatefulWidget {
@@ -15,6 +18,8 @@ class ClassicCalculatorPage extends StatefulWidget {
 }
 
 class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
+  static const _handoffColor = Color(0xFF0A66C2);
+
   final _focusNode = FocusNode(debugLabel: 'classicCalculator');
 
   String _display = '0';
@@ -353,6 +358,104 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
     );
   }
 
+  double? _handoffAmount() {
+    final value = _value;
+    if (value.isNaN || value.isInfinite) return null;
+    return value.abs();
+  }
+
+  void _openHandoffPage(Widget Function(double amount) buildPage) {
+    final amount = _handoffAmount();
+    if (amount == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Importo non valido sul display.')),
+      );
+      return;
+    }
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(builder: (_) => buildPage(amount)),
+    );
+  }
+
+  void _openRepaymentPlan() {
+    _openHandoffPage(
+      (amount) => StandardRepaymentPlanPage(
+        key: ValueKey('calc-pdr-$amount'),
+        initialPrefillAmount: amount,
+      ),
+    );
+  }
+
+  void _openBalanceWriteOff() {
+    _openHandoffPage(
+      (amount) => BalanceWriteOffPage(
+        key: ValueKey('calc-bwo-$amount'),
+        initialPrefillAmount: amount,
+      ),
+    );
+  }
+
+  void _openCommissionEntry() {
+    _openHandoffPage(
+      (amount) => CommissionEntryPage(
+        key: ValueKey('calc-comm-$amount'),
+        initialAmountCollected: amount,
+      ),
+    );
+  }
+
+  Widget _handoffButtonsRow() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          _handoffButton(
+            'Sviluppa piano di rientro',
+            _openRepaymentPlan,
+          ),
+          const SizedBox(width: 4),
+          _handoffButton(
+            'Sviluppa saldo e stralcio',
+            _openBalanceWriteOff,
+          ),
+          const SizedBox(width: 4),
+          _handoffButton(
+            'Inserisci in provvigioni',
+            _openCommissionEntry,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _handoffButton(String label, VoidCallback onTap) {
+    return Expanded(
+      child: Material(
+        color: _handoffColor,
+        borderRadius: BorderRadius.circular(4),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+            child: Text(
+              label,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                height: 1.15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return wrapCreditCalcPage(
@@ -408,6 +511,7 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
                     ),
                     const SizedBox(height: 8),
                     _memoryRow(),
+                    _handoffButtonsRow(),
                     const SizedBox(height: 4),
                     _buttonRow([
                       _CalcBtn('%', onTap: _btn(_percent)),

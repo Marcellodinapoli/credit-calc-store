@@ -64,8 +64,13 @@ class _EntrySnapshot {
 
 class CommissionEntryPage extends StatefulWidget {
   final String? entryId;
+  final double? initialAmountCollected;
 
-  const CommissionEntryPage({super.key, this.entryId});
+  const CommissionEntryPage({
+    super.key,
+    this.entryId,
+    this.initialAmountCollected,
+  });
 
   bool get isEditing => entryId != null && entryId!.isNotEmpty;
 
@@ -102,6 +107,11 @@ class _CommissionEntryPageState extends State<CommissionEntryPage> {
     super.initState();
     if (_isEditing) {
       _loadEntry();
+    } else {
+      final prefill = widget.initialAmountCollected;
+      if (prefill != null) {
+        _amountCtrl.text = EuroFormat.format(prefill);
+      }
     }
   }
 
