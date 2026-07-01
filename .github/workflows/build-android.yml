@@ -41,8 +41,9 @@ jobs:
 
       - name: Rename APK
         run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk dist/CreditCalc-1.0.12-android-arm64.apk
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/CreditCalc-${VERSION}-android-arm64.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

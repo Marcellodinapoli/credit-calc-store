@@ -172,7 +172,7 @@ abstract final class DeviceTransferSyncAdvisor {
     DeviceTransferPeerState? peer,
   }) {
     if (peer == null) {
-      if (local.hasPendingChanges || local.neverSynced) {
+      if (local.hasPendingChanges) {
         return DeviceTransferSyncHint.youShouldSend;
       }
       return DeviceTransferSyncHint.waitingForPeer;
@@ -207,8 +207,13 @@ abstract final class DeviceTransferSyncAdvisor {
       return DeviceTransferSyncHint.bothHaveChanges;
     }
 
-    if (!baselinesMatch && local.localRecordCount > 0) {
-      return DeviceTransferSyncHint.youShouldSend;
+    if (!baselinesMatch) {
+      if (local.localRecordCount == 0 && peer.localRecordCount > 0) {
+        return DeviceTransferSyncHint.peerShouldSend;
+      }
+      if (local.localRecordCount > 0 && peer.localRecordCount == 0) {
+        return DeviceTransferSyncHint.peerEmptyNeedsFull;
+      }
     }
 
     return DeviceTransferSyncHint.waitingForPeer;

@@ -1,7 +1,7 @@
 name: credit_calc
 description: CreditCalc — app ufficiale CreditCore per mobile e desktop (store).
 publish_to: "none"
-version: 1.0.18+18
+version: 1.0.19+19
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -72,3 +72,5 @@ flutter_launcher_icons:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icon/app_icon.png

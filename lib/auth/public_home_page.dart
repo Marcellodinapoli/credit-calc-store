@@ -32,15 +32,14 @@ class PublicHomePage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 8),
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: _accent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _accent.withValues(alpha: 0.2)),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Image.asset(
+                  'assets/icon/app_icon.png',
+                  width: 56,
+                  height: 56,
+                  fit: BoxFit.cover,
                 ),
-                child: const Icon(Icons.shield_outlined, color: _accent, size: 28),
               ),
               const SizedBox(height: 20),
               Text(

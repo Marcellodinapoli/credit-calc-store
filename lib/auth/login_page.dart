@@ -19,7 +19,7 @@ import 'login_pricing_page.dart';
 import 'registration_coupon_field.dart';
 import 'registration_coupon_service.dart';
 import 'registration_company_code_field.dart';
-import 'registration_plan_field.dart';
+import 'registration_plan_selection_page.dart';
 import 'registration_plan_selection_result.dart';
 import 'registration_privacy_consents_page.dart';
 import 'registration_consents_service.dart';
@@ -742,29 +742,87 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> _applyPlanSelectionResult(
+    RegistrationPlanSelectionResult result,
+  ) async {
+    setState(() {
+      _registerPlan = result.planId;
+      _registerFieldErrors.remove('plan');
+    });
+
+    if (result.couponApplied && result.couponCode != null) {
+      _couponController.text = result.couponCode!;
+      await _applyCoupon();
+    } else {
+      _clearRegistrationCoupon();
+    }
+  }
+
+  Future<RegistrationPlanSelectionResult?> _openPlanSelection(
+    String registerType,
+  ) {
+    return Navigator.of(context).push<RegistrationPlanSelectionResult>(
+      MaterialPageRoute(
+        builder: (_) => RegistrationPlanSelectionPage(registerType: registerType),
+      ),
+    );
+  }
+
+  Future<void> _startRegistration() async {
+    final type = await _showRegisterTypePopup();
+    if (type == null || !mounted) return;
+
+    final result = await _openPlanSelection(type);
+    if (result == null || !mounted) return;
+
+    setState(() {
+      _registerType = type;
+      _registerPlan = result.planId;
+      _clearCompanyLink();
+      _clearRegistrationCoupon();
+      _isLogin = false;
+      _resetPrivacyAcceptance();
+      _clearLoginFeedback();
+      _clearRegisterFeedback();
+    });
+    await _applyPlanSelectionResult(result);
+  }
+
+  Future<void> _changeRegistrationPlan() async {
+    if (_registerType == null) return;
+    final result = await _openPlanSelection(_registerType!);
+    if (result == null || !mounted) return;
+    await _applyPlanSelectionResult(result);
+  }
+
   Future<String?> _showRegisterTypePopup() async {
     return showDialog<String>(
       context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Tipo di registrazione'),
         content: const Text('Seleziona il tipo di account'),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
-          SizedBox(
-            width: 120,
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, 'public'),
-              child: const Text('Utente'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 120,
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, 'company'),
-              child: const Text('Azienda'),
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 120,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, 'public'),
+                  child: const Text('Utente'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 120,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, 'company'),
+                  child: const Text('Azienda'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1267,25 +1325,13 @@ class _LoginPageState extends State<LoginPage> {
 
     return Column(
       children: [
-        Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppTheme.accent.withValues(alpha: 0.14),
-                AppTheme.accent.withValues(alpha: 0.05),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.accent.withValues(alpha: 0.18)),
-          ),
-          child: const Icon(
-            Icons.shield_outlined,
-            color: AppTheme.accent,
-            size: 26,
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Image.asset(
+            'assets/icon/app_icon.png',
+            width: 52,
+            height: 52,
+            fit: BoxFit.cover,
           ),
         ),
         const SizedBox(height: 18),
@@ -1357,18 +1403,7 @@ class _LoginPageState extends State<LoginPage> {
                   ? null
                   : () async {
                       if (!_isLogin) return;
-                      final type = await _showRegisterTypePopup();
-                      if (type == null || !mounted) return;
-                      setState(() {
-                        _registerType = type;
-                        _registerPlan = 'free';
-                        _clearCompanyLink();
-                        _clearRegistrationCoupon();
-                        _isLogin = false;
-                        _resetPrivacyAcceptance();
-                        _clearLoginFeedback();
-                        _clearRegisterFeedback();
-                      });
+                      await _startRegistration();
                     },
             ),
           ),
@@ -1380,31 +1415,50 @@ class _LoginPageState extends State<LoginPage> {
   Widget? _buildRegisterTypeBadge() {
     if (_isLogin || _registerType == null) return null;
     final isCompany = _registerType == 'company';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.accent.withValues(alpha: 0.07),
+    final planLabel = _registerPlan == null
+        ? null
+        : registrationPlanLabel(_registerPlan);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _busy ? null : _changeRegistrationPlan,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.18)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isCompany ? Icons.business_center_outlined : Icons.person_outline,
-            size: 16,
-            color: AppTheme.accent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.accent.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.accent.withValues(alpha: 0.18)),
           ),
-          const SizedBox(width: 6),
-          Text(
-            isCompany ? 'Registrazione azienda' : 'Registrazione utente',
-            style: const TextStyle(
-              color: AppTheme.accentDark,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isCompany ? Icons.business_center_outlined : Icons.person_outline,
+                size: 16,
+                color: AppTheme.accent,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                planLabel == null
+                    ? (isCompany ? 'Registrazione azienda' : 'Registrazione utente')
+                    : '${isCompany ? 'Azienda' : 'Utente'} · Piano $planLabel',
+                style: const TextStyle(
+                  color: AppTheme.accentDark,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.edit_outlined,
+                size: 14,
+                color: AppTheme.accent,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1647,7 +1701,8 @@ class _LoginPageState extends State<LoginPage> {
           const SizedBox(height: 14),
         ],
 
-        if (!_isLogin && _registerType == 'public') ...[
+        if (!_isLogin &&
+            _registerType == 'public') ...[
           RegistrationCompanyCodeField(
             controller: _companyCode,
             validating: _validatingCompanyCode,
@@ -1659,27 +1714,6 @@ class _LoginPageState extends State<LoginPage> {
               setState(() {
                 _clearCompanyLink();
                 _registerPlan ??= 'free';
-              });
-            },
-          ),
-          const SizedBox(height: 14),
-        ],
-
-        if (!_isLogin &&
-            _registerType != null &&
-            !_companyLinkActive) ...[
-          RegistrationPlanField(
-            registerType: _registerType!,
-            selectedPlanId: _registerPlan,
-            errorText: _regError('plan'),
-            onPlanSelected: (planId) {
-              setState(() {
-                _registerPlan = planId;
-                _registerFieldErrors.remove('plan');
-                if (_appliedCoupon?.restrictedPlan != null &&
-                    _appliedCoupon!.restrictedPlan != planId) {
-                  _clearRegistrationCoupon();
-                }
               });
             },
           ),
@@ -1740,7 +1774,7 @@ class _LoginPageState extends State<LoginPage> {
               checking: _couponChecking,
               error: _couponError,
               applied: _couponActive,
-              appliedCode: _appliedCoupon?.code,
+              appliedCoupon: _appliedCoupon,
               onApply: _applyCoupon,
               onClear: _clearCoupon,
             ),

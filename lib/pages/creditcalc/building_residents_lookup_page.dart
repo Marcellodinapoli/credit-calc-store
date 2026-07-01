@@ -75,7 +75,7 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
   @override
   Widget build(BuildContext context) {
     return SecondaryPageScaffold(
-      pageTitle: 'Strumenti',
+      pageTitle: 'Ricerca per indirizzo',
       project: BrandedPageProject.calc,
       body: MaintenanceSectionGate(
         sectionName: MaintenanceService.creditCalc,

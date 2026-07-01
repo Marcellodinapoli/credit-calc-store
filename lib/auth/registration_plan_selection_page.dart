@@ -1,27 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'registration_coupon_field.dart';
 import 'registration_coupon_service.dart';
+import 'registration_plan_options.dart';
 import 'registration_plan_selection_result.dart';
 
 abstract final class _PlanPageTheme {
   static const accent = Color(0xFF0A66C2);
   static const body = Color(0xFFE8E8E8);
-}
-
-class RegistrationPlanOption {
-  final String id;
-  final String name;
-  final String price;
-  final String description;
-  final bool availableNow;
-
-  const RegistrationPlanOption({
-    required this.id,
-    required this.name,
-    required this.price,
-    required this.description,
-    this.availableNow = true,
-  });
 }
 
 class RegistrationPlanSelectionPage extends StatefulWidget {
@@ -52,67 +38,8 @@ class _RegistrationPlanSelectionPageState
     super.dispose();
   }
 
-  List<RegistrationPlanOption> get _plans {
-    if (_isCompany) {
-      return const [
-        RegistrationPlanOption(
-          id: 'free',
-          name: 'Gratis',
-          price: '€0',
-          description:
-              'Workspace aziendale base per iniziare. Funzioni essenziali '
-              'con limiti su team, recruiting e strumenti avanzati.',
-        ),
-        RegistrationPlanOption(
-          id: 'plus',
-          name: 'Plus',
-          price: '€4,99 / mese',
-          description:
-              'Workspace completo per piccoli team. Recruiting, gestione '
-              'candidati e strumenti operativi con storico e salvataggio dati.',
-          availableNow: false,
-        ),
-        RegistrationPlanOption(
-          id: 'enterprise',
-          name: 'Enterprise',
-          price: '€9,99 / mese',
-          description:
-              'Soluzione avanzata per organizzazioni. Ruoli, supervisor, '
-              'dashboard performance e priorità sulle funzioni aziendali.',
-          availableNow: false,
-        ),
-      ];
-    }
-
-    return const [
-      RegistrationPlanOption(
-        id: 'free',
-        name: 'Gratis',
-        price: '€0',
-        description:
-            'Accesso base alla piattaforma per uso personale. Funzioni '
-            'limitate per test e utilizzo occasionale.',
-      ),
-      RegistrationPlanOption(
-        id: 'plus',
-        name: 'Plus',
-        price: '€4,99 / mese',
-        description:
-            'Accesso completo alle funzionalità principali. Utilizzo '
-            'illimitato dei servizi core, storico attività e salvataggio dati.',
-        availableNow: false,
-      ),
-      RegistrationPlanOption(
-        id: 'enterprise',
-        name: 'Enterprise',
-        price: '€9,99 / mese',
-        description:
-            'Piano professionale con analisi, personalizzazione dei flussi '
-            'e maggiore controllo sui dati per utilizzo intensivo.',
-        availableNow: false,
-      ),
-    ];
-  }
+  List<RegistrationPlanOption> get _plans =>
+      registrationPlansForType(widget.registerType);
 
   String get _title =>
       _isCompany ? 'Scegli il piano aziendale' : 'Scegli il tuo piano';
@@ -285,8 +212,7 @@ class _RegistrationPlanSelectionPageState
                     controller: _couponController,
                     checking: _couponChecking,
                     error: _couponError,
-                    applied: couponActive,
-                    appliedCode: _appliedCoupon?.code,
+                    appliedCoupon: _appliedCoupon,
                     onApply: _applyCoupon,
                     onClear: _clearCoupon,
                   ),
@@ -315,8 +241,7 @@ class _CouponSection extends StatelessWidget {
   final TextEditingController controller;
   final bool checking;
   final String? error;
-  final bool applied;
-  final String? appliedCode;
+  final RegistrationCouponValidation? appliedCoupon;
   final VoidCallback onApply;
   final VoidCallback onClear;
 
@@ -324,11 +249,12 @@ class _CouponSection extends StatelessWidget {
     required this.controller,
     required this.checking,
     required this.error,
-    required this.applied,
-    required this.appliedCode,
+    required this.appliedCoupon,
     required this.onApply,
     required this.onClear,
   });
+
+  bool get _applied => appliedCoupon?.isValid == true;
 
   @override
   Widget build(BuildContext context) {
@@ -348,21 +274,24 @@ class _CouponSection extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Hai un codice promozionale? Inseriscilo per attivare l\'uso '
-            'gratuito per sempre della piattaforma.',
+            'Se hai un codice promozionale inseriscilo.',
             style: TextStyle(
               fontSize: 13,
               color: Colors.grey.shade700,
               height: 1.35,
             ),
           ),
+          if (_applied) ...[
+            const SizedBox(height: 10),
+            RegistrationCouponDetailsPanel(coupon: appliedCoupon!),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: controller,
-                  enabled: !applied && !checking,
+                  enabled: !_applied && !checking,
                   textCapitalization: TextCapitalization.characters,
                   decoration: InputDecoration(
                     hintText: 'Codice coupon',
@@ -378,7 +307,7 @@ class _CouponSection extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              if (applied)
+              if (_applied)
                 OutlinedButton(
                   onPressed: checking ? null : onClear,
                   child: const Text('Rimuovi'),
@@ -402,17 +331,6 @@ class _CouponSection extends StatelessWidget {
                 ),
             ],
           ),
-          if (applied && appliedCode != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Coupon $appliedCode applicato: accesso gratuito per sempre.',
-              style: const TextStyle(
-                color: Color(0xFF1B5E20),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
           if (error != null) ...[
             const SizedBox(height: 8),
             Text(

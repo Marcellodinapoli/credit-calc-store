@@ -120,7 +120,7 @@ class _PhoneCallAnalysisPageState extends State<PhoneCallAnalysisPage> {
   @override
   Widget build(BuildContext context) {
     return SecondaryPageScaffold(
-      pageTitle: 'Strumenti',
+      pageTitle: 'Analisi telefonata',
       project: BrandedPageProject.calc,
       body: MaintenanceSectionGate(
         sectionName: MaintenanceService.creditCalc,

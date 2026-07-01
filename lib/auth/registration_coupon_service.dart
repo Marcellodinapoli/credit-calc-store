@@ -7,6 +7,7 @@ class RegistrationCouponValidation {
   final bool lifetimeFree;
   final String? restrictedPlan;
   final DateTime? benefitExpiresAt;
+  final String? label;
 
   const RegistrationCouponValidation({
     required this.code,
@@ -14,6 +15,7 @@ class RegistrationCouponValidation {
     this.lifetimeFree = false,
     this.restrictedPlan,
     this.benefitExpiresAt,
+    this.label,
   });
 
   static const invalid = RegistrationCouponValidation(
@@ -62,6 +64,7 @@ abstract final class RegistrationCouponService {
       if (benefitExpiresAt is Timestamp) {
         benefitEnd = benefitExpiresAt.toDate();
       }
+      final labelRaw = (data['label'] ?? '').toString().trim();
       return RegistrationCouponValidation(
         code: code,
         isValid: true,
@@ -69,6 +72,7 @@ abstract final class RegistrationCouponService {
             (data['lifetimeFree'] as bool? ?? true) && benefitEnd == null,
         restrictedPlan: plan.isEmpty ? null : plan,
         benefitExpiresAt: benefitEnd,
+        label: labelRaw.isEmpty ? null : labelRaw,
       );
     } catch (_) {
       return RegistrationCouponValidation.invalid;

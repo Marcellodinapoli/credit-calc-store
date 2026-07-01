@@ -46,8 +46,8 @@ class RegistrationCompanyCodeField extends StatelessWidget {
             linked
                 ? 'Account collegato al piano aziendale. Piano individuale e '
                     'coupon non sono necessari.'
-                : 'Se la tua azienda ti ha fornito un codice (CP-XXXXXX-COL '
-                    'o CP-XXXXXX-SUP), inseriscilo per usare il piano aziendale.',
+                : 'Se la tua azienda ti ha fornito un codice (CP-XXXXXX-COL), '
+                    'inseriscilo per usare il piano aziendale.',
             style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.35),
           ),
           if (linked && linkedCompanyName != null) ...[

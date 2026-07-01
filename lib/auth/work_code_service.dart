@@ -52,7 +52,7 @@ abstract final class WorkCodeService {
     }
     if (!looksLikeWorkCode(code)) {
       return WorkCodeValidationResult.failure(
-        'Formato non valido. Usa CP-XXXXXX-COL o CP-XXXXXX-SUP.',
+        'Formato non valido. Usa CP-XXXXXX-COL.',
       );
     }
 

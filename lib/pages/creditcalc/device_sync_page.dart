@@ -61,6 +61,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
     final online = await ConnectivityService.isOnline();
     DeviceTransferMeta? transfer;
     DeviceTransferLocalState? localState;
+    DeviceTransferPeerState? peer;
     var isSender = false;
 
     if (uid != null) {
@@ -69,6 +70,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
       } catch (_) {}
       if (online) {
         try {
+          peer = await DeviceTransferService.readPeerState(uid);
           transfer = await DeviceTransferService.readTransferMeta(uid);
           if (transfer?.isPrepared == true) {
             isSender = await DeviceTransferService.isActiveSender(uid);
@@ -79,13 +81,14 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
 
     final syncHint = localState == null
         ? DeviceTransferSyncHint.waitingForPeer
-        : DeviceTransferSyncAdvisor.advise(local: localState, peer: _peer);
+        : DeviceTransferSyncAdvisor.advise(local: localState, peer: peer);
 
     if (!mounted) return;
     setState(() {
       _online = online;
       _activeTransfer = transfer;
       _localState = localState;
+      _peer = peer;
       _isSender = isSender;
       _syncHint = syncHint;
       _loading = false;
@@ -234,13 +237,8 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
     if (_busy || !_online || _activeTransfer != null || _isSender) {
       return false;
     }
-    if (_syncHint == DeviceTransferSyncHint.aligned) return false;
-    if (_syncHint == DeviceTransferSyncHint.peerShouldSend) return false;
-    final local = _localState;
-    if (local == null) return false;
-    return local.hasPendingChanges ||
-        _syncHint == DeviceTransferSyncHint.peerEmptyNeedsFull ||
-        local.neverSynced;
+    return _syncHint == DeviceTransferSyncHint.youShouldSend ||
+        _syncHint == DeviceTransferSyncHint.peerEmptyNeedsFull;
   }
 
   bool get _canRelease =>

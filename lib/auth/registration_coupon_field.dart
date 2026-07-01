@@ -1,7 +1,72 @@
 import 'package:flutter/material.dart';
 
+import 'registration_coupon_service.dart';
+import 'registration_plan_selection_result.dart';
+
 abstract final class _CouponFieldTheme {
   static const accent = Color(0xFF0A66C2);
+}
+
+String _formatCouponDate(DateTime date) =>
+    '${date.day.toString().padLeft(2, '0')}/'
+    '${date.month.toString().padLeft(2, '0')}/'
+    '${date.year}';
+
+/// Dettagli coupon dopo l'applicazione in registrazione.
+class RegistrationCouponDetailsPanel extends StatelessWidget {
+  final RegistrationCouponValidation coupon;
+
+  const RegistrationCouponDetailsPanel({super.key, required this.coupon});
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = <String>[
+      if (coupon.label != null && coupon.label!.isNotEmpty) coupon.label!,
+      if (coupon.restrictedPlan != null)
+        'Piano: ${registrationPlanLabel(coupon.restrictedPlan)}',
+      if (coupon.lifetimeFree)
+        'Accesso gratuito per sempre'
+      else if (coupon.benefitExpiresAt != null)
+        'Beneficio attivo fino al ${_formatCouponDate(coupon.benefitExpiresAt!)}',
+    ];
+
+    if (lines.isEmpty) {
+      lines.add('Coupon ${coupon.code} applicato.');
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.green.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Coupon ${coupon.code}',
+            style: TextStyle(
+              color: Colors.green.shade900,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          for (final line in lines) ...[
+            Text(
+              line,
+              style: TextStyle(
+                color: Colors.green.shade900,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 /// Campo coupon nel form di registrazione (CreditCore store).
@@ -10,7 +75,7 @@ class RegistrationCouponSection extends StatelessWidget {
   final bool checking;
   final String? error;
   final bool applied;
-  final String? appliedCode;
+  final RegistrationCouponValidation? appliedCoupon;
   final VoidCallback onApply;
   final VoidCallback onClear;
 
@@ -20,7 +85,7 @@ class RegistrationCouponSection extends StatelessWidget {
     required this.checking,
     required this.error,
     required this.applied,
-    required this.appliedCode,
+    this.appliedCoupon,
     required this.onApply,
     required this.onClear,
   });
@@ -43,9 +108,13 @@ class RegistrationCouponSection extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Codice promozionale per accesso gratuito per sempre.',
+            'Se hai un codice promozionale inseriscilo.',
             style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
           ),
+          if (applied && appliedCoupon?.isValid == true) ...[
+            const SizedBox(height: 10),
+            RegistrationCouponDetailsPanel(coupon: appliedCoupon!),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [
@@ -90,17 +159,6 @@ class RegistrationCouponSection extends StatelessWidget {
                 ),
             ],
           ),
-          if (applied && appliedCode != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Coupon $appliedCode applicato: accesso gratuito per sempre.',
-              style: TextStyle(
-                color: Colors.green.shade800,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
           if (error != null) ...[
             const SizedBox(height: 8),
             Text(
