@@ -788,6 +788,19 @@ class _LoginPageState extends State<LoginPage> {
     await _applyPlanSelectionResult(result);
   }
 
+  void _cancelRegistration() {
+    setState(() {
+      _isLogin = true;
+      _registerType = null;
+      _registerPlan = null;
+      _clearCompanyLink();
+      _clearRegistrationCoupon();
+      _resetPrivacyAcceptance();
+      _clearRegisterFeedback();
+      _clearLoginFeedback();
+    });
+  }
+
   Future<void> _changeRegistrationPlan() async {
     if (_registerType == null) return;
     final result = await _openPlanSelection(_registerType!);
@@ -1838,6 +1851,25 @@ class _LoginPageState extends State<LoginPage> {
                   )
                 : Text(_isLogin ? 'Accedi' : 'Crea account'),
           ),
+        if (!_isLogin) ...[
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: _busy ? null : _cancelRegistration,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.accent,
+              minimumSize: const Size(double.infinity, 48),
+              side: const BorderSide(color: AppTheme.accent),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radius),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            child: const Text('Annulla'),
+          ),
+        ],
         if (_isLogin &&
             _showBiometricButton &&
             !_hasSavedCredentials &&

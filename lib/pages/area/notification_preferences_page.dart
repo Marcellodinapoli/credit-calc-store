@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -6,6 +8,7 @@ import '../../services/field_reminder_notification_service.dart';
 import '../../services/field_visit_notification_service.dart';
 import '../../services/itinerary_notifications_service.dart';
 import '../../services/location_consent_service.dart';
+import '../../services/notification_preferences_notifier.dart';
 import '../../services/product_notifications_service.dart';
 import 'personal_area_shell.dart';
 
@@ -25,13 +28,23 @@ class _NotificationPreferencesPageState
   bool _itineraryEnabled = false;
   bool _saving = false;
   bool _savingItinerary = false;
+  StreamSubscription<void>? _prefsSub;
 
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
   @override
   void initState() {
     super.initState();
+    _prefsSub = NotificationPreferencesNotifier.instance.changes.listen((_) {
+      _load();
+    });
     _load();
+  }
+
+  @override
+  void dispose() {
+    _prefsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -43,7 +56,7 @@ class _NotificationPreferencesPageState
 
     final enabled = await ProductNotificationsService.loadEnabled(uid);
     final itineraryEnabled =
-        await ItineraryNotificationsService.loadEnabled(uid);
+        await ItineraryNotificationsService.loadItineraryField(uid);
     if (!mounted) return;
     setState(() {
       _enabled = enabled;
@@ -85,6 +98,7 @@ class _NotificationPreferencesPageState
       setState(() => _itineraryEnabled = false);
       _showSnack('Notifiche disattivate.');
     }
+    NotificationPreferencesNotifier.instance.notifyChanged();
   }
 
   Future<void> _onItineraryChanged(bool value) async {
@@ -110,6 +124,7 @@ class _NotificationPreferencesPageState
           ? 'Promemoria itinerario e uso posizione attivati.'
           : 'Promemoria itinerario e uso posizione disattivati.',
     );
+    NotificationPreferencesNotifier.instance.notifyChanged();
   }
 
   void _showSnack(String message) {

@@ -4,6 +4,7 @@ import '../widgets/public_page_shell.dart';
 import '../widgets/public_top_menu.dart';
 import 'login_pricing_page.dart';
 import 'login_page.dart';
+import 'public_detail_cards.dart';
 
 /// Home pubblica leggera — intro breve prima di login/registrazione.
 class PublicHomePage extends StatelessWidget {
@@ -32,13 +33,15 @@ class PublicHomePage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: Image.asset(
-                  'assets/icon/app_icon.png',
-                  width: 56,
-                  height: 56,
-                  fit: BoxFit.cover,
+              Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Image.asset(
+                    'assets/icon/app_icon.png',
+                    width: 52,
+                    height: 52,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -54,18 +57,21 @@ class PublicHomePage extends StatelessWidget {
               ),
               const SizedBox(height: 28),
               const _HighlightTile(
+                sectionId: 'creditform',
                 icon: Icons.school_outlined,
                 title: 'CreditForm',
                 subtitle: 'Corsi, quiz e percorsi formativi',
               ),
               const SizedBox(height: 10),
               const _HighlightTile(
+                sectionId: 'creditcalc',
                 icon: Icons.calculate_outlined,
                 title: 'CreditCalc',
                 subtitle: 'Simulazioni e strumenti per l\'operatività',
               ),
               const SizedBox(height: 10),
               const _HighlightTile(
+                sectionId: 'creditjob',
                 icon: Icons.work_outline,
                 title: 'CreditJob',
                 subtitle: 'Collegamenti tra aziende e professionisti',
@@ -116,53 +122,67 @@ class PublicHomePage extends StatelessWidget {
 
 class _HighlightTile extends StatelessWidget {
   const _HighlightTile({
+    required this.sectionId,
     required this.icon,
     required this.title,
     required this.subtitle,
   });
 
+  final String sectionId;
   final IconData icon;
   final String title;
   final String subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    final section = creditCoreEcosystemSectionForId(sectionId);
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: section == null
+            ? null
+            : () => showCreditCoreEcosystemSectionDetail(context, section),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: PublicHomePage._accent, size: 22),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.35,
-                    color: Color(0xFF6B7280),
-                  ),
-                ),
-              ],
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
           ),
-        ],
+          child: Row(
+            children: [
+              Icon(icon, color: PublicHomePage._accent, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        height: 1.35,
+                        color: Color(0xFF6B7280),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.grey.shade500, size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }

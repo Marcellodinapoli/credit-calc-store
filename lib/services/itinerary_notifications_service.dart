@@ -14,6 +14,12 @@ abstract final class ItineraryNotificationsService {
         data[fieldEnabled] == true;
   }
 
+  /// Solo il flag itinerario (senza richiedere le notifiche prodotto attive).
+  static Future<bool> loadItineraryField(String uid) async {
+    final doc = await _firestore.collection('users').doc(uid).get();
+    return doc.data()?[fieldEnabled] == true;
+  }
+
   static Future<void> setEnabled({
     required String uid,
     required bool enabled,

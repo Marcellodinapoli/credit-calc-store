@@ -1,3 +1,5 @@
+import 'package:credit_calc_core/credit_calc_core.dart';
+
 class RegistrationPlanOption {
   final String id;
   final String name;
@@ -15,64 +17,42 @@ class RegistrationPlanOption {
 }
 
 List<RegistrationPlanOption> registrationPlansForType(String registerType) {
-  final isCompany = registerType == 'company';
-  if (isCompany) {
-    return const [
+  if (registerType == 'company') {
+    final free = companySubscriptionPlanForId('free')!;
+    final starter = companySubscriptionPlanForId('plus')!;
+    final enterprise = companySubscriptionPlanForId('enterprise')!;
+    return [
       RegistrationPlanOption(
         id: 'free',
-        name: 'Gratis',
-        price: '€0',
-        description:
-            'Workspace aziendale base per iniziare. Funzioni essenziali '
-            'con limiti su team, recruiting e strumenti avanzati.',
+        name: free.name,
+        price: free.price,
+        description: free.description,
       ),
       RegistrationPlanOption(
         id: 'plus',
-        name: 'Plus',
-        price: '€4,99 / mese',
-        description:
-            'Workspace completo per piccoli team. Recruiting, gestione '
-            'candidati e strumenti operativi con storico e salvataggio dati.',
+        name: starter.name,
+        price: starter.price,
+        description: starter.description,
         availableNow: false,
       ),
       RegistrationPlanOption(
         id: 'enterprise',
-        name: 'Enterprise',
-        price: '€9,99 / mese',
-        description:
-            'Soluzione avanzata per organizzazioni. Ruoli, supervisor, '
-            'dashboard performance e priorità sulle funzioni aziendali.',
+        name: enterprise.name,
+        price: enterprise.price,
+        description: enterprise.description,
         availableNow: false,
       ),
     ];
   }
 
-  return const [
-    RegistrationPlanOption(
-      id: 'free',
-      name: 'Gratis',
-      price: '€0',
-      description:
-          'Accesso base alla piattaforma per uso personale. Funzioni '
-          'limitate per test e utilizzo occasionale.',
-    ),
-    RegistrationPlanOption(
-      id: 'plus',
-      name: 'Plus',
-      price: '€4,99 / mese',
-      description:
-          'Accesso completo alle funzionalità principali. Utilizzo '
-          'illimitato dei servizi core, storico attività e salvataggio dati.',
-      availableNow: false,
-    ),
-    RegistrationPlanOption(
-      id: 'enterprise',
-      name: 'Enterprise',
-      price: '€9,99 / mese',
-      description:
-          'Piano professionale con analisi, personalizzazione dei flussi '
-          'e maggiore controllo sui dati per utilizzo intensivo.',
-      availableNow: false,
-    ),
+  return [
+    for (final plan in defaultPublicSubscriptionPlans())
+      RegistrationPlanOption(
+        id: plan.id,
+        name: PublicPlanLimitsConfigService.publicPlanTierLabel(plan.id),
+        price: plan.price,
+        description: plan.description,
+        availableNow: plan.id == 'free',
+      ),
   ];
 }

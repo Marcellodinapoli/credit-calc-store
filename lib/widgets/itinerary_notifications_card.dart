@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/itinerary_notifications_service.dart';
 import '../services/location_consent_service.dart';
+import '../services/notification_preferences_notifier.dart';
 import '../services/product_notifications_service.dart';
 
 class ItineraryNotificationsCard extends StatefulWidget {
@@ -15,50 +18,54 @@ class ItineraryNotificationsCard extends StatefulWidget {
 
 class _ItineraryNotificationsCardState extends State<ItineraryNotificationsCard> {
   bool _loading = true;
-  bool _enabled = false;
+  bool _itineraryEnabled = false;
   bool _productEnabled = false;
   bool _saving = false;
+  StreamSubscription<void>? _prefsSub;
 
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
   @override
   void initState() {
     super.initState();
+    _prefsSub = NotificationPreferencesNotifier.instance.changes.listen((_) {
+      _load();
+    });
     _load();
   }
 
   @override
-  void activate() {
-    super.activate();
-    _load();
+  void dispose() {
+    _prefsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
     final uid = _uid;
     if (uid == null) {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
       return;
     }
 
     final productEnabled =
         await ProductNotificationsService.loadEnabled(uid);
-    final enabled = await ItineraryNotificationsService.loadEnabled(uid);
+    final doc = await ItineraryNotificationsService.loadItineraryField(uid);
 
     if (!mounted) return;
     setState(() {
       _productEnabled = productEnabled;
-      _enabled = enabled;
+      _itineraryEnabled = doc;
       _loading = false;
     });
   }
 
   Future<void> _onChanged(bool value) async {
     final uid = _uid;
-    if (uid == null || _saving) return;
+    if (uid == null || _saving || !_productEnabled) return;
 
     setState(() {
       _saving = true;
-      _enabled = value;
+      _itineraryEnabled = value;
     });
 
     await ItineraryNotificationsService.setEnabled(uid: uid, enabled: value);
@@ -67,15 +74,23 @@ class _ItineraryNotificationsCardState extends State<ItineraryNotificationsCard>
     if (!mounted) return;
     setState(() => _saving = false);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          value
-              ? 'Promemoria itinerario attivati su questo dispositivo.'
-              : 'Promemoria itinerario disattivati.',
+    NotificationPreferencesNotifier.instance.notifyChanged();
+
+    if (value) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Promemoria itinerario attivati su questo dispositivo.',
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Promemoria itinerario disattivati.'),
+        ),
+      );
+    }
   }
 
   @override
@@ -89,7 +104,7 @@ class _ItineraryNotificationsCardState extends State<ItineraryNotificationsCard>
       );
     }
 
-    if (_enabled) {
+    if (_itineraryEnabled) {
       return const SizedBox.shrink();
     }
 
@@ -101,10 +116,10 @@ class _ItineraryNotificationsCardState extends State<ItineraryNotificationsCard>
         ),
         subtitle: Text(
           !_productEnabled
-              ? 'Attiva prima le notifiche in Area personale → Notifiche.'
+              ? 'Attiva prima «Ricevi notifiche» in Area personale → Notifiche.'
               : 'Promemoria programmati e avviso 30 min prima delle visite.',
         ),
-        value: _enabled,
+        value: _itineraryEnabled,
         onChanged: _productEnabled && !_saving ? _onChanged : null,
       ),
     );
@@ -124,11 +139,21 @@ class _ItineraryNotificationsConsentHintState
     extends State<ItineraryNotificationsConsentHint> {
   bool _loading = true;
   bool _enabled = false;
+  StreamSubscription<void>? _prefsSub;
 
   @override
   void initState() {
     super.initState();
+    _prefsSub = NotificationPreferencesNotifier.instance.changes.listen((_) {
+      _load();
+    });
     _load();
+  }
+
+  @override
+  void dispose() {
+    _prefsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {

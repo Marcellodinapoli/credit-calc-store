@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'plan_description_list.dart';
+import 'public_detail_cards.dart';
 import 'registration_coupon_field.dart';
 import 'registration_coupon_service.dart';
 import 'registration_plan_options.dart';
@@ -94,6 +96,28 @@ class _RegistrationPlanSelectionPageState
       _couponError = null;
       _couponController.clear();
     });
+  }
+
+  void _openPlanDetail(RegistrationPlanOption plan) {
+    final available = _planAvailable(plan);
+    final couponActive = _appliedCoupon?.isValid == true;
+    final priceLabel = couponActive && !plan.availableNow
+        ? 'Gratis per sempre'
+        : plan.price;
+    final actionLabel = available
+        ? (couponActive && !plan.availableNow ? 'Attiva gratis' : 'Attiva ora')
+        : 'Seleziona piano';
+
+    showSubscriptionPlanDetailCard(
+      context,
+      name: plan.name,
+      price: priceLabel,
+      description: plan.description,
+      badge: plan.id == 'plus' ? 'Consigliato' : null,
+      limitsHeading: _isCompany ? 'Cosa include' : 'Limiti operativi',
+      primaryActionLabel: actionLabel,
+      onPrimaryAction: () => _onPlanTap(plan),
+    );
   }
 
   Future<void> _onPlanTap(RegistrationPlanOption plan) async {
@@ -224,7 +248,7 @@ class _RegistrationPlanSelectionPageState
                       highlighted: plans[i].id == 'plus',
                       available: _planAvailable(plans[i]),
                       couponActive: couponActive,
-                      onTap: () => _onPlanTap(plans[i]),
+                      onTap: () => _openPlanDetail(plans[i]),
                     ),
                   ],
                 ],
@@ -365,6 +389,10 @@ class _PlanCard extends StatelessWidget {
     final priceLabel = couponActive && !plan.availableNow
         ? 'Gratis per sempre'
         : plan.price;
+    final intro = planDescriptionIntro(plan.description);
+    final actionLabel = available
+        ? (couponActive && !plan.availableNow ? 'Attiva gratis' : 'Attiva ora')
+        : 'Seleziona piano';
 
     return Material(
       color: Colors.white,
@@ -399,26 +427,28 @@ class _PlanCard extends StatelessWidget {
                       color: _PlanPageTheme.accent,
                     ),
                   ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right, color: Colors.grey.shade500, size: 20),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                plan.description,
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                  height: 1.4,
-                  fontSize: 14,
+              if (intro.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  intro,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    height: 1.4,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerRight,
                 child: Text(
-                  available
-                      ? (couponActive && !plan.availableNow
-                          ? 'Attiva gratis'
-                          : 'Attiva ora')
-                      : 'Seleziona piano',
+                  actionLabel,
                   style: const TextStyle(
                     color: _PlanPageTheme.accent,
                     fontWeight: FontWeight.w600,
