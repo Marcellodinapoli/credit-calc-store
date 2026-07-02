@@ -330,7 +330,7 @@ class _SectionEditor extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
+          TextFormField(
             key: ValueKey('title-${payload['sectionId']}'),
             initialValue: payload['title']?.toString() ?? '',
             decoration: const InputDecoration(
@@ -340,7 +340,7 @@ class _SectionEditor extends StatelessWidget {
             onChanged: (value) => onChanged({'title': value}),
           ),
           const SizedBox(height: 12),
-          TextField(
+          TextFormField(
             key: ValueKey('subtitle-${payload['sectionId']}'),
             initialValue: payload['subtitle']?.toString() ?? '',
             decoration: const InputDecoration(
@@ -350,7 +350,7 @@ class _SectionEditor extends StatelessWidget {
             onChanged: (value) => onChanged({'subtitle': value}),
           ),
           const SizedBox(height: 12),
-          TextField(
+          TextFormField(
             key: ValueKey('body-${payload['sectionId']}'),
             initialValue: payload['body']?.toString() ?? '',
             minLines: 4,
@@ -363,7 +363,7 @@ class _SectionEditor extends StatelessWidget {
             onChanged: (value) => onChanged({'body': value}),
           ),
           const SizedBox(height: 12),
-          TextField(
+          TextFormField(
             key: ValueKey('highlights-${payload['sectionId']}'),
             initialValue: payload['highlightsText']?.toString() ?? '',
             minLines: 6,

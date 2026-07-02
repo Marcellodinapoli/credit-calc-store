@@ -1,6 +1,5 @@
 import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 import 'auth/auth_gate.dart';
 import 'core/app_localizations_config.dart';
