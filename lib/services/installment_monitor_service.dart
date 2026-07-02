@@ -34,6 +34,7 @@ class InstallmentMonitorPractice {
     required this.creditorId,
     required this.creditorName,
     required this.installments,
+    this.pdrInstallments = const [],
   });
 
   final String groupKey;
@@ -41,8 +42,11 @@ class InstallmentMonitorPractice {
   final String creditorId;
   final String creditorName;
   final List<CommissionEntryRecord> installments;
+  final List<PdrInstallment> pdrInstallments;
 
-  int get totalRates => installments.length;
+  int get totalRates => pdrInstallments.isNotEmpty
+      ? pdrInstallments.length
+      : installments.length;
 }
 
 class InstallmentMonitorConfig {
@@ -175,6 +179,32 @@ abstract final class InstallmentMonitorService {
     return practices;
   }
 
+  static Future<List<InstallmentMonitorPractice>> practicesFromEntriesAsync(
+    List<CommissionEntryRecord> entries,
+  ) async {
+    final practices = practicesFromEntries(entries);
+    if (practices.isEmpty) return practices;
+
+    try {
+      final schedules = await PdrScheduleStorage.instance.listSchedules();
+      final byKey = {for (final schedule in schedules) schedule.groupKey: schedule};
+
+      return [
+        for (final practice in practices)
+          InstallmentMonitorPractice(
+            groupKey: practice.groupKey,
+            companyName: practice.companyName,
+            creditorId: practice.creditorId,
+            creditorName: practice.creditorName,
+            installments: practice.installments,
+            pdrInstallments: byKey[practice.groupKey]?.installments ?? const [],
+          ),
+      ];
+    } catch (_) {
+      return practices;
+    }
+  }
+
   static bool isRateizzoReminder(FieldReminder reminder) =>
       reminder.notes?.startsWith(notesPrefix) == true;
 
@@ -268,10 +298,15 @@ abstract final class InstallmentMonitorService {
     required InstallmentMonitorPlan plan,
   }) async {
     final count = plan.ratesToMonitor.clamp(1, practice.totalRates);
-    final selected = practice.installments.take(count).toList();
     final monitorId = DateTime.now().microsecondsSinceEpoch.toString();
-    final reminderIds = <String>[];
-    final visitIds = <String>[];
+    final tracked = await _createTrackedItems(
+      practice: practice,
+      plan: plan,
+      monitorId: monitorId,
+      count: count,
+    );
+    final reminderIds = tracked.reminderIds;
+    final visitIds = tracked.visitIds;
 
     final configs = await loadConfigs();
     final existing = configs
@@ -290,6 +325,144 @@ abstract final class InstallmentMonitorService {
           c.companyName == practice.companyName,
     );
 
+    final config = InstallmentMonitorConfig(
+      id: monitorId,
+      companyName: practice.companyName,
+      creditorId: practice.creditorId,
+      creditorName: practice.creditorName,
+      ratesMonitored: count,
+      totalRates: practice.totalRates,
+      followUpMode: plan.followUpMode,
+      reminderIds: reminderIds,
+      visitIds: visitIds,
+      commissionEntryIds: tracked.commissionEntryIds,
+      createdAt: DateTime.now(),
+    );
+    configs.add(config);
+    await _saveConfigs(configs);
+    return config;
+  }
+
+  static Future<void> deactivate(String monitorId) async {
+    final configs = await loadConfigs();
+    InstallmentMonitorConfig? config;
+    for (final item in configs) {
+      if (item.id == monitorId) {
+        config = item;
+        break;
+      }
+    }
+    if (config == null) return;
+
+    await _removeTrackedItems(config);
+
+    configs.removeWhere((c) => c.id == monitorId);
+    await _saveConfigs(configs);
+  }
+
+  static Future<InstallmentMonitorConfig> update({
+    required InstallmentMonitorConfig config,
+    required InstallmentMonitorPractice practice,
+    required InstallmentMonitorPlan plan,
+  }) async {
+    await _removeTrackedItems(config);
+
+    final count = plan.ratesToMonitor.clamp(1, practice.totalRates);
+    final tracked = await _createTrackedItems(
+      practice: practice,
+      plan: plan,
+      monitorId: config.id,
+      count: count,
+    );
+
+    final updated = InstallmentMonitorConfig(
+      id: config.id,
+      companyName: practice.companyName,
+      creditorId: practice.creditorId,
+      creditorName: practice.creditorName,
+      ratesMonitored: count,
+      totalRates: practice.totalRates,
+      followUpMode: plan.followUpMode,
+      reminderIds: tracked.reminderIds,
+      visitIds: tracked.visitIds,
+      commissionEntryIds: tracked.commissionEntryIds,
+      createdAt: config.createdAt,
+    );
+
+    final configs = await loadConfigs();
+    final index = configs.indexWhere((c) => c.id == config.id);
+    if (index >= 0) {
+      configs[index] = updated;
+    } else {
+      configs.add(updated);
+    }
+    await _saveConfigs(configs);
+    return updated;
+  }
+
+  static Future<_TrackedMonitorItems> _createTrackedItems({
+    required InstallmentMonitorPractice practice,
+    required InstallmentMonitorPlan plan,
+    required String monitorId,
+    required int count,
+  }) async {
+    final reminderIds = <String>[];
+    final visitIds = <String>[];
+    final commissionEntryIds = <String>[];
+    final linkedEntryId =
+        practice.installments.isNotEmpty ? practice.installments.first.id : '';
+
+    if (practice.pdrInstallments.isNotEmpty) {
+      final selected = practice.pdrInstallments.take(count).toList();
+      for (var i = 0; i < selected.length; i++) {
+        final installment = selected[i];
+        final collectionDate = installment.dueDate;
+        final amount = installment.amount;
+        final dateLabel = CommissionCollectionsHelper.formatDate(collectionDate);
+        final scheduledAt = remindAtForCollection(collectionDate);
+        final rateIndex = installment.index > 0 ? installment.index : i + 1;
+        final notes = _entryNotes(
+          monitorId: monitorId,
+          entryId: linkedEntryId,
+          rateIndex: rateIndex,
+          totalRates: practice.totalRates,
+          dateLabel: dateLabel,
+          amount: amount,
+        );
+
+        if (plan.followUpMode == InstallmentMonitorFollowUpMode.telefonico) {
+          final result = await FieldReminderService.save(
+            title:
+                'Sollecito telefonico: ${practice.companyName} '
+                '(rata $rateIndex/${practice.totalRates})',
+            remindAt: scheduledAt,
+            notes: notes,
+          );
+          reminderIds.add(result.id);
+        } else {
+          final visitId = await FieldVisitService.save(
+            companyName: practice.companyName,
+            address: plan.visitAddress.trim(),
+            scheduledAt: scheduledAt,
+            creditorId: practice.creditorId,
+            creditorName: practice.creditorName,
+            calculationId: linkedEntryId,
+            notes: notes,
+          );
+          visitIds.add(visitId);
+        }
+      }
+      if (linkedEntryId.isNotEmpty) {
+        commissionEntryIds.add(linkedEntryId);
+      }
+      return _TrackedMonitorItems(
+        reminderIds: reminderIds,
+        visitIds: visitIds,
+        commissionEntryIds: commissionEntryIds,
+      );
+    }
+
+    final selected = practice.installments.take(count).toList();
     for (var i = 0; i < selected.length; i++) {
       final entry = selected[i];
       final collectionDate = CommissionCollectionsHelper.entryDate(entry.data);
@@ -331,121 +504,14 @@ abstract final class InstallmentMonitorService {
         );
         visitIds.add(visitId);
       }
+      commissionEntryIds.add(entry.id);
     }
 
-    final config = InstallmentMonitorConfig(
-      id: monitorId,
-      companyName: practice.companyName,
-      creditorId: practice.creditorId,
-      creditorName: practice.creditorName,
-      ratesMonitored: count,
-      totalRates: practice.totalRates,
-      followUpMode: plan.followUpMode,
+    return _TrackedMonitorItems(
       reminderIds: reminderIds,
       visitIds: visitIds,
-      commissionEntryIds: selected.map((e) => e.id).toList(),
-      createdAt: DateTime.now(),
+      commissionEntryIds: commissionEntryIds,
     );
-    configs.add(config);
-    await _saveConfigs(configs);
-    return config;
-  }
-
-  static Future<void> deactivate(String monitorId) async {
-    final configs = await loadConfigs();
-    InstallmentMonitorConfig? config;
-    for (final item in configs) {
-      if (item.id == monitorId) {
-        config = item;
-        break;
-      }
-    }
-    if (config == null) return;
-
-    await _removeTrackedItems(config);
-
-    configs.removeWhere((c) => c.id == monitorId);
-    await _saveConfigs(configs);
-  }
-
-  static Future<InstallmentMonitorConfig> update({
-    required InstallmentMonitorConfig config,
-    required InstallmentMonitorPractice practice,
-    required InstallmentMonitorPlan plan,
-  }) async {
-    await _removeTrackedItems(config);
-
-    final count = plan.ratesToMonitor.clamp(1, practice.totalRates);
-    final selected = practice.installments.take(count).toList();
-    final reminderIds = <String>[];
-    final visitIds = <String>[];
-
-    for (var i = 0; i < selected.length; i++) {
-      final entry = selected[i];
-      final collectionDate = CommissionCollectionsHelper.entryDate(entry.data);
-      if (collectionDate == null) continue;
-
-      final amount = CommissionCollectionsHelper.numField(
-        entry.data,
-        'amountCollected',
-      );
-      final dateLabel = CommissionCollectionsHelper.formatDate(collectionDate);
-      final scheduledAt = remindAtForCollection(collectionDate);
-      final notes = _entryNotes(
-        monitorId: config.id,
-        entryId: entry.id,
-        rateIndex: i + 1,
-        totalRates: count,
-        dateLabel: dateLabel,
-        amount: amount,
-      );
-
-      if (plan.followUpMode == InstallmentMonitorFollowUpMode.telefonico) {
-        final result = await FieldReminderService.save(
-          title:
-              'Sollecito telefonico: ${practice.companyName} '
-              '(rata ${i + 1}/$count)',
-          remindAt: scheduledAt,
-          notes: notes,
-        );
-        reminderIds.add(result.id);
-      } else {
-        final visitId = await FieldVisitService.save(
-          companyName: practice.companyName,
-          address: plan.visitAddress.trim(),
-          scheduledAt: scheduledAt,
-          creditorId: practice.creditorId,
-          creditorName: practice.creditorName,
-          calculationId: entry.id,
-          notes: notes,
-        );
-        visitIds.add(visitId);
-      }
-    }
-
-    final updated = InstallmentMonitorConfig(
-      id: config.id,
-      companyName: practice.companyName,
-      creditorId: practice.creditorId,
-      creditorName: practice.creditorName,
-      ratesMonitored: count,
-      totalRates: practice.totalRates,
-      followUpMode: plan.followUpMode,
-      reminderIds: reminderIds,
-      visitIds: visitIds,
-      commissionEntryIds: selected.map((e) => e.id).toList(),
-      createdAt: config.createdAt,
-    );
-
-    final configs = await loadConfigs();
-    final index = configs.indexWhere((c) => c.id == config.id);
-    if (index >= 0) {
-      configs[index] = updated;
-    } else {
-      configs.add(updated);
-    }
-    await _saveConfigs(configs);
-    return updated;
   }
 
   static InstallmentMonitorConfig? configForPractice(
@@ -460,4 +526,16 @@ abstract final class InstallmentMonitorService {
     }
     return null;
   }
+}
+
+class _TrackedMonitorItems {
+  const _TrackedMonitorItems({
+    required this.reminderIds,
+    required this.visitIds,
+    required this.commissionEntryIds,
+  });
+
+  final List<String> reminderIds;
+  final List<String> visitIds;
+  final List<String> commissionEntryIds;
 }

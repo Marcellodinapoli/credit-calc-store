@@ -521,6 +521,10 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
           ),
         ),
       );
+      if (widget.pendingPlanId != null && widget.autoOpenCommissionExport) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+      }
       return;
     }
 

@@ -4843,6 +4843,11 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
           ),
         ),
       );
+      if (widget.pendingPlanId != null && widget.autoOpenCommissionExport) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        return;
+      }
       final offer = RepaymentPlanHostConfig.offerFollowUpVisit;
       if (offer != null) {
         await offer(

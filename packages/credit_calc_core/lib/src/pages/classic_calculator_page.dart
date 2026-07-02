@@ -408,6 +408,7 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _handoffButton(
             'Sviluppa piano di rientro',
@@ -420,7 +421,7 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
           ),
           const SizedBox(width: 4),
           _handoffButton(
-            'Inserisci in provvigioni',
+            'Inserisci\nin provvigioni',
             _openCommissionEntry,
           ),
         ],
@@ -438,16 +439,18 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
           borderRadius: BorderRadius.circular(4),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-            child: Text(
-              label,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 9,
-                height: 1.15,
-                fontWeight: FontWeight.w600,
+            child: Center(
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  height: 1.15,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),

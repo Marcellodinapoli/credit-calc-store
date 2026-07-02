@@ -1,8 +1,14 @@
 import 'package:credit_calc_core/credit_calc_core.dart' hide DevelopPage;
 import 'package:flutter/material.dart';
 
+import '../../models/field_reminder.dart';
+import '../../models/field_visit.dart';
+import '../../services/field_reminder_service.dart';
+import '../../services/field_visit_service.dart';
+import '../../services/installment_monitor_service.dart';
 import 'building_residents_lookup_page.dart';
 import 'debtor_contact_page.dart';
+import 'installment_monitor_page.dart';
 import 'normative_search_page.dart';
 import 'phone_call_analysis_page.dart';
 
@@ -38,6 +44,11 @@ class DevelopPage extends StatelessWidget {
       icon: Icons.fact_check_outlined,
     ),
     _DevelopMenuItem(
+      title: 'Monitoraggio rata',
+      subtitle: 'Scadenze PDR e collegamento con l\'agenda.',
+      icon: Icons.calendar_month_outlined,
+    ),
+    _DevelopMenuItem(
       title: 'WhatsApp e email',
       subtitle: 'Modelli di messaggio per contattare il debitore.',
       icon: Icons.chat_outlined,
@@ -68,16 +79,25 @@ class DevelopPage extends StatelessWidget {
   static int _backofficeIncassiBadgeCount(List<BackofficePendingPlan> plans) =>
       plans.where((plan) => !plan.hasCommissionExport).length;
 
-  Widget _leadingIcon(_DevelopMenuItem item, int backofficeIncassiBadgeCount) {
-    if (item.title != 'Riscontro backoffice' || backofficeIncassiBadgeCount <= 0) {
+  Widget _leadingIcon(
+    _DevelopMenuItem item, {
+    required int backofficeIncassiBadgeCount,
+    required int rateizzoBadgeCount,
+  }) {
+    int? badgeCount;
+    if (item.title == 'Riscontro backoffice' && backofficeIncassiBadgeCount > 0) {
+      badgeCount = backofficeIncassiBadgeCount;
+    } else if (item.title == 'Monitoraggio rata' && rateizzoBadgeCount > 0) {
+      badgeCount = rateizzoBadgeCount;
+    }
+
+    if (badgeCount == null) {
       return Icon(item.icon);
     }
 
     return Badge(
       isLabelVisible: true,
-      label: Text(
-        backofficeIncassiBadgeCount > 99 ? '99+' : '$backofficeIncassiBadgeCount',
-      ),
+      label: Text(badgeCount > 99 ? '99+' : '$badgeCount'),
       backgroundColor: Colors.red.shade700,
       child: Icon(item.icon),
     );
@@ -95,24 +115,42 @@ class DevelopPage extends StatelessWidget {
             snapshot.data ?? const [],
           );
 
-          return ListView(
-            children: [
-              for (var i = 0; i < _menuItems.length; i++) ...[
-                if (i > 0) const SizedBox(height: 12),
-                Card(
-                  child: ListTile(
-                    leading: _leadingIcon(
-                      _menuItems[i],
-                      backofficeIncassiBadgeCount,
-                    ),
-                    title: Text(_menuItems[i].title),
-                    subtitle: Text(_menuItems[i].subtitle),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _openItem(context, _menuItems[i].title),
-                  ),
-                ),
-              ],
-            ],
+          return StreamBuilder<List<FieldReminder>>(
+            stream: FieldReminderService.watchUpcoming(),
+            builder: (context, remindersSnap) {
+              return StreamBuilder<List<FieldVisit>>(
+                stream: FieldVisitService.watchAllForUser(),
+                builder: (context, visitsSnap) {
+                  final rateizzoBadge =
+                      InstallmentMonitorService.upcomingAlertCount(
+                    reminders: remindersSnap.data ?? const [],
+                    visits: visitsSnap.data ?? const [],
+                  );
+
+                  return ListView(
+                    children: [
+                      for (var i = 0; i < _menuItems.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 12),
+                        Card(
+                          child: ListTile(
+                            leading: _leadingIcon(
+                              _menuItems[i],
+                              backofficeIncassiBadgeCount:
+                                  backofficeIncassiBadgeCount,
+                              rateizzoBadgeCount: rateizzoBadge,
+                            ),
+                            title: Text(_menuItems[i].title),
+                            subtitle: Text(_menuItems[i].subtitle),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => _openItem(context, _menuItems[i].title),
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              );
+            },
           );
         },
       ),
@@ -131,6 +169,8 @@ class DevelopPage extends StatelessWidget {
       );
     } else if (title == 'Riscontro backoffice') {
       page = const BackofficePendingPlansPage();
+    } else if (title == 'Monitoraggio rata') {
+      page = const InstallmentMonitorPage();
     } else if (title == 'WhatsApp e email') {
       page = const DebtorContactPage();
     } else if (title == 'Ricerca per indirizzo') {

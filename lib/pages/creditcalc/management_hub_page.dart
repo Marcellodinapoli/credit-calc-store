@@ -11,7 +11,6 @@ import '../../services/gestione_menu_badge_service.dart';
 import '../../services/installment_monitor_service.dart';
 import '../../widgets/management_section_intro.dart';
 import '../area/personal_area_shell.dart';
-import 'installment_monitor_page.dart';
 import 'itinerary/activities_page.dart';
 import 'itinerary/practice_agenda_page.dart';
 import 'itinerary/reminders_page.dart';
@@ -43,10 +42,6 @@ class ManagementHubPage extends StatelessWidget {
             builder: (context, visitsSnap) {
               final reminders = remindersSnap.data ?? const [];
               final visits = visitsSnap.data ?? const [];
-              final rateizzoBadge = InstallmentMonitorService.upcomingAlertCount(
-                reminders: reminders,
-                visits: visits,
-              );
               final promemoriaBadge =
                   InstallmentMonitorService.badgeCountFromReminders(reminders);
               final appuntamentiBadge =
@@ -56,8 +51,7 @@ class ManagementHubPage extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 children: [
                   const Text(
-                    'Riscontri backoffice, monitoraggio rate, appuntamenti '
-                    'e attività sul territorio.',
+                    'Riscontri backoffice, appuntamenti e attività sul territorio.',
                     style: TextStyle(color: Colors.black54, height: 1.45),
                   ),
                   const SizedBox(height: 16),
@@ -77,31 +71,6 @@ class ManagementHubPage extends StatelessWidget {
                       onTap: () => _open(
                         context,
                         const BackofficePendingPlansPage(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Card(
-                    child: ListTile(
-                      leading: Badge(
-                        isLabelVisible: rateizzoBadge > 0,
-                        label: Text(
-                          rateizzoBadge > 99 ? '99+' : '$rateizzoBadge',
-                        ),
-                        backgroundColor: Colors.red.shade700,
-                        child: const Icon(
-                          Icons.calendar_month_outlined,
-                          color: ProjectColors.area,
-                        ),
-                      ),
-                      title: const Text('Monitoraggio rata'),
-                      subtitle: const Text(
-                        'Scadenze PDR e collegamento con l\'agenda.',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _open(
-                        context,
-                        const InstallmentMonitorPage(personalArea: true),
                       ),
                     ),
                   ),

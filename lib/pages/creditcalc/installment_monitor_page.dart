@@ -213,8 +213,18 @@ class _InstallmentMonitorPageState extends State<InstallmentMonitorPage> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final practices =
-              InstallmentMonitorService.practicesFromEntries(entriesSnap.data!);
+          final practicesFuture =
+              InstallmentMonitorService.practicesFromEntriesAsync(
+            entriesSnap.data!,
+          );
+
+          return FutureBuilder<List<InstallmentMonitorPractice>>(
+            future: practicesFuture,
+            builder: (context, practicesSnap) {
+              if (!practicesSnap.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final practices = practicesSnap.data!;
 
           return StreamBuilder<List<FieldReminder>>(
             stream: FieldReminderService.watchUpcoming(),
@@ -357,6 +367,8 @@ class _InstallmentMonitorPageState extends State<InstallmentMonitorPage> {
                   );
                 },
               );
+            },
+          );
             },
           );
         },
@@ -524,7 +536,9 @@ class _InstallmentMonitorPlanDialogState
               ),
               const SizedBox(height: 12),
               Text(
-                'Rate in provvigioni: ${practice.totalRates}',
+                practice.pdrInstallments.isNotEmpty
+                    ? 'Rate del rateizzo: ${practice.totalRates}'
+                    : 'Rate in provvigioni: ${practice.totalRates}',
                 style: const TextStyle(color: Colors.black54),
               ),
               const SizedBox(height: 16),
