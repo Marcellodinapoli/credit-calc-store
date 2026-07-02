@@ -408,6 +408,8 @@ class LocalDatabaseService {
         continue;
       }
 
+      if (payload['_deleted'] == true) continue;
+
       final incomingMs = record['updatedAtMs'] as int? ?? 0;
       final local = await recordById(collection: collection, id: id);
       if (local != null) {

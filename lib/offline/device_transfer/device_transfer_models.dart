@@ -224,14 +224,16 @@ abstract final class DeviceTransferSyncAdvisor {
       DeviceTransferSyncHint.aligned =>
         'I dispositivi risultano allineati: nessun aggiornamento da trasferire.',
       DeviceTransferSyncHint.youShouldSend =>
-        'Questo dispositivo ha modifiche da inviare. Prepara il pacchetto.',
+        'Questo dispositivo ha dati da condividere. Prepara il pacchetto.',
       DeviceTransferSyncHint.peerShouldSend =>
-        'L\'altro dispositivo ha modifiche più recenti. Attendi l\'invio da lì.',
+        'L\'altro dispositivo ha dati da condividere. Attendi l\'invio da lì, '
+            'oppure sincronizza prima da questo se hai modifiche recenti.',
       DeviceTransferSyncHint.bothHaveChanges =>
-        'Entrambi i dispositivi hanno modifiche. Invia prima da quello con '
-            'più aggiornamenti; dopo la ricezione potrai inviare le restanti.',
+        'Entrambi hanno dati diversi. Sincronizza da questo dispositivo, '
+            'poi ripeti dall\'altro: i dati si integrano senza cancellazioni.',
       DeviceTransferSyncHint.peerEmptyNeedsFull =>
-        'L\'altro dispositivo è vuoto: verrà inviato l\'intero archivio.',
+        'L\'altro dispositivo è vuoto: invia il tuo archivio (verrà aggiunto, '
+            'non sostituisce nulla).',
       DeviceTransferSyncHint.waitingForPeer =>
         'Apri Sincronizza sull\'altro dispositivo con lo stesso account.',
     };

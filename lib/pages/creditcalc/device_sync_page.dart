@@ -238,7 +238,8 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
       return false;
     }
     return _syncHint == DeviceTransferSyncHint.youShouldSend ||
-        _syncHint == DeviceTransferSyncHint.peerEmptyNeedsFull;
+        _syncHint == DeviceTransferSyncHint.peerEmptyNeedsFull ||
+        _syncHint == DeviceTransferSyncHint.bothHaveChanges;
   }
 
   bool get _canRelease =>
@@ -272,8 +273,9 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Trasferimento incrementale: dopo il primo allineamento '
-                  'vengono inviati solo i record modificati.',
+                  'Ogni dispositivo condivide i propri dati: l\'altro li integra '
+                  'senza cancellare i suoi. Ripeti da entrambi per tenere tutto '
+                  'aggiornato.',
                   style: TextStyle(
                     color: Colors.grey.shade700,
                     height: 1.45,
@@ -282,10 +284,14 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                 if (_localState != null && _activeTransfer == null) ...[
                   const SizedBox(height: 16),
                   _InfoCard(
-                    title: 'Stato di questo dispositivo',
+                    title: 'Questo dispositivo',
                     rows: [
                       _InfoRow(
-                        label: 'Modifiche da inviare',
+                        label: 'Record in archivio',
+                        value: '${_localState!.localRecordCount}',
+                      ),
+                      _InfoRow(
+                        label: 'Da condividere',
                         value: '${_localState!.pendingChangeCount}',
                       ),
                       if (_localState!.lastSyncAtMs > 0)
@@ -297,6 +303,22 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                             ),
                           ),
                         ),
+                    ],
+                  ),
+                ],
+                if (_peer != null && _activeTransfer == null) ...[
+                  const SizedBox(height: 12),
+                  _InfoCard(
+                    title: 'Altro dispositivo',
+                    rows: [
+                      _InfoRow(
+                        label: 'Record in archivio',
+                        value: '${_peer!.localRecordCount}',
+                      ),
+                      _InfoRow(
+                        label: 'Da condividere',
+                        value: '${_peer!.pendingChangeCount}',
+                      ),
                     ],
                   ),
                 ],
@@ -380,7 +402,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                         label: 'Tipo',
                         value: _activeTransfer!.isDeltaTransfer
                             ? 'Solo aggiornamenti'
-                            : 'Archivio completo',
+                            : 'Integrazione archivio',
                       ),
                       _InfoRow(
                         label: 'Peso totale',

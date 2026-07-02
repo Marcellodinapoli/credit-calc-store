@@ -1,24 +1,10 @@
-﻿CreditCalc 1.0.18 — versione portable (senza installer)
-========================================================
+﻿CreditCalc 1.0.21 — distribuzione
+================================
 
-File da scaricare / distribuire:
+Versioni conservate in dist: 1.0.19, 1.0.20 (se presenti), 1.0.21 (build corrente).
 
-  dist\CreditCalc-1.0.18-win64.zip
+File da scaricare dopo build GitHub Actions:
+  CreditCalc-1.0.21-Setup.exe          (PC)
+  CreditCalc-1.0.21-android-arm64.apk  (cell)
 
-Dopo l'estrazione, avvia:
-
-  CreditCalc-1.0.18-win64\CreditCalc.exe
-
-Copia sul Desktop:
-
-  C:\Users\271\Desktop\CreditCalc-1.0.18-win64.zip
-
-Nota: CreditCalc.exe va eseguito dalla cartella win64 (contiene DLL e dati).
-Non basta copiare solo l'exe senza il resto della cartella.
-
-Novità 1.0.18:
-- Ricerca per indirizzo: integrazione Pagine Gialle
-- URL esterni corretti (via/civico + città separati)
-- Match migliorato su descrizione elenchi (civico nel testo)
-
-Build: GitHub Actions (commit in corso)
+Versioni <= 1.0.18 rimosse da dist.

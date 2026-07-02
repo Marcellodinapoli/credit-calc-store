@@ -127,11 +127,20 @@ abstract final class DeviceTransferService {
     required DeviceTransferLocalState local,
     DeviceTransferPeerState? peer,
   }) {
-    if (local.neverSynced) return 'full';
-    if (peer == null) return 'delta';
-    if (peer.localRecordCount == 0) return 'full';
-    if (peer.lastSyncAtMs != local.lastSyncAtMs) return 'full';
     return 'delta';
+  }
+
+  /// Quando i dispositivi non condividono lo stesso baseline si inviano tutti i
+  /// record locali: il ricevente li integra senza cancellare i propri.
+  static int resolveSinceMs({
+    required DeviceTransferLocalState local,
+    DeviceTransferPeerState? peer,
+  }) {
+    if (local.neverSynced) return 0;
+    if (peer == null) return local.lastSyncAtMs;
+    if (peer.localRecordCount == 0) return 0;
+    if (peer.lastSyncAtMs != local.lastSyncAtMs) return 0;
+    return local.lastSyncAtMs;
   }
 
   static Future<DeviceTransferSyncHint> adviseSync(String userId) async {
@@ -276,10 +285,14 @@ abstract final class DeviceTransferService {
     final local = await readLocalState(userId);
     final peer = await readPeerState(userId);
     final transferMode = resolveTransferMode(local: local, peer: peer);
+    final sinceMs = resolveSinceMs(local: local, peer: peer);
 
-    if (transferMode == 'delta' && !local.hasPendingChanges) {
+    final db = LocalDatabaseService.instance;
+    final toSend = await db.recordsChangedSince(userId, sinceMs);
+    if (toSend.isEmpty) {
       throw StateError(
-        'Nessun aggiornamento da inviare: i dispositivi risultano già allineati.',
+        'Nessun dato da condividere da questo dispositivo. '
+        'Ricevi prima dall\'altro se ha modifiche.',
       );
     }
 
@@ -287,14 +300,14 @@ abstract final class DeviceTransferService {
       userId: userId,
       status: 'prepared',
       transferMode: transferMode,
-      sinceMs: transferMode == 'delta' ? local.lastSyncAtMs : 0,
+      sinceMs: sinceMs,
     );
     return DeviceTransferPrepareResult(
       recordCount: built.recordCount,
       totalBytes: built.totalBytes,
       companyNames: built.companyNames,
       preparedAt: built.timestamp,
-      isDelta: transferMode == 'delta',
+      isDelta: sinceMs > 0,
       pendingChanges: local.pendingChangeCount,
     );
   }
@@ -355,9 +368,7 @@ abstract final class DeviceTransferService {
     await _deleteRemotePackage(userId);
 
     final db = LocalDatabaseService.instance;
-    final rows = transferMode == 'delta'
-        ? await db.recordsChangedSince(userId, sinceMs)
-        : await db.listAllRecordsForUser(userId);
+    final rows = await db.recordsChangedSince(userId, sinceMs);
     final appMeta = _filterAppMeta(
       await LocalDatabaseService.instance.listAllMeta(),
     );
@@ -373,7 +384,7 @@ abstract final class DeviceTransferService {
       final id = row['id'] as String;
       final payload = Map<String, dynamic>.from(row['payload'] as Map);
       final isDeleted = payload['_deleted'] == true;
-      if (transferMode == 'full' && isDeleted) continue;
+      if (isDeleted) continue;
 
       final company = _readCompanyName(payload);
       if (company != null) {
@@ -548,33 +559,13 @@ abstract final class DeviceTransferService {
     final syncBaselineMs = meta.syncBaselineMs ??
         meta.releasedAtMs ??
         receivedAt.millisecondsSinceEpoch;
-    final int applied;
-
-    if (meta.isFullTransfer) {
-      await LocalDatabaseService.instance.clearUserData(userId);
-      await LocalDatabaseService.instance.clearAppMeta(
-        exceptKeys: const {
-          'local_cipher_key_v1',
-          'local_cipher_key_history_v1',
-        },
-      );
-      await LocalDatabaseService.instance.importTransferRecords(
-        userId: userId,
-        records: imported,
-      );
-      applied = imported.length;
-      debugPrint(
-        'DeviceTransferService: importati $applied record (full) per $userId',
-      );
-    } else {
-      applied = await LocalDatabaseService.instance.mergeTransferRecords(
-        userId: userId,
-        records: imported,
-      );
-      debugPrint(
-        'DeviceTransferService: uniti $applied record (delta) per $userId',
-      );
-    }
+    final applied = await LocalDatabaseService.instance.mergeTransferRecords(
+      userId: userId,
+      records: imported,
+    );
+    debugPrint(
+      'DeviceTransferService: integrati $applied record per $userId',
+    );
 
     for (final entry in appMeta.entries) {
       await LocalDatabaseService.instance.setMeta(entry.key, entry.value);
