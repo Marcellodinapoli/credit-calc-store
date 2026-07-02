@@ -4,6 +4,7 @@ import 'package:credit_calc_core/credit_calc_core.dart'
     hide CommissionsPage, CreditorsPage, DevelopPage;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../auth/biometric_lock_gate.dart';
 import '../core/dimensions.dart';
@@ -477,22 +478,47 @@ class _BrandTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(
-        children: const [
-          TextSpan(
-            text: 'Credit',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-          ),
-          TextSpan(
-            text: 'Calc',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: ProjectColors.calc,
+    return FutureBuilder<PackageInfo>(
+      future: DesktopAppUpdateButton.packageInfoFuture,
+      builder: (context, snap) {
+        final version = snap.data?.version;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text.rich(
+              TextSpan(
+                children: const [
+                  TextSpan(
+                    text: 'Credit',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                  TextSpan(
+                    text: 'Calc',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: ProjectColors.calc,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+            if (version != null) ...[
+              const SizedBox(width: 8),
+              Text(
+                'v$version',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }

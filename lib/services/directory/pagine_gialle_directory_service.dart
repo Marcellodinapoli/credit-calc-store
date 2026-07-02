@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../models/building_resident_entry.dart';
 import '../../utils/building_residents_address_util.dart';
+import '../../utils/directory_web_uri_util.dart';
 import 'directory_html_utils.dart';
 import 'pagine_gialle_listing_parser.dart';
 
@@ -27,16 +28,7 @@ abstract final class PagineGialleDirectoryService {
       if (response.statusCode != 200) return [];
 
       final body = utf8.decode(response.bodyBytes, allowMalformed: true);
-      final listings = PagineGialleListingParser.parseListings(body);
-      return listings
-          .where(
-            (entry) => BuildingResidentsAddressUtil.matchesListingAddress(
-              query,
-              entry.address,
-              extraText: entry.category,
-            ),
-          )
-          .toList();
+      return PagineGialleListingParser.parseListings(body);
     } catch (e, st) {
       debugPrint('PagineGialleDirectoryService: $e\n$st');
       return [];
@@ -46,17 +38,6 @@ abstract final class PagineGialleDirectoryService {
   static Uri searchUri(String address) => _searchUri(address.trim());
 
   static Uri _searchUri(String query) {
-    final parts = BuildingResidentsAddressUtil.splitForDirectorySearch(query);
-    final street = parts.streetQuery.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (parts.cityQuery != null && parts.cityQuery!.isNotEmpty) {
-      return Uri.https(
-        'www.paginegialle.it',
-        '/ricerca/${Uri.encodeComponent(street)}/${Uri.encodeComponent(parts.cityQuery!)}',
-      );
-    }
-    return Uri.https(
-      'www.paginegialle.it',
-      '/ricerca/${Uri.encodeComponent(query)}',
-    );
+    return DirectoryWebUriUtil.pagineGialleRicerca(query);
   }
 }

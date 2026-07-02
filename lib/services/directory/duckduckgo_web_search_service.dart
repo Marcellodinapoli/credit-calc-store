@@ -110,11 +110,14 @@ abstract final class DuckDuckGoWebSearchService {
 
       if (!_isRelevant(queryAddress, combined, url)) continue;
 
-      final extractedAddress = _extractAddress(cleanSnippet);
-      if (extractedAddress == null) continue;
+      final extractedAddress = _extractAddress(cleanSnippet) ??
+          _extractAddress(combined) ??
+          BuildingResidentsAddressUtil.stripCivicNumber(queryAddress);
+      if (extractedAddress.isEmpty) continue;
       if (!BuildingResidentsAddressUtil.matchesListingAddress(
         queryAddress,
         extractedAddress,
+        strict: false,
       )) {
         continue;
       }
@@ -148,9 +151,14 @@ abstract final class DuckDuckGoWebSearchService {
       return BuildingResidentsAddressUtil.matchesListingAddress(
         queryAddress,
         extracted,
+        strict: false,
       );
     }
-    return BuildingResidentsAddressUtil.matchesListingAddress(queryAddress, text);
+    return BuildingResidentsAddressUtil.matchesListingAddress(
+      queryAddress,
+      text,
+      strict: false,
+    );
   }
 
   static String _extractDisplayName(String title, String snippet) {
@@ -167,11 +175,16 @@ abstract final class DuckDuckGoWebSearchService {
   }
 
   static String? _extractAddress(String snippet) {
-    final match = RegExp(
+    final withCivic = RegExp(
       r'((?:Via|Viale|Piazza|Corso|Largo|Vicolo|Strada|Frazione|Località)[^.,\n]{3,80}\d+[a-zA-Z]?)',
       caseSensitive: false,
     ).firstMatch(snippet);
-    if (match == null) return null;
-    return match.group(1)!.trim();
+    if (withCivic != null) return withCivic.group(1)!.trim();
+
+    final withoutCivic = RegExp(
+      r'((?:Via|Viale|Piazza|Corso|Largo|Vicolo|Strada|Frazione|Località)[^.,\n]{3,60})',
+      caseSensitive: false,
+    ).firstMatch(snippet);
+    return withoutCivic?.group(1)?.trim();
   }
 }

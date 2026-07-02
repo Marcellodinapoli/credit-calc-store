@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../offline/device_transfer/device_transfer_models.dart';
 import '../../offline/device_transfer/device_transfer_service.dart';
@@ -188,6 +189,26 @@ class _CreditCalcSettingsPageState extends State<CreditCalcSettingsPage> {
                     height: 1.45,
                     fontSize: 13,
                   ),
+                ),
+                const SizedBox(height: 24),
+                FutureBuilder<PackageInfo>(
+                  future: PackageInfo.fromPlatform(),
+                  builder: (context, snap) {
+                    final version = snap.data?.version ?? '…';
+                    final build = snap.data?.buildNumber;
+                    final label = build == null || build.isEmpty
+                        ? 'v$version'
+                        : 'v$version ($build)';
+                    return Center(
+                      child: Text(
+                        'Versione installata: $label',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

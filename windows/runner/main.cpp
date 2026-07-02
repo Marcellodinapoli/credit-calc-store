@@ -2,6 +2,8 @@
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 
+#include <string>
+
 #include "flutter_window.h"
 #include "utils.h"
 
@@ -28,7 +30,16 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Larghezza tipo Calcolatrice Windows, ~20% più ampia della base 322×660.
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(386, 792);
-  if (!window.Create(L"CreditCalc", origin, size)) {
+  std::wstring window_title = L"CreditCalc v";
+#ifdef FLUTTER_VERSION
+  {
+    const std::string version = FLUTTER_VERSION;
+    window_title.append(version.begin(), version.end());
+  }
+#else
+  window_title += L"1.0.0";
+#endif
+  if (!window.Create(window_title.c_str(), origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

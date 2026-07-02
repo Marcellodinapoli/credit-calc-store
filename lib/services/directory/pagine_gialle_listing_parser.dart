@@ -79,10 +79,16 @@ abstract final class PagineGialleListingParser {
   }
 
   static String? _extractAddressFromText(String text) {
-    final match = RegExp(
+    final withCivic = RegExp(
       r'((?:Via|Viale|Piazza|Corso|Largo|Vicolo|Strada|Frazione|Località)[^.,\n]{3,80}\d+[a-zA-Z]?)',
       caseSensitive: false,
     ).firstMatch(text);
-    return match?.group(1)?.trim();
+    if (withCivic != null) return withCivic.group(1)!.trim();
+
+    final withoutCivic = RegExp(
+      r'((?:Via|Viale|Piazza|Corso|Largo|Vicolo|Strada|Frazione|Località)[^.,\n]{3,60})',
+      caseSensitive: false,
+    ).firstMatch(text);
+    return withoutCivic?.group(1)?.trim();
   }
 }

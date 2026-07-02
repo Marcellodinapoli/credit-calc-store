@@ -76,7 +76,53 @@ abstract final class BuildingResidentsAddressUtil {
     return (streetQuery: street, cityQuery: city);
   }
 
+  /// Varianti di ricerca: completa, senza civico, solo via + città.
+  static List<String> searchVariants(String address) {
+    final trimmed = address.trim();
+    if (trimmed.isEmpty) return const [];
+
+    final variants = <String>{trimmed};
+
+    final withoutCivic = stripCivicNumber(trimmed);
+    if (withoutCivic.isNotEmpty) variants.add(withoutCivic);
+
+    final parts = splitForDirectorySearch(trimmed);
+    if (parts.cityQuery != null && parts.cityQuery!.isNotEmpty) {
+      final streetOnly = stripCivicNumber(parts.streetQuery);
+      if (streetOnly.isNotEmpty) {
+        variants.add('$streetOnly, ${parts.cityQuery}');
+        variants.add('$streetOnly ${parts.cityQuery}');
+      }
+      variants.add(parts.cityQuery!);
+    }
+
+    return variants.toList();
+  }
+
+  static String stripCivicNumber(String address) {
+    var result = address.trim();
+    result = result.replaceAll(
+      RegExp(r'\b(n\.?|n°|civico)\s*\d+[a-zA-Z]?\b', caseSensitive: false),
+      ' ',
+    );
+    result = result.replaceAll(
+      RegExp(r',\s*\d+[a-zA-Z]?\b'),
+      '',
+    );
+    result = result.replaceAll(
+      RegExp(r'\b\d+[a-zA-Z]?\b(?=\s*,)'),
+      '',
+    );
+    result = result.replaceAll(RegExp(r'\s+'), ' ').trim();
+    result = result.replaceAll(RegExp(r',\s*,+'), ',');
+    result = result.replaceAll(RegExp(r'^[,\s-]+|[,\s-]+$'), '').trim();
+    return result;
+  }
+
   /// Parametri query per /ricerca su portali ItaliaOnline.
+  ///
+  /// [tab] seleziona il filtro PB (es. `indirizzo`, `privati`, `aziende`).
+  /// Via/civico in [qs], città in [dv]: così il sito apre già col tipo giusto.
   static Map<String, String> italiaOnlineQueryParams(
     String address, {
     String tab = 'indirizzo',
@@ -85,31 +131,35 @@ abstract final class BuildingResidentsAddressUtil {
     final parts = splitForDirectorySearch(trimmed);
     final params = <String, String>{'tab': tab};
 
-    if (tab == 'indirizzo') {
-      // Tab indirizzo: testo completo (via, civico, città) nel campo di ricerca.
+    final street = parts.streetQuery.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (street.isNotEmpty) {
+      params['qs'] = street;
+    } else if (trimmed.isNotEmpty) {
       params['qs'] = trimmed;
-      if (parts.cityQuery != null && parts.cityQuery!.isNotEmpty) {
-        params['dv'] = parts.cityQuery!;
-      }
-      return params;
     }
 
-    if (parts.cityQuery != null && parts.cityQuery!.isNotEmpty) {
-      params['qs'] = parts.streetQuery;
-      params['dv'] = parts.cityQuery!;
-    } else {
-      params['qs'] = parts.streetQuery;
+    final city = parts.cityQuery?.trim();
+    if (city != null && city.isNotEmpty) {
+      params['dv'] = city;
     }
+
     return params;
   }
 
   /// Query testuale per motori web (Bing, Google).
   static String webSearchQuery(String address) {
-    final parts = splitForDirectorySearch(address);
-    if (parts.cityQuery != null && parts.cityQuery!.isNotEmpty) {
-      return '"${parts.streetQuery}" ${parts.cityQuery} telefono elenco';
+    final parts = splitForDirectorySearch(address.trim());
+    final street = parts.streetQuery.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final city = parts.cityQuery?.trim();
+
+    if (city != null && city.isNotEmpty) {
+      if (street.isNotEmpty) {
+        return '"$street" $city telefono elenco privati indirizzo';
+      }
+      return '$city telefono elenco privati indirizzo';
     }
-    return '"${address.trim()}" telefono elenco';
+
+    return '"${address.trim()}" telefono elenco privati indirizzo';
   }
 
   static String normalize(String raw) {
@@ -167,10 +217,7 @@ abstract final class BuildingResidentsAddressUtil {
   }
 
   static List<String> streetTokens(String address) {
-    final withoutCivic = address.replaceAll(
-      RegExp(r'\b(n\.?|n°|civico)\s*\d+[a-zA-Z]?\b', caseSensitive: false),
-      ' ',
-    );
+    final withoutCivic = stripCivicNumber(address);
     return normalize(withoutCivic)
         .split(RegExp(r'[,\s/]+'))
         .where((w) => w.length > 2 && !RegExp(r'^\d').hasMatch(w))
@@ -190,20 +237,35 @@ abstract final class BuildingResidentsAddressUtil {
     return matchesListingAddress(query, candidate);
   }
 
-  /// Filtro rigoroso: via, civico e città nella riga indirizzo o nel testo descrittivo.
+  /// Filtro elenco: rigoroso (civico se presente) oppure flessibile.
   static bool matchesListingAddress(
     String query,
     String listingAddress, {
     String? extraText,
+    bool strict = true,
   }) {
-    if (_matchesListingAddressCore(query, listingAddress)) return true;
+    if (_matchesListingAddressCore(
+      query,
+      listingAddress,
+      strict: strict,
+    )) {
+      return true;
+    }
     if (extraText != null && extraText.trim().isNotEmpty) {
-      return _matchesListingAddressCore(query, extraText);
+      return _matchesListingAddressCore(
+        query,
+        extraText,
+        strict: strict,
+      );
     }
     return false;
   }
 
-  static bool _matchesListingAddressCore(String query, String text) {
+  static bool _matchesListingAddressCore(
+    String query,
+    String text, {
+    required bool strict,
+  }) {
     final candidate = text.trim();
     if (candidate.isEmpty) return false;
 
@@ -212,24 +274,67 @@ abstract final class BuildingResidentsAddressUtil {
 
     final city = extractCity(query);
     final civic = extractCivicNumber(query);
-    if (civic != null && !_containsCivic(normalizedCandidate, civic)) {
-      return false;
-    }
-
     final streetNames = streetNameTokens(query);
+
     if (streetNames.isEmpty) {
+      final normalizedQuery = normalize(stripCivicNumber(query));
+      if (normalizedQuery.length >= 3 &&
+          normalizedCandidate.contains(normalizedQuery)) {
+        return true;
+      }
+      if (city != null &&
+          city.length >= 3 &&
+          normalizedCandidate.contains(city)) {
+        return true;
+      }
       return normalizedCandidate.contains(normalize(query));
     }
 
-    final streetOk =
-        streetNames.every((token) => normalizedCandidate.contains(token));
-    if (!streetOk) return false;
+    final matchedTokens = streetNames
+        .where((token) => normalizedCandidate.contains(token))
+        .length;
 
-    if (city != null && city.length >= 3 && normalizedCandidate.contains(city)) {
-      return true;
+    if (strict) {
+      if (matchedTokens < streetNames.length) return false;
+
+      if (civic != null && !_containsCivic(normalizedCandidate, civic)) {
+        return false;
+      }
+
+      if (city != null && city.length >= 3) {
+        return normalizedCandidate.contains(city);
+      }
+
+      return matchedTokens == streetNames.length;
     }
 
-    return civic != null;
+    // Flessibile: almeno un token di via + città se nota; civico facoltativo.
+    if (matchedTokens == 0) return false;
+
+    if (city != null && city.length >= 3) {
+      return normalizedCandidate.contains(city);
+    }
+
+    return true;
+  }
+
+  /// Ultimo filtro per risultati restituiti dagli elenchi sulla stessa città.
+  static bool matchesDirectoryAreaResult(
+    String query,
+    String listingAddress, {
+    String? extraText,
+  }) {
+    final city = extractCity(query);
+    final haystack = normalize(
+      '$listingAddress ${extraText ?? ''}',
+    );
+    if (haystack.length < 5) return false;
+    if (city != null && city.length >= 3) {
+      return haystack.contains(city);
+    }
+    final streetNames = streetNameTokens(query);
+    if (streetNames.isEmpty) return true;
+    return streetNames.any((token) => haystack.contains(token));
   }
 
   static bool _containsCivic(String text, String civic) {

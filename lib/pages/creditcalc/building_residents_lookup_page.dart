@@ -33,8 +33,8 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
 
   Future<void> _search() async {
     final address = _addressCtrl.text.trim();
-    if (address.length < 5) {
-      setState(() => _error = 'Inserisci via, civico e città.');
+    if (address.length < 3) {
+      setState(() => _error = 'Inserisci almeno via e città (civico facoltativo).');
       return;
     }
 
@@ -62,8 +62,8 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
 
   Future<void> _openUri(Uri Function(String) builder) async {
     final address = (_result?.queryAddress ?? _addressCtrl.text).trim();
-    if (address.length < 5) {
-      setState(() => _error = 'Inserisci via, civico e città prima di aprire il sito.');
+    if (address.length < 3) {
+      setState(() => _error = 'Inserisci almeno via e città prima di aprire il sito.');
       return;
     }
     await launchUrl(
@@ -83,7 +83,7 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
           padding: const EdgeInsets.all(16),
           children: [
               Text(
-                'Inserisci via, numero civico e città. CreditCalc consulta '
+                'Inserisci via e città (il numero civico è facoltativo). CreditCalc consulta '
                 'Pagine Bianche, Pagine Gialle, Telextra (1188) e altri '
                 'motori web pubblici (DuckDuckGo, Bing) per trovare nominativi '
                 'collegati all\'indirizzo. Non vengono usati dati delle tue pratiche.',
@@ -103,8 +103,8 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
               const SizedBox(height: 20),
               AddressFieldWithScan(
                 controller: _addressCtrl,
-                labelText: 'Indirizzo (via, civico, città)',
-                hintText: 'Es. Via Roma 10, 80100 Napoli',
+                labelText: 'Indirizzo (via e città, civico facoltativo)',
+                hintText: 'Es. Via Roma, Napoli oppure Via Roma 10, Napoli',
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
@@ -124,7 +124,7 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
                               BuildingResidentsLookupService.pagineBiancheWebUri,
                             ),
                     icon: const Icon(Icons.open_in_new, size: 18),
-                    label: const Text('Pagine Bianche'),
+                    label: const Text('Pagine Bianche (indirizzo)'),
                   ),
                   OutlinedButton.icon(
                     onPressed: _loading
@@ -140,7 +140,7 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
                         ? null
                         : () => _openUri(TelextraDirectoryService.webSearchUri),
                     icon: const Icon(Icons.open_in_new, size: 18),
-                    label: const Text('1188 / Telextra'),
+                    label: const Text('1188 (indirizzo)'),
                   ),
                   OutlinedButton.icon(
                     onPressed: _loading

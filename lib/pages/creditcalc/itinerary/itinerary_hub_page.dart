@@ -7,6 +7,7 @@ import '../../../services/field_visit_service.dart';
 import '../../../services/installment_monitor_service.dart';
 import '../../../widgets/itinerary_day_summary_card.dart';
 import '../../../widgets/itinerary_notifications_card.dart';
+import '../installment_monitor_page.dart';
 import 'activities_page.dart';
 import 'itinerary_page_shell.dart';
 import 'practice_agenda_page.dart';
@@ -44,6 +45,48 @@ class ItineraryHubPage extends StatelessWidget {
           const SizedBox(height: 16),
           const ItineraryNotificationsCard(),
           const SizedBox(height: 16),
+          StreamBuilder<List<FieldReminder>>(
+            stream: FieldReminderService.watchUpcoming(),
+            builder: (context, remindersSnap) {
+              return StreamBuilder<List<FieldVisit>>(
+                stream: FieldVisitService.watchAllForUser(),
+                builder: (context, visitsSnap) {
+                  final reminders = remindersSnap.data ?? const [];
+                  final visits = visitsSnap.data ?? const [];
+                  final rateizzoBadge =
+                      InstallmentMonitorService.upcomingAlertCount(
+                    reminders: reminders,
+                    visits: visits,
+                  );
+                  return Card(
+                    child: ListTile(
+                      leading: Badge(
+                        isLabelVisible: rateizzoBadge > 0,
+                        label: Text(
+                          rateizzoBadge > 99 ? '99+' : '$rateizzoBadge',
+                        ),
+                        backgroundColor: Colors.red.shade700,
+                        child: const Icon(
+                          Icons.calendar_month_outlined,
+                          color: Color(0xFF00B0FF),
+                        ),
+                      ),
+                      title: const Text('Monitoraggio rata'),
+                      subtitle: const Text(
+                        'Scadenze PDR e collegamento con l\'agenda.',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _open(
+                        context,
+                        InstallmentMonitorPage(personalArea: personalArea),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+          const SizedBox(height: 12),
           Card(
             child: StreamBuilder<List<FieldVisit>>(
               stream: FieldVisitService.watchAllForUser(),

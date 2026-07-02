@@ -1,4 +1,4 @@
-﻿import 'package:credit_calc_core/credit_calc_core.dart' hide DevelopPage;
+import 'package:credit_calc_core/credit_calc_core.dart' hide DevelopPage;
 import 'package:flutter/material.dart';
 
 import 'building_residents_lookup_page.dart';
@@ -33,6 +33,11 @@ class DevelopPage extends StatelessWidget {
       icon: Icons.handshake_outlined,
     ),
     _DevelopMenuItem(
+      title: 'Riscontro backoffice',
+      subtitle: 'Esiti e piani in attesa di valutazione dal backoffice.',
+      icon: Icons.fact_check_outlined,
+    ),
+    _DevelopMenuItem(
       title: 'WhatsApp e email',
       subtitle: 'Modelli di messaggio per contattare il debitore.',
       icon: Icons.chat_outlined,
@@ -60,26 +65,56 @@ class DevelopPage extends StatelessWidget {
     ),
   ];
 
+  static int _backofficeIncassiBadgeCount(List<BackofficePendingPlan> plans) =>
+      plans.where((plan) => !plan.hasCommissionExport).length;
+
+  Widget _leadingIcon(_DevelopMenuItem item, int backofficeIncassiBadgeCount) {
+    if (item.title != 'Riscontro backoffice' || backofficeIncassiBadgeCount <= 0) {
+      return Icon(item.icon);
+    }
+
+    return Badge(
+      isLabelVisible: true,
+      label: Text(
+        backofficeIncassiBadgeCount > 99 ? '99+' : '$backofficeIncassiBadgeCount',
+      ),
+      backgroundColor: Colors.red.shade700,
+      child: Icon(item.icon),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return wrapCreditCalcPage(
       pageTitle: 'Sviluppa',
       current: CreditCalcNavItem.develop,
-      body: ListView(
-        children: [
-          for (var i = 0; i < _menuItems.length; i++) ...[
-            if (i > 0) const SizedBox(height: 12),
-            Card(
-              child: ListTile(
-                leading: Icon(_menuItems[i].icon),
-                title: Text(_menuItems[i].title),
-                subtitle: Text(_menuItems[i].subtitle),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _openItem(context, _menuItems[i].title),
-              ),
-            ),
-          ],
-        ],
+      body: StreamBuilder<List<BackofficePendingPlan>>(
+        stream: BackofficePendingPlanService.watchAll(),
+        builder: (context, snapshot) {
+          final backofficeIncassiBadgeCount = _backofficeIncassiBadgeCount(
+            snapshot.data ?? const [],
+          );
+
+          return ListView(
+            children: [
+              for (var i = 0; i < _menuItems.length; i++) ...[
+                if (i > 0) const SizedBox(height: 12),
+                Card(
+                  child: ListTile(
+                    leading: _leadingIcon(
+                      _menuItems[i],
+                      backofficeIncassiBadgeCount,
+                    ),
+                    title: Text(_menuItems[i].title),
+                    subtitle: Text(_menuItems[i].subtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _openItem(context, _menuItems[i].title),
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -94,6 +129,8 @@ class DevelopPage extends StatelessWidget {
       page = BalanceWriteOffPage(
         key: ValueKey(DateTime.now().microsecondsSinceEpoch),
       );
+    } else if (title == 'Riscontro backoffice') {
+      page = const BackofficePendingPlansPage();
     } else if (title == 'WhatsApp e email') {
       page = const DebtorContactPage();
     } else if (title == 'Ricerca per indirizzo') {

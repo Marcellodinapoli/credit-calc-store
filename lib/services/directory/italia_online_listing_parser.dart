@@ -1,6 +1,6 @@
 import '../../models/building_resident_entry.dart';
-import '../../utils/building_residents_address_util.dart';
 import 'directory_html_utils.dart';
+import 'pagine_gialle_listing_parser.dart';
 
 /// Parser condiviso per elenchi ItaliaOnline (Pagine Bianche e siti affini).
 abstract final class ItaliaOnlineListingParser {
@@ -9,8 +9,40 @@ abstract final class ItaliaOnlineListingParser {
     required String source,
     required String queryAddress,
   }) {
+    final out = <BuildingResidentEntry>[];
+    out.addAll(
+      _parseListElementBlocks(
+        html: html,
+        source: source,
+        queryAddress: queryAddress,
+      ),
+    );
+
+    if (out.isEmpty && html.contains('search-itm card-listing')) {
+      final pgEntries = PagineGialleListingParser.parseListings(html);
+      for (final entry in pgEntries) {
+        out.add(
+          BuildingResidentEntry(
+            displayName: entry.displayName,
+            address: entry.address,
+            source: source,
+            phone: entry.phone,
+            category: entry.category,
+          ),
+        );
+      }
+    }
+
+    return out;
+  }
+
+  static List<BuildingResidentEntry> _parseListElementBlocks({
+    required String html,
+    required String source,
+    required String queryAddress,
+  }) {
     final sections = RegExp(
-      r'<section class="list-element[^"]*"[^>]*>(.*?)</section>',
+      r'<(?:section|div|article)\s+class="list-element[^"]*"[^>]*>(.*?)</(?:section|div|article)>',
       dotAll: true,
     ).allMatches(html);
 
@@ -52,16 +84,6 @@ abstract final class ItaliaOnlineListingParser {
       final category = DirectoryHtmlUtils.firstMatch(block, [
         RegExp(r'class="list-element__category[^"]*"[^>]*>([^<]+)'),
       ]);
-
-      if (!BuildingResidentsAddressUtil.matchesListingAddress(
-        queryAddress,
-        cleanAddress,
-        extraText: category != null
-            ? DirectoryHtmlUtils.decodeHtmlEntities(category)
-            : null,
-      )) {
-        continue;
-      }
 
       final phone = DirectoryHtmlUtils.firstMatch(block, [
         RegExp(r'class="[^"]*phone-numbers__number[^"]*"[^>]*>([^<]+)'),

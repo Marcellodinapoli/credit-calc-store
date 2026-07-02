@@ -24,18 +24,22 @@ abstract final class BuildingResidentsLookupService {
 
   static Future<BuildingResidentsLookupResult> lookup(String address) async {
     final query = address.trim();
-    if (query.length < 5) {
-      throw ArgumentError('Inserisci un indirizzo più completo (via, civico e città).');
+    if (query.length < 3) {
+      throw ArgumentError(
+        'Inserisci almeno via e città (il numero civico è facoltativo).',
+      );
     }
 
+    final searchQueries = BuildingResidentsAddressUtil.searchVariants(query);
+
     final results = await Future.wait([
-      PagineBiancheDirectoryService.searchByAddress(query, tab: 'indirizzo'),
-      PagineBiancheDirectoryService.searchByAddress(query, tab: 'privati'),
-      PagineBiancheDirectoryService.searchByAddress(query, tab: 'aziende'),
-      PagineGialleDirectoryService.searchByAddress(query),
-      TelextraDirectoryService.searchAddress(query),
-      DuckDuckGoWebSearchService.searchAddress(query),
-      BingWebSearchService.searchAddress(query),
+      _searchPb(searchQueries, 'indirizzo'),
+      _searchPb(searchQueries, 'privati'),
+      _searchPb(searchQueries, 'aziende'),
+      _searchPg(searchQueries),
+      _searchTelextra(searchQueries),
+      _searchDdg(searchQueries),
+      _searchBing(searchQueries),
     ]);
 
     final pbIndirizzo = _filterRelevant(query, results[0]);
@@ -99,19 +103,97 @@ abstract final class BuildingResidentsLookupService {
     );
   }
 
+  static Future<List<BuildingResidentEntry>> _searchPb(
+    List<String> queries,
+    String tab,
+  ) async {
+    for (final query in queries) {
+      final hits =
+          await PagineBiancheDirectoryService.searchByAddress(query, tab: tab);
+      if (hits.isNotEmpty) return hits;
+    }
+    return [];
+  }
+
+  static Future<List<BuildingResidentEntry>> _searchPg(
+    List<String> queries,
+  ) async {
+    for (final query in queries) {
+      final hits = await PagineGialleDirectoryService.searchByAddress(query);
+      if (hits.isNotEmpty) return hits;
+    }
+    return [];
+  }
+
+  static Future<List<BuildingResidentEntry>> _searchTelextra(
+    List<String> queries,
+  ) async {
+    for (final query in queries) {
+      final hits = await TelextraDirectoryService.searchAddress(query);
+      if (hits.isNotEmpty) return hits;
+    }
+    return [];
+  }
+
+  static Future<List<BuildingResidentEntry>> _searchDdg(
+    List<String> queries,
+  ) async {
+    final out = <BuildingResidentEntry>[];
+    for (final query in queries) {
+      out.addAll(await DuckDuckGoWebSearchService.searchAddress(query));
+    }
+    return out;
+  }
+
+  static Future<List<BuildingResidentEntry>> _searchBing(
+    List<String> queries,
+  ) async {
+    for (final query in queries) {
+      final hits = await BingWebSearchService.searchAddress(query);
+      if (hits.isNotEmpty) return hits;
+    }
+    return [];
+  }
+
   static List<BuildingResidentEntry> _filterRelevant(
     String query,
     List<BuildingResidentEntry> entries,
   ) {
-    final filtered = entries
+    List<BuildingResidentEntry> filtered = entries
         .where(
           (entry) => BuildingResidentsAddressUtil.matchesListingAddress(
             query,
             entry.address,
             extraText: entry.category,
+            strict: true,
           ),
         )
         .toList();
+
+    if (filtered.isEmpty) {
+      filtered = entries
+          .where(
+            (entry) => BuildingResidentsAddressUtil.matchesListingAddress(
+              query,
+              entry.address,
+              extraText: entry.category,
+              strict: false,
+            ),
+          )
+          .toList();
+    }
+
+    if (filtered.isEmpty) {
+      filtered = entries
+          .where(
+            (entry) => BuildingResidentsAddressUtil.matchesDirectoryAreaResult(
+              query,
+              entry.address,
+              extraText: entry.category,
+            ),
+          )
+          .toList();
+    }
 
     filtered.sort((a, b) {
       final aHasPhone = a.phone != null && a.phone!.length >= 9;

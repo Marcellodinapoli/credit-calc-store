@@ -98,7 +98,7 @@ Get-ChildItem $extractTmp -Recurse -Directory -Filter "*-win64" | ForEach-Object
 Remove-Item $extractTmp -Recurse -Force -ErrorAction SilentlyContinue
 
 if (-not (Test-Path $setupPath)) {
-    throw "Download completato ma Setup.exe non trovato nell'artifact."
+    throw 'Download completato ma Setup.exe non trovato nell''artifact.'
 }
 
 $readme = @(
