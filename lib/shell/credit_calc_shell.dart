@@ -324,7 +324,6 @@ class _DesktopShell extends StatelessWidget {
                   ),
                 ),
                 Expanded(child: child),
-                const DesktopAppVersionFooter(),
               ],
             ),
           ),

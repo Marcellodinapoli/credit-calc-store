@@ -3,31 +3,14 @@ import 'package:flutter/material.dart';
 
 import 'auth/auth_gate.dart';
 import 'core/app_localizations_config.dart';
-import 'widgets/desktop_app_update_button.dart';
 
-class CreditCalcApp extends StatefulWidget {
+class CreditCalcApp extends StatelessWidget {
   const CreditCalcApp({super.key});
-
-  @override
-  State<CreditCalcApp> createState() => _CreditCalcAppState();
-}
-
-class _CreditCalcAppState extends State<CreditCalcApp> {
-  String? _windowTitle;
-
-  @override
-  void initState() {
-    super.initState();
-    DesktopAppUpdateButton.packageInfoFuture.then((info) {
-      if (!mounted) return;
-      setState(() => _windowTitle = 'CreditCalc v${info.version}');
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: _windowTitle ?? 'CreditCalc',
+      title: 'CreditCalc',
       debugShowCheckedModeBanner: false,
       locale: AppLocalizationsConfig.locale,
       localizationsDelegates: AppLocalizationsConfig.localizationsDelegates,

@@ -97,8 +97,17 @@ abstract final class DevelopSyncCoordinator {
     if (!LocalItineraryCoordinator.isActive) {
       ItineraryStorage.instance = FirestoreItineraryStorage();
     }
-    BackofficePendingPlanStorage.instance =
-        FirestoreBackofficePendingPlanStorage();
+    if (LocalItineraryCoordinator.isActive &&
+        LocalItineraryCoordinator.store != null) {
+      final repo = DevelopBackofficePendingPlanRepository(
+        LocalItineraryCoordinator.store!,
+      );
+      BackofficePendingPlanStorage.instance =
+          DevelopBackofficePendingPlanStorage(repo);
+    } else {
+      BackofficePendingPlanStorage.instance =
+          FirestoreBackofficePendingPlanStorage();
+    }
     PdrScheduleStorage.instance = FirestorePdrScheduleStorage();
     InstallmentMonitorConfigStorage.instance =
         InMemoryInstallmentMonitorConfigStorage();
