@@ -1,0 +1,9 @@
+CREDITCALC 1.0.24 — SCARICA PC E CELLULARE
+==========================================
+
+Build completata: https://github.com/Marcellodinapoli/credit-calc-store/actions
+
+PC:       run 28658095971 -> CreditCalc-1.0.24-Setup.exe
+Telefono: run 28658095950 -> CreditCalc-1.0.24-android-arm64.apk
+
+Vedi anche SCARICA-CREDITCALC-1.0.24.txt sul Desktop.
