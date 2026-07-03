@@ -8,7 +8,6 @@ import '../core/admin/bk_admin_service.dart';
 import '../pages/area/personal_area_menu.dart';
 import '../pages/bk/bk_coupons_page.dart';
 import '../pages/bk/bk_warmup_contestations_page.dart';
-import '../pages/bk/bk_normative_search_page.dart';
 import '../pages/bk/bk_call_analysis_page.dart';
 import '../pages/bk/bk_ecosystem_sections_page.dart';
 import '../pages/bk/bk_plan_limits_page.dart';
@@ -515,18 +514,6 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const BkWarmupContestationsPage(),
-                    ),
-                  );
-                }),
-              ),
-              _item(
-                icon: Icons.balance_outlined,
-                title: 'Prompt ricerca normativa',
-                iconColor: _areaColor,
-                onTap: () => _closeAnd(() {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const BkNormativeSearchPage(),
                     ),
                   );
                 }),
