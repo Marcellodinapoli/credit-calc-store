@@ -410,7 +410,11 @@ class _PracticeTile extends StatelessWidget {
     final preview = practice.installments.take(3).toList();
     final subtitle = StringBuffer()
       ..writeln(practice.creditorName)
-      ..writeln('${practice.totalRates} rate in provvigioni');
+      ..writeln(
+        practice.pdrInstallments.isNotEmpty
+            ? '${practice.totalRates} rate del rateizzo PDR'
+            : '${practice.totalRates} rate in provvigioni',
+      );
     for (var i = 0; i < preview.length; i++) {
       subtitle.writeln(installmentLabel(preview[i], i));
     }

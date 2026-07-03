@@ -104,11 +104,13 @@ abstract final class DevelopSyncCoordinator {
       );
       BackofficePendingPlanStorage.instance =
           DevelopBackofficePendingPlanStorage(repo);
+      PdrScheduleStorage.instance =
+          DevelopPdrScheduleStorage(LocalItineraryCoordinator.store!);
     } else {
       BackofficePendingPlanStorage.instance =
           FirestoreBackofficePendingPlanStorage();
+      PdrScheduleStorage.instance = FirestorePdrScheduleStorage();
     }
-    PdrScheduleStorage.instance = FirestorePdrScheduleStorage();
     InstallmentMonitorConfigStorage.instance =
         InMemoryInstallmentMonitorConfigStorage();
     _itineraryRepository = null;

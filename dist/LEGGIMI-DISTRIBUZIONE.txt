@@ -1,10 +1,10 @@
-﻿CreditCalc 1.0.22 — distribuzione
+﻿CreditCalc 1.0.23 — distribuzione
 ================================
 
-Versioni conservate in dist: 1.0.19, 1.0.20, 1.0.21 (se presenti), 1.0.22 (build corrente).
+Versioni conservate in dist: 1.0.20, 1.0.21, 1.0.22 (se presenti), 1.0.23 (build corrente).
 
 File da scaricare dopo build GitHub Actions:
-  CreditCalc-1.0.22-Setup.exe          (PC)
-  CreditCalc-1.0.22-android-arm64.apk  (cell)
+  CreditCalc-1.0.23-Setup.exe          (PC)
+  CreditCalc-1.0.23-android-arm64.apk  (cell)
 
 Versioni <= 1.0.18 rimosse da dist.

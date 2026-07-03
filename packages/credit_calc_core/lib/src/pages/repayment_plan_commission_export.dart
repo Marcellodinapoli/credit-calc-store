@@ -7,6 +7,7 @@ import 'commission_creditor_data_access.dart';
 import 'commission_entry_data_access.dart';
 import 'commission_export_dialog.dart';
 import 'commission_payment_resolver.dart';
+import 'pdr_schedule_storage.dart';
 
 /// Scelta nel dialog dopo «Annulla» con incassi registrati in sessione.
 enum PlanCancelWithCommissionsAction {
@@ -423,7 +424,20 @@ abstract final class RepaymentPlanCommissionExporter {
       );
     }
 
+    final pdrInstallmentsJson = _pdrInstallmentsJson(installments);
+    if (pdrInstallmentsJson.isNotEmpty) {
+      payloads.first['pdrInstallments'] = pdrInstallmentsJson;
+      payloads.first['pdrRateCount'] = pdrInstallmentsJson.length;
+    }
+
     return _commitCommissionPayloads(payloads, const []);
+  }
+
+  static List<Map<String, dynamic>> _pdrInstallmentsJson(
+    List<CommissionInstallmentPayment> installments,
+  ) {
+    final parsed = PdrScheduleStorage.installmentsFromPayments(installments);
+    return parsed.map((installment) => installment.toJson()).toList();
   }
 
   static Map<String, dynamic> _entryPayload({

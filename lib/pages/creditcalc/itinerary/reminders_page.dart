@@ -6,6 +6,7 @@ import '../../../widgets/field_visit_link_picker.dart';
 import '../../../models/field_reminder.dart';
 import '../../../services/field_reminder_service.dart';
 import '../../../services/gestione_menu_badge_service.dart';
+import '../../../services/installment_monitor_service.dart';
 import '../../../widgets/itinerary_notifications_card.dart';
 import 'itinerary_page_shell.dart';
 
@@ -76,6 +77,10 @@ class _RemindersPageState extends State<RemindersPage> {
 
   Widget _reminderCard(FieldReminder item, DateTime now) {
     final isPast = item.remindAt.isBefore(now);
+    final visibleNotes =
+        InstallmentMonitorService.rateizzoReminderVisibleNotes(item) ??
+            item.notes;
+
     return Card(
       color: AppCardTheme.surface,
       child: ListTile(
@@ -95,7 +100,8 @@ class _RemindersPageState extends State<RemindersPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(_formatDateTime(item.remindAt)),
-            if (item.notes != null && item.notes!.isNotEmpty) Text(item.notes!),
+            if (visibleNotes != null && visibleNotes.isNotEmpty)
+              Text(visibleNotes),
             if (item.pushSent)
               const Text(
                 'Notifica inviata',

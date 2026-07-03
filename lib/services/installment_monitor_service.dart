@@ -187,7 +187,6 @@ abstract final class InstallmentMonitorService {
 
     try {
       final schedules = await PdrScheduleStorage.instance.listSchedules();
-      final byKey = {for (final schedule in schedules) schedule.groupKey: schedule};
 
       return [
         for (final practice in practices)
@@ -197,16 +196,107 @@ abstract final class InstallmentMonitorService {
             creditorId: practice.creditorId,
             creditorName: practice.creditorName,
             installments: practice.installments,
-            pdrInstallments: byKey[practice.groupKey]?.installments ?? const [],
+            pdrInstallments: _resolvePdrInstallments(
+              practice: practice,
+              schedules: schedules,
+            ),
           ),
       ];
     } catch (_) {
-      return practices;
+      return [
+        for (final practice in practices)
+          InstallmentMonitorPractice(
+            groupKey: practice.groupKey,
+            companyName: practice.companyName,
+            creditorId: practice.creditorId,
+            creditorName: practice.creditorName,
+            installments: practice.installments,
+            pdrInstallments: _pdrInstallmentsFromEntries(practice.installments),
+          ),
+      ];
     }
+  }
+
+  static List<PdrInstallment> _resolvePdrInstallments({
+    required InstallmentMonitorPractice practice,
+    required List<PdrScheduleRecord> schedules,
+  }) {
+    final fromSchedule = _findSchedule(schedules, practice)?.installments;
+    if (fromSchedule != null && fromSchedule.isNotEmpty) {
+      return fromSchedule;
+    }
+    return _pdrInstallmentsFromEntries(practice.installments);
+  }
+
+  static PdrScheduleRecord? _findSchedule(
+    List<PdrScheduleRecord> schedules,
+    InstallmentMonitorPractice practice,
+  ) {
+    for (final schedule in schedules) {
+      if (schedule.groupKey == practice.groupKey) {
+        return schedule;
+      }
+    }
+
+    final company = practice.companyName.trim().toLowerCase();
+    if (company.isEmpty) return null;
+
+    for (final schedule in schedules) {
+      if (schedule.creditorId == practice.creditorId &&
+          schedule.companyName.trim().toLowerCase() == company) {
+        return schedule;
+      }
+    }
+    return null;
+  }
+
+  static List<PdrInstallment> _pdrInstallmentsFromEntries(
+    List<CommissionEntryRecord> entries,
+  ) {
+    for (final entry in entries) {
+      final parsed = _pdrInstallmentsFromEntryData(entry.data);
+      if (parsed.isNotEmpty) {
+        return parsed;
+      }
+    }
+    return const [];
+  }
+
+  static List<PdrInstallment> _pdrInstallmentsFromEntryData(
+    Map<String, dynamic> data,
+  ) {
+    final raw = data['pdrInstallments'];
+    if (raw is! List || raw.isEmpty) return const [];
+
+    final installments = <PdrInstallment>[];
+    for (var i = 0; i < raw.length; i++) {
+      final item = raw[i];
+      if (item is! Map) continue;
+      installments.add(
+        PdrInstallment.fromJson(Map<String, dynamic>.from(item)),
+      );
+    }
+    installments.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    return installments;
   }
 
   static bool isRateizzoReminder(FieldReminder reminder) =>
       reminder.notes?.startsWith(notesPrefix) == true;
+
+  /// Note visibili in lista, senza il prefisso tecnico `rateizzo-monitor:…`.
+  static String? rateizzoReminderVisibleNotes(FieldReminder reminder) {
+    if (!isRateizzoReminder(reminder)) return null;
+    final notes = reminder.notes;
+    if (notes == null) return null;
+
+    final visible = notes
+        .split('\n')
+        .where((line) => !line.trim().startsWith(notesPrefix))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .join('\n');
+    return visible.isEmpty ? null : visible;
+  }
 
   static bool isRateizzoVisit(FieldVisit visit) =>
       visit.notes?.startsWith(notesPrefix) == true;

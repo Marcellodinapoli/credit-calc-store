@@ -10,6 +10,7 @@ import 'develop_sync/develop_backoffice_pending_plan_repository.dart';
 import 'develop_sync/develop_backoffice_pending_plan_storage.dart';
 import 'develop_sync/develop_itinerary_repository.dart';
 import 'develop_sync/develop_itinerary_storage.dart';
+import 'develop_sync/develop_pdr_schedule_storage.dart';
 import 'develop_sync/develop_sync_sqlite_store.dart';
 import 'services/local_data_cipher.dart';
 
@@ -36,6 +37,7 @@ abstract final class LocalItineraryCoordinator {
     ItineraryStorage.instance = DevelopItineraryStorage(_repository!);
     BackofficePendingPlanStorage.instance =
         DevelopBackofficePendingPlanStorage(_backofficeRepository!);
+    PdrScheduleStorage.instance = DevelopPdrScheduleStorage(_store!);
     _active = true;
     MigratedDataFirestorePolicy.isLocalPrimary = () => _active;
 
@@ -52,6 +54,7 @@ abstract final class LocalItineraryCoordinator {
     ItineraryStorage.instance = FirestoreItineraryStorage();
     BackofficePendingPlanStorage.instance =
         FirestoreBackofficePendingPlanStorage();
+    PdrScheduleStorage.instance = FirestorePdrScheduleStorage();
     _repository = null;
     _backofficeRepository = null;
     _store = null;
