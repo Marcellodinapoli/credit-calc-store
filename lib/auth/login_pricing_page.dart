@@ -66,15 +66,6 @@ class LoginPricingPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 28),
                     const _SectionLabel(
-                      title: 'Cosa include ogni piano',
-                      subtitle:
-                          'Tutti i piani danno accesso all\'ecosistema CreditCore; '
-                          'i limiti indicano quante operazioni puoi svolgere.',
-                    ),
-                    const SizedBox(height: 16),
-                    const EcosystemSectionsList(),
-                    const SizedBox(height: 32),
-                    const _SectionLabel(
                       title: 'Confronto piani',
                       subtitle: 'Prezzo, funzionalità e limiti operativi del piano attivo.',
                     ),

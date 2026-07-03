@@ -556,41 +556,42 @@ match /companies/{companyId}/registration_consents_history/{docId} {
           && request.auth.token.admin == true;
       }
 
-      /// Relay sync multi-dispositivo Sviluppa (payload cifrati).
+      /// Sync continuo Sviluppa (PC + mobile, stesso account).
       match /develop_sync/{docId} {
-        allow read, create, update: if request.auth != null
+        allow get, list, create, update: if request.auth != null
           && request.auth.uid == userId;
         allow delete: if request.auth != null
           && request.auth.token.admin == true;
       }
 
       match /develop_sync_records/{recordId} {
-        allow read, create, update: if request.auth != null
+        allow get, list, create, update: if request.auth != null
           && request.auth.uid == userId;
         allow delete: if request.auth != null
           && request.auth.uid == userId;
       }
 
       match /develop_sync_private/{docId} {
-        allow read, create, update: if request.auth != null
+        allow get, list, create, update: if request.auth != null
           && request.auth.uid == userId;
         allow delete: if request.auth != null
-          && request.auth.token.admin == true;
+          && (request.auth.uid == userId
+            || request.auth.token.admin == true);
       }
 
-      /// Trasferimento una tantum tra dispositivi (ponte effimero).
+      /// Trasferimento manuale tra app (pagina Sincronizza, ponte effimero).
       match /device_transfer/{transferId} {
-        allow read, create, update, delete: if request.auth != null
+        allow get, list, create, update, delete: if request.auth != null
           && request.auth.uid == userId;
 
         match /chunks/{chunkId} {
-          allow read, create, update, delete: if request.auth != null
+          allow get, list, create, update, delete: if request.auth != null
             && request.auth.uid == userId;
         }
       }
 
       match /device_transfer_presence/{deviceId} {
-        allow read, create, update, delete: if request.auth != null
+        allow get, list, create, update, delete: if request.auth != null
           && request.auth.uid == userId;
       }
 
@@ -664,26 +665,30 @@ match /settings/ecosystem_sections {
 }
 
 // ------------------------------------------------------------------
-// SETTINGS — consensi registrazione (lettura senza login)
+// SETTINGS — consensi registrazione (PC + mobile, senza login)
+// App Store: login_page → RegistrationPrivacyConsentsPage prima della signup.
 // ------------------------------------------------------------------
 match /settings/registration_consents {
-  allow read: if true;
+  allow get, list: if true;
   allow create, update, delete: if request.auth != null
     && request.auth.token.admin == true;
 
   match /versions/{versionId} {
-    allow read: if true;
+    allow get, list: if true;
     allow create, update, delete: if request.auth != null
       && request.auth.token.admin == true;
   }
 }
 
  // ------------------------------------------------------------------
-// SETTINGS
+// SETTINGS (esclusi i documenti pubblici definiti sopra)
  // ------------------------------------------------------------------
 match /settings/{docId} {
 
-  allow read: if request.auth != null;
+  allow read: if request.auth != null
+    && docId != 'registration_consents'
+    && docId != 'plan_limits'
+    && docId != 'ecosystem_sections';
 
   allow create, update: if request.auth != null
     && request.auth.token.admin == true;
@@ -693,7 +698,8 @@ match /settings/{docId} {
 
   match /{subCollection}/{docSubId} {
 
-    allow read: if request.auth != null;
+    allow read: if request.auth != null
+      && docId != 'registration_consents';
 
     allow create, update, delete: if request.auth != null
       && request.auth.token.admin == true;

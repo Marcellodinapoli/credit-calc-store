@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../models/building_resident_entry.dart';
-import '../../utils/building_residents_address_util.dart';
 import '../../utils/directory_web_uri_util.dart';
 import 'directory_html_utils.dart';
 import 'pagine_gialle_listing_parser.dart';

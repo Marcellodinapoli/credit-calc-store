@@ -1,11 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'auth_redirect_feedback.dart';
+import 'registration_consents_defaults.dart';
 import 'registration_privacy_consents_page.dart';
 
 class RegistrationConsentsDocument {
@@ -28,6 +28,35 @@ class RegistrationConsentsService {
 
   static Future<RegistrationConsentsDocument?> loadCurrent() async {
     try {
+      final remote = await _loadFromFirestore();
+      if (remote != null) return remote;
+
+      debugPrint(
+        'RegistrationConsentsService: documento Firestore assente o vuoto, '
+        'uso testo predefinito v${RegistrationConsentsDefaults.version}.',
+      );
+      return const RegistrationConsentsDocument(
+        version: RegistrationConsentsDefaults.version,
+        text: RegistrationConsentsDefaults.text,
+      );
+    } on TimeoutException catch (e, stack) {
+      debugPrint('RegistrationConsentsService.loadCurrent timeout: $e\n$stack');
+      return _fallbackDocument();
+    } catch (e, stack) {
+      debugPrint('RegistrationConsentsService.loadCurrent failed: $e\n$stack');
+      return _fallbackDocument();
+    }
+  }
+
+  static RegistrationConsentsDocument _fallbackDocument() {
+    return const RegistrationConsentsDocument(
+      version: RegistrationConsentsDefaults.version,
+      text: RegistrationConsentsDefaults.text,
+    );
+  }
+
+  static Future<RegistrationConsentsDocument?> _loadFromFirestore() async {
+    try {
       final firestore = FirebaseFirestore.instance;
       final rulesDoc = await firestore
           .collection('settings')
@@ -38,7 +67,8 @@ class RegistrationConsentsService {
       if (!rulesDoc.exists) return null;
 
       final data = rulesDoc.data() ?? {};
-      final version = (data['version'] ?? '1.0.0').toString();
+      final version = (data['version'] ?? RegistrationConsentsDefaults.version)
+          .toString();
 
       final versionDoc = await firestore
           .collection('settings')
@@ -54,11 +84,10 @@ class RegistrationConsentsService {
       if (text.isEmpty) return null;
 
       return RegistrationConsentsDocument(version: version, text: text);
-    } on TimeoutException catch (e, stack) {
-      debugPrint('RegistrationConsentsService.loadCurrent timeout: $e\n$stack');
-      return null;
+    } on TimeoutException {
+      rethrow;
     } catch (e, stack) {
-      debugPrint('RegistrationConsentsService.loadCurrent failed: $e\n$stack');
+      debugPrint('RegistrationConsentsService._loadFromFirestore: $e\n$stack');
       return null;
     }
   }
