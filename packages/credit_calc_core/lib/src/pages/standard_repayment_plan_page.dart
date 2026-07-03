@@ -5509,22 +5509,10 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       return const SizedBox.shrink();
     } else {
       tone = Colors.green.shade800;
-      final autoCount = _planSizingMode == _PlanSizingMode.automatic &&
-              !_usesMultiPracticeForm &&
-              !_isModulatedCadenza
-          ? (_modalitaRate == _RepaymentSplitMode.lastAdjustment
-              ? _RepaymentInstallmentPlan.installmentCountForLastAdjustment(
-                  netAmount: netto,
-                  minInstallment: creditor.minInstallmentAmount,
-                )
-              : _RepaymentInstallmentPlan.installmentCountForMinAmount(
-                  netAmount: netto,
-                  minInstallment: creditor.minInstallmentAmount,
-                ))
-          : null;
-      final rateLabel = autoCount != null
-          ? '$autoCount rate previste (minimo rata '
-              '${EuroFormat.format(creditor.minInstallmentAmount)})'
+      final minRata = creditor.minInstallmentAmount;
+      final rateLabel = minRata > 0
+          ? '${band.installments} rate previste (minimo rata '
+              '${EuroFormat.format(minRata)})'
           : '${band.installments} rate previste';
       message =
           'Importo netto ${EuroFormat.format(netto)} nella fascia PDR '

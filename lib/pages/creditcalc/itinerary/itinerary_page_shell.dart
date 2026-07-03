@@ -2,14 +2,9 @@ import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/dimensions.dart';
-import '../../../core/maintenance_service.dart';
-import '../../../services/gestione_menu_badge_service.dart';
-import '../../area/personal_area_shell.dart';
 
 class ItineraryPageShell {
-  const ItineraryPageShell({this.personalArea = false});
-
-  final bool personalArea;
+  const ItineraryPageShell();
 
   /// Padding liste scrollabili: spazio extra sotto per barra gesti / bordo telefono.
   static EdgeInsets listPadding(BuildContext context) {
@@ -37,17 +32,7 @@ class ItineraryPageShell {
   Widget primary({
     required String pageTitle,
     required Widget body,
-    GestioneMenuBadgeKey? badgeKey,
   }) {
-    if (personalArea) {
-      return PersonalAreaShell(
-        pageTitle: pageTitle,
-        gestioneSection: true,
-        gestioneBadgeKey: badgeKey,
-        maintenanceSection: MaintenanceService.creditCalc,
-        body: body,
-      );
-    }
     return wrapCreditCalcPage(
       pageTitle: pageTitle,
       current: CreditCalcNavItem.tools,
@@ -58,17 +43,7 @@ class ItineraryPageShell {
   Widget secondary({
     required String pageTitle,
     required Widget body,
-    GestioneMenuBadgeKey? badgeKey,
   }) {
-    if (personalArea) {
-      return PersonalAreaShell(
-        pageTitle: pageTitle,
-        gestioneSection: true,
-        gestioneBadgeKey: badgeKey,
-        maintenanceSection: MaintenanceService.creditCalc,
-        body: body,
-      );
-    }
     return wrapCreditCalcPage(
       secondary: true,
       pageTitle: pageTitle,

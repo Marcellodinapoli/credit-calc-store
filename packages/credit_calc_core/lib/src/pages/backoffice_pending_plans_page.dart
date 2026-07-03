@@ -277,7 +277,7 @@ class BackofficePendingPlansPage extends StatelessWidget {
     return wrapCreditCalcPage(
       secondary: true,
       pageTitle: 'Riscontro backoffice',
-      current: CreditCalcNavItem.management,
+      current: CreditCalcNavItem.develop,
       body: StreamBuilder<List<BackofficePendingPlan>>(
         stream: BackofficePendingPlanService.watchAll(),
         builder: (context, snapshot) {

@@ -15,9 +15,7 @@ import 'territory_map_page.dart';
 import 'visit_history_page.dart';
 
 class ItineraryHubPage extends StatelessWidget {
-  const ItineraryHubPage({super.key, this.personalArea = false});
-
-  final bool personalArea;
+  const ItineraryHubPage({super.key});
 
   void _open(BuildContext context, Widget page) {
     Navigator.of(context).push(
@@ -27,7 +25,7 @@ class ItineraryHubPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shell = ItineraryPageShell(personalArea: personalArea);
+    const shell = ItineraryPageShell();
 
     return shell.primary(
       pageTitle: 'Itinerario',
@@ -66,8 +64,7 @@ class ItineraryHubPage extends StatelessWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _open(
                     context,
-                    PracticeAgendaPage(
-                      personalArea: personalArea,
+                    const PracticeAgendaPage(
                       pageTitle: 'Appuntamenti',
                     ),
                   ),
@@ -84,10 +81,7 @@ class ItineraryHubPage extends StatelessWidget {
                 'Compiti e follow-up da completare, con scadenza opzionale.',
               ),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => _open(
-                context,
-                ActivitiesPage(personalArea: personalArea),
-              ),
+              onTap: () => _open(context, const ActivitiesPage()),
             ),
           ),
           const SizedBox(height: 12),
@@ -114,10 +108,7 @@ class ItineraryHubPage extends StatelessWidget {
                     'Avvisi programmati per richiami e scadenze importanti.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _open(
-                    context,
-                    RemindersPage(personalArea: personalArea),
-                  ),
+                  onTap: () => _open(context, const RemindersPage()),
                 );
               },
             ),
@@ -133,8 +124,7 @@ class ItineraryHubPage extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _open(
                 context,
-                TerritoryMapPage(
-                  personalArea: personalArea,
+                const TerritoryMapPage(
                   pageTitle: 'Pianificazione territoriale',
                 ),
               ),
@@ -149,10 +139,7 @@ class ItineraryHubPage extends StatelessWidget {
                 'Riepilogo per mese e zona territoriale.',
               ),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => _open(
-                context,
-                VisitHistoryPage(personalArea: personalArea),
-              ),
+              onTap: () => _open(context, const VisitHistoryPage()),
             ),
           ),
         ],

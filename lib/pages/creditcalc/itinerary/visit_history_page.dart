@@ -8,9 +8,7 @@ import '../../../widgets/field_visit_day_picker.dart';
 import 'itinerary_page_shell.dart';
 
 class VisitHistoryPage extends StatefulWidget {
-  const VisitHistoryPage({super.key, this.personalArea = false});
-
-  final bool personalArea;
+  const VisitHistoryPage({super.key});
 
   @override
   State<VisitHistoryPage> createState() => _VisitHistoryPageState();
@@ -20,8 +18,7 @@ class _VisitHistoryPageState extends State<VisitHistoryPage> {
   DateTime _month = DateTime.now();
   String? _zoneFilter;
 
-  ItineraryPageShell get _shell =>
-      ItineraryPageShell(personalArea: widget.personalArea);
+  static const _shell = ItineraryPageShell();
 
   List<FieldVisit> _filterByMonth(List<FieldVisit> visits) {
     return visits.where((v) {

@@ -127,6 +127,7 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
 
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.equal ||
         char == '=') {
       _equals();
       return KeyEventResult.handled;
@@ -404,32 +405,34 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
     );
   }
 
-  Widget _handoffButtonsRow() {
+  Widget _handoffButtonsRow(double height) {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _handoffButton(
-            'Sviluppa piano di rientro',
+            'Sviluppa\npiano di rientro',
             _openRepaymentPlan,
+            height,
           ),
           const SizedBox(width: 4),
           _handoffButton(
-            'Sviluppa saldo e stralcio',
+            'Sviluppa\nsaldo e stralcio',
             _openBalanceWriteOff,
+            height,
           ),
           const SizedBox(width: 4),
           _handoffButton(
-            'Inserisci\nin provvigioni',
+            'Inserisci\nincasso',
             _openCommissionEntry,
+            height,
           ),
         ],
       ),
     );
   }
 
-  Widget _handoffButton(String label, VoidCallback onTap) {
+  Widget _handoffButton(String label, VoidCallback onTap, double height) {
     return Expanded(
       child: Material(
         color: _handoffColor,
@@ -437,23 +440,153 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-            child: Center(
+          child: Container(
+            height: height,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                height: 1.1,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _calculatorCard(double buttonHeight) {
+    final handoffHeight = buttonHeight + 6;
+    return Card(
+      elevation: 2,
+      color: const Color(0xFFF3F3F3),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
               child: Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  height: 1.15,
+                'Standard',
+                style: TextStyle(
+                  color: Colors.grey.shade700,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-          ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 20,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                _display,
+                textAlign: TextAlign.right,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 40,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _memoryRow(),
+            _handoffButtonsRow(handoffHeight),
+            const SizedBox(height: 8),
+            _buttonRow([
+              _CalcBtn('%', height: buttonHeight, onTap: _btn(_percent)),
+              _CalcBtn('CE', height: buttonHeight, onTap: _btn(_clearEntry)),
+              _CalcBtn('C', height: buttonHeight, onTap: _btn(_clearAll)),
+              _CalcBtn(
+                '⌫',
+                height: buttonHeight,
+                onTap: _btn(_backspace),
+                icon: Icons.backspace_outlined,
+              ),
+            ]),
+            _buttonRow([
+              _CalcBtn(
+                '¹/x',
+                height: buttonHeight,
+                onTap: _btn(() => _applyUnary((v) => v == 0 ? double.nan : 1 / v)),
+              ),
+              _CalcBtn(
+                'x²',
+                height: buttonHeight,
+                onTap: _btn(() => _applyUnary((v) => v * v)),
+              ),
+              _CalcBtn(
+                '²√x',
+                height: buttonHeight,
+                onTap: _btn(() => _applyUnary((v) => v < 0 ? double.nan : math.sqrt(v))),
+              ),
+              _CalcBtn(
+                '÷',
+                height: buttonHeight,
+                onTap: _btn(() => _setOperation('÷')),
+                accent: true,
+              ),
+            ]),
+            _buttonRow([
+              _CalcBtn('7', height: buttonHeight, onTap: _btn(() => _inputDigit('7'))),
+              _CalcBtn('8', height: buttonHeight, onTap: _btn(() => _inputDigit('8'))),
+              _CalcBtn('9', height: buttonHeight, onTap: _btn(() => _inputDigit('9'))),
+              _CalcBtn(
+                '×',
+                height: buttonHeight,
+                onTap: _btn(() => _setOperation('×')),
+                accent: true,
+              ),
+            ]),
+            _buttonRow([
+              _CalcBtn('4', height: buttonHeight, onTap: _btn(() => _inputDigit('4'))),
+              _CalcBtn('5', height: buttonHeight, onTap: _btn(() => _inputDigit('5'))),
+              _CalcBtn('6', height: buttonHeight, onTap: _btn(() => _inputDigit('6'))),
+              _CalcBtn(
+                '−',
+                height: buttonHeight,
+                onTap: _btn(() => _setOperation('-')),
+                accent: true,
+              ),
+            ]),
+            _buttonRow([
+              _CalcBtn('1', height: buttonHeight, onTap: _btn(() => _inputDigit('1'))),
+              _CalcBtn('2', height: buttonHeight, onTap: _btn(() => _inputDigit('2'))),
+              _CalcBtn('3', height: buttonHeight, onTap: _btn(() => _inputDigit('3'))),
+              _CalcBtn(
+                '+',
+                height: buttonHeight,
+                onTap: _btn(() => _setOperation('+')),
+                accent: true,
+              ),
+            ]),
+            _buttonRow([
+              _CalcBtn('±', height: buttonHeight, onTap: _btn(_toggleSign)),
+              _CalcBtn('0', height: buttonHeight, onTap: _btn(() => _inputDigit('0'))),
+              _CalcBtn(',', height: buttonHeight, onTap: _btn(_inputDecimal)),
+              _CalcBtn(
+                '=',
+                height: buttonHeight,
+                onTap: _btn(_equals),
+                equals: true,
+              ),
+            ]),
+          ],
         ),
       ),
     );
@@ -465,99 +598,25 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
       secondary: true,
       pageTitle: 'Calcolatrice',
       current: CreditCalcNavItem.develop,
-      body: Focus(
-        focusNode: _focusNode,
-        autofocus: true,
-        onKeyEvent: _handleKey,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Card(
-              elevation: 2,
-              color: const Color(0xFFF3F3F3),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        'Standard',
-                        style: TextStyle(
-                          color: Colors.grey.shade700,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 20,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        _display,
-                        textAlign: TextAlign.right,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 40,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _memoryRow(),
-                    _handoffButtonsRow(),
-                    const SizedBox(height: 4),
-                    _buttonRow([
-                      _CalcBtn('%', onTap: _btn(_percent)),
-                      _CalcBtn('CE', onTap: _btn(_clearEntry)),
-                      _CalcBtn('C', onTap: _btn(_clearAll)),
-                      _CalcBtn('⌫', onTap: _btn(_backspace), icon: Icons.backspace_outlined),
-                    ]),
-                    _buttonRow([
-                      _CalcBtn('¹/x', onTap: _btn(() => _applyUnary((v) => v == 0 ? double.nan : 1 / v))),
-                      _CalcBtn('x²', onTap: _btn(() => _applyUnary((v) => v * v))),
-                      _CalcBtn('²√x', onTap: _btn(() => _applyUnary((v) => v < 0 ? double.nan : math.sqrt(v)))),
-                      _CalcBtn('÷', onTap: _btn(() => _setOperation('÷')), accent: true),
-                    ]),
-                    _buttonRow([
-                      _CalcBtn('7', onTap: _btn(() => _inputDigit('7'))),
-                      _CalcBtn('8', onTap: _btn(() => _inputDigit('8'))),
-                      _CalcBtn('9', onTap: _btn(() => _inputDigit('9'))),
-                      _CalcBtn('×', onTap: _btn(() => _setOperation('×')), accent: true),
-                    ]),
-                    _buttonRow([
-                      _CalcBtn('4', onTap: _btn(() => _inputDigit('4'))),
-                      _CalcBtn('5', onTap: _btn(() => _inputDigit('5'))),
-                      _CalcBtn('6', onTap: _btn(() => _inputDigit('6'))),
-                      _CalcBtn('−', onTap: _btn(() => _setOperation('-')), accent: true),
-                    ]),
-                    _buttonRow([
-                      _CalcBtn('1', onTap: _btn(() => _inputDigit('1'))),
-                      _CalcBtn('2', onTap: _btn(() => _inputDigit('2'))),
-                      _CalcBtn('3', onTap: _btn(() => _inputDigit('3'))),
-                      _CalcBtn('+', onTap: _btn(() => _setOperation('+')), accent: true),
-                    ]),
-                    _buttonRow([
-                      _CalcBtn('±', onTap: _btn(_toggleSign)),
-                      _CalcBtn('0', onTap: _btn(() => _inputDigit('0'))),
-                      _CalcBtn(',', onTap: _btn(_inputDecimal)),
-                      _CalcBtn('=', onTap: _btn(_equals), equals: true),
-                    ]),
-                  ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final buttonHeight = constraints.maxHeight < 640 ? 44.0 : 52.0;
+          return Focus(
+            focusNode: _focusNode,
+            autofocus: true,
+            onKeyEvent: _handleKey,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: _calculatorCard(buttonHeight),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -609,6 +668,7 @@ class _CalcBtn extends StatelessWidget {
   const _CalcBtn(
     this.label, {
     required this.onTap,
+    this.height = 52,
     this.accent = false,
     this.equals = false,
     this.icon,
@@ -616,6 +676,7 @@ class _CalcBtn extends StatelessWidget {
 
   final String label;
   final VoidCallback onTap;
+  final double height;
   final bool accent;
   final bool equals;
   final IconData? icon;
@@ -636,7 +697,7 @@ class _CalcBtn extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(4),
         child: Container(
-          height: 52,
+          height: height,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             border: Border.all(color: const Color(0xFFE0E0E0)),

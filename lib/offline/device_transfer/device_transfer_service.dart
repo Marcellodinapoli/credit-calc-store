@@ -218,10 +218,21 @@ abstract final class DeviceTransferService {
   static Future<DeviceTransferMeta?> readTransferMeta(String userId) async {
     final snap = await _transferRef(userId).get();
     if (!snap.exists) return null;
-    final meta = DeviceTransferMeta.fromFirestore(snap.data() ?? {});
+    return _metaFromSnapshot(snap.data() ?? {});
+  }
+
+  static DeviceTransferMeta? _metaFromSnapshot(Map<String, dynamic> data) {
+    final meta = DeviceTransferMeta.fromFirestore(data);
     if (meta.isExpired) return null;
     if (meta.isPrepared || meta.isPending) return meta;
     return null;
+  }
+
+  static Stream<DeviceTransferMeta?> watchTransferMeta(String userId) {
+    return _transferRef(userId).snapshots().map((snap) {
+      if (!snap.exists) return null;
+      return _metaFromSnapshot(snap.data() ?? {});
+    });
   }
 
   static Future<bool> isActiveSender(String userId) async {

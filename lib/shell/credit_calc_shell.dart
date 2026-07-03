@@ -14,7 +14,6 @@ import '../pages/creditcalc/commissions_page.dart';
 import '../pages/creditcalc/credit_calc_settings_page.dart';
 import '../pages/creditcalc/creditors_page.dart';
 import '../pages/creditcalc/develop_page.dart';
-import '../pages/creditcalc/management_hub_page.dart';
 import '../pages/creditcalc/itinerary/itinerary_hub_page.dart';
 import '../ui/layout/page_shell.dart';
 import '../widgets/desktop_app_update_button.dart';
@@ -159,8 +158,6 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
         return const CommissionsPage();
       case CreditCalcNavItem.tools:
         return const ItineraryHubPage();
-      case CreditCalcNavItem.management:
-        return const ManagementHubPage();
       case CreditCalcNavItem.subscription:
         return const SubscriptionAccountPage();
     }

@@ -6,14 +6,10 @@ import '../../../widgets/field_visit_link_picker.dart';
 import '../../../widgets/voice_note_field.dart';
 import '../../../models/field_activity.dart';
 import '../../../services/field_activity_service.dart';
-import '../../../services/gestione_menu_badge_service.dart';
-import '../../../widgets/itinerary_notifications_card.dart';
 import 'itinerary_page_shell.dart';
 
 class ActivitiesPage extends StatefulWidget {
-  const ActivitiesPage({super.key, this.personalArea = false});
-
-  final bool personalArea;
+  const ActivitiesPage({super.key});
 
   @override
   State<ActivitiesPage> createState() => _ActivitiesPageState();
@@ -22,8 +18,7 @@ class ActivitiesPage extends StatefulWidget {
 class _ActivitiesPageState extends State<ActivitiesPage> {
   bool _busy = false;
 
-  ItineraryPageShell get _shell =>
-      ItineraryPageShell(personalArea: widget.personalArea);
+  static const _shell = ItineraryPageShell();
 
   String _formatDate(DateTime value) {
     final d = value.day.toString().padLeft(2, '0');
@@ -406,18 +401,11 @@ class _ActivitiesPageState extends State<ActivitiesPage> {
   Widget build(BuildContext context) {
     return _shell.secondary(
       pageTitle: 'Attività',
-      badgeKey: widget.personalArea ? GestioneMenuBadgeKey.activities : null,
       body: Stack(
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (widget.personalArea) ...[
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: ItineraryNotificationsConsentHint(),
-                ),
-              ],
               Padding(
                 padding: ItineraryPageShell.headerPadding(context),
                 child: Row(

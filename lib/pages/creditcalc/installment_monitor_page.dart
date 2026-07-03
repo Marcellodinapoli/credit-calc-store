@@ -2,7 +2,6 @@ import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/dimensions.dart';
-import '../../core/maintenance_service.dart';
 import '../../models/field_reminder.dart';
 import '../../models/field_visit.dart';
 import '../../services/creditor_visit_address_service.dart';
@@ -10,12 +9,9 @@ import '../../services/field_reminder_service.dart';
 import '../../services/field_visit_service.dart';
 import '../../services/installment_monitor_service.dart';
 import '../../widgets/address_field_with_scan.dart';
-import '../area/personal_area_shell.dart';
 
 class InstallmentMonitorPage extends StatefulWidget {
-  const InstallmentMonitorPage({super.key, this.personalArea = false});
-
-  final bool personalArea;
+  const InstallmentMonitorPage({super.key});
 
   @override
   State<InstallmentMonitorPage> createState() => _InstallmentMonitorPageState();
@@ -373,15 +369,6 @@ class _InstallmentMonitorPageState extends State<InstallmentMonitorPage> {
           );
         },
       );
-
-    if (widget.personalArea) {
-      return PersonalAreaShell(
-        pageTitle: 'Monitoraggio rata',
-        gestioneSection: true,
-        maintenanceSection: MaintenanceService.creditCalc,
-        body: body,
-      );
-    }
 
     return wrapCreditCalcPage(
       secondary: true,

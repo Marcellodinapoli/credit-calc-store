@@ -14,18 +14,15 @@ import '../../../widgets/schedule_field_visit_dialog.dart';
 import '../../../widgets/visit_practice_links.dart';
 import '../../../widgets/voice_note_field.dart';
 import '../commission_collections_shared.dart';
-import '../../../services/gestione_menu_badge_service.dart';
 import 'itinerary_page_shell.dart';
 import 'territory_map_page.dart';
 
 class PracticeAgendaPage extends StatefulWidget {
   const PracticeAgendaPage({
     super.key,
-    this.personalArea = false,
     this.pageTitle = 'Agenda pratiche',
   });
 
-  final bool personalArea;
   final String pageTitle;
 
   @override
@@ -36,8 +33,7 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
   DateTime _selectedDay = DateTime.now();
   bool _busy = false;
 
-  ItineraryPageShell get _shell =>
-      ItineraryPageShell(personalArea: widget.personalArea);
+  static const _shell = ItineraryPageShell();
 
   Future<void> _pickDay() async {
     final picked = await showFieldVisitDayPicker(
@@ -258,8 +254,6 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
   Widget build(BuildContext context) {
     return _shell.secondary(
       pageTitle: widget.pageTitle,
-      badgeKey:
-          widget.personalArea ? GestioneMenuBadgeKey.appointments : null,
       body: Stack(
         children: [
           Column(
@@ -287,7 +281,6 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
                         Navigator.of(context, rootNavigator: true).push(
                           MaterialPageRoute(
                             builder: (_) => TerritoryMapPage(
-                              personalArea: widget.personalArea,
                               day: _selectedDay,
                             ),
                           ),

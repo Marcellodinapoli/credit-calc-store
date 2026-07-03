@@ -31,6 +31,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
   DeviceTransferReceiveResult? _lastReceive;
   StreamSubscription<bool>? _receiverSub;
   StreamSubscription<DeviceTransferPeerState?>? _peerSub;
+  StreamSubscription<DeviceTransferMeta?>? _transferSub;
   Timer? _presenceTimer;
 
   @override
@@ -43,6 +44,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
   void dispose() {
     _receiverSub?.cancel();
     _peerSub?.cancel();
+    _transferSub?.cancel();
     _presenceTimer?.cancel();
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
@@ -100,9 +102,11 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
   Future<void> _syncPresenceAndWatch(String? uid, bool isSender) async {
     await _receiverSub?.cancel();
     await _peerSub?.cancel();
-    _presenceTimer?.cancel();
+    await _transferSub?.cancel();
     _receiverSub = null;
     _peerSub = null;
+    _transferSub = null;
+    _presenceTimer?.cancel();
     _presenceTimer = null;
 
     if (uid == null || !_online) return;
@@ -124,22 +128,60 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
       });
     });
 
-    if (isSender) {
-      _receiverSub = DeviceTransferService.watchReceiverReady(uid).listen(
-        (ready) {
-          if (!mounted) return;
-          setState(() {
-            _receiverReady = ready;
-            if (ready &&
-                _statusMessage?.contains('Altro dispositivo') != true) {
-              _statusMessage =
-                  'Altro dispositivo rilevato con lo stesso account. '
-                  'Ora puoi inviare i dati.';
-            }
-          });
-        },
-      );
+    _transferSub = DeviceTransferService.watchTransferMeta(uid).listen(
+      (transfer) => unawaited(_applyTransferMeta(uid, transfer)),
+    );
+
+    await _startReceiverReadyWatch(uid, isSender);
+  }
+
+  Future<void> _applyTransferMeta(
+    String uid,
+    DeviceTransferMeta? transfer,
+  ) async {
+    var isSender = false;
+    if (transfer?.isPrepared == true) {
+      isSender = await DeviceTransferService.isActiveSender(uid);
     }
+    if (!mounted) return;
+
+    final wasSender = _isSender;
+    setState(() {
+      _activeTransfer = transfer;
+      _isSender = isSender;
+      if (transfer?.isReceivable == true && !isSender) {
+        _statusMessage =
+            'Pacchetto pronto da ricevere. Tocca «Ricevi dati» '
+            'entro ${DeviceTransferFormat.dateTime(
+              DateTime.fromMillisecondsSinceEpoch(transfer!.expiresAtMs),
+            )}.';
+      }
+    });
+
+    if (wasSender != isSender) {
+      await _startReceiverReadyWatch(uid, isSender);
+    }
+  }
+
+  Future<void> _startReceiverReadyWatch(String uid, bool isSender) async {
+    await _receiverSub?.cancel();
+    _receiverSub = null;
+    if (!isSender) return;
+
+    _receiverSub = DeviceTransferService.watchReceiverReady(uid).listen(
+      (ready) {
+        if (!mounted) return;
+        setState(() {
+          _receiverReady = ready;
+          if (ready &&
+              _statusMessage?.contains('Altro dispositivo') != true) {
+            _statusMessage =
+                'Altro dispositivo rilevato con lo stesso account. '
+                'Ora puoi inviare i dati.';
+          }
+        });
+      },
+    );
   }
 
   Future<void> _prepare() async {

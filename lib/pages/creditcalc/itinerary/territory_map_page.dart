@@ -16,12 +16,10 @@ enum _MapPeriodFilter { today, week, all }
 class TerritoryMapPage extends StatefulWidget {
   const TerritoryMapPage({
     super.key,
-    this.personalArea = false,
     this.day,
     this.pageTitle = 'Mappa territorio',
   });
 
-  final bool personalArea;
   final DateTime? day;
   final String pageTitle;
 
@@ -37,8 +35,7 @@ class _TerritoryMapPageState extends State<TerritoryMapPage> {
   bool _plannedOnly = true;
   String? _creditorFilter;
 
-  ItineraryPageShell get _shell =>
-      ItineraryPageShell(personalArea: widget.personalArea);
+  static const _shell = ItineraryPageShell();
 
   Future<void> _openExternalMaps(FieldVisit visit) async {
     if (!visit.hasCoordinates) return;

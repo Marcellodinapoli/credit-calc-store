@@ -5,9 +5,7 @@ import '../../../widgets/field_visit_day_picker.dart';
 import '../../../widgets/field_visit_link_picker.dart';
 import '../../../models/field_reminder.dart';
 import '../../../services/field_reminder_service.dart';
-import '../../../services/gestione_menu_badge_service.dart';
 import '../../../services/installment_monitor_service.dart';
-import '../../../widgets/itinerary_notifications_card.dart';
 import 'itinerary_page_shell.dart';
 
 enum _ReminderMonthFilter {
@@ -20,9 +18,7 @@ enum _ReminderMonthFilter {
 }
 
 class RemindersPage extends StatefulWidget {
-  const RemindersPage({super.key, this.personalArea = false});
-
-  final bool personalArea;
+  const RemindersPage({super.key});
 
   @override
   State<RemindersPage> createState() => _RemindersPageState();
@@ -32,8 +28,7 @@ class _RemindersPageState extends State<RemindersPage> {
   bool _busy = false;
   _ReminderMonthFilter _monthFilter = _ReminderMonthFilter.currentMonth;
 
-  ItineraryPageShell get _shell =>
-      ItineraryPageShell(personalArea: widget.personalArea);
+  static const _shell = ItineraryPageShell();
 
   bool _isCurrentMonth(DateTime date) {
     final now = DateTime.now();
@@ -346,18 +341,11 @@ class _RemindersPageState extends State<RemindersPage> {
   Widget build(BuildContext context) {
     return _shell.secondary(
       pageTitle: 'Promemoria',
-      badgeKey: widget.personalArea ? GestioneMenuBadgeKey.reminders : null,
       body: Stack(
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (widget.personalArea) ...[
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: ItineraryNotificationsConsentHint(),
-                ),
-              ],
               Padding(
                 padding: ItineraryPageShell.headerPadding(context),
                 child: Column(
