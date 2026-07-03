@@ -40,6 +40,20 @@ class DevelopSyncSqliteStore {
     controller.add(DateTime.now().millisecondsSinceEpoch);
   }
 
+  /// Aggiorna gli stream UI dopo import esterni (es. trasferimento manuale).
+  void notifyRevisionsForStorageKeys(Iterable<String> storageKeys) {
+    for (final key in storageKeys) {
+      final collection = DevelopLocalCollectionCodec.fromStorageKey(key);
+      if (collection != null) _notifyRevision(collection);
+    }
+  }
+
+  void notifyAllDevelopRevisions() {
+    for (final collection in storeDevelopSyncedCollections) {
+      _notifyRevision(collection);
+    }
+  }
+
   Future<List<DevelopLocalRecord>> recordsForCollection(
     DevelopLocalCollection collection,
   ) async {

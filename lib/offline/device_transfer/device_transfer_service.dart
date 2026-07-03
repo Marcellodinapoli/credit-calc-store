@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../develop_sync/develop_sync_crypto.dart';
 import '../develop_sync/develop_sync_device.dart';
 import '../utils/firestore_json_codec.dart';
+import '../develop_sync/develop_sync_coordinator.dart';
 import '../credit_calc_repository_setup.dart';
 import '../device_public_usage_local_data_access.dart';
 import '../models/sync_record_status.dart';
@@ -140,6 +141,9 @@ abstract final class DeviceTransferService {
     if (peer == null) return local.lastSyncAtMs;
     if (peer.localRecordCount == 0) return 0;
     if (peer.lastSyncAtMs != local.lastSyncAtMs) return 0;
+    // Stesso baseline ma conteggi diversi: il peer non ha record più vecchi
+    // non inclusi nel delta (es. monitoraggio rata attivato solo su un device).
+    if (peer.localRecordCount != local.localRecordCount) return 0;
     return local.lastSyncAtMs;
   }
 
@@ -595,6 +599,7 @@ abstract final class DeviceTransferService {
     );
     await _saveLastSyncAt(userId, syncBaselineMs);
     CreditCalcRepositorySetup.notifyDataChanged();
+    await DevelopSyncCoordinator.afterDeviceTransferMerge(userId);
 
     return DeviceTransferReceiveResult(
       importedRecords: applied,

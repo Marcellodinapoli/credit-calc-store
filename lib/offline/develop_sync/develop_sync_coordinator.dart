@@ -133,4 +133,17 @@ abstract final class DevelopSyncCoordinator {
 
   static Future<DevelopSyncRunResult?> syncNow() =>
       DevelopSyncService.instance.syncNow();
+
+  /// Dopo trasferimento manuale: refresh UI + allinea Firestore develop sync.
+  static Future<void> afterDeviceTransferMerge(String userId) async {
+    if (!_active || _store == null || _store!.userId != userId) return;
+    _store!.notifyAllDevelopRevisions();
+    try {
+      await DevelopSyncService.instance.syncNow(silent: true);
+    } catch (e, st) {
+      debugPrint('DevelopSyncCoordinator: post-transfer sync ($e)\n$st');
+    }
+    await FieldVisitNotificationService.syncAllForCurrentUser();
+    await FieldReminderNotificationService.syncAllForCurrentUser();
+  }
 }
