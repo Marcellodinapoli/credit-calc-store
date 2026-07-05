@@ -21,11 +21,14 @@ class CreditorsPage extends StatelessWidget {
       useRootNavigator: true,
       builder: (ctx) {
         return Dialog.fullscreen(
-          child: CreditorDetailPage(
-            creditorId: creditorId,
-            name: name,
-            notes: notes,
-            maxAge: maxAge,
+          child: SectionOccupancyScope(
+            sectionKey: 'creditor:$creditorId',
+            child: CreditorDetailPage(
+              creditorId: creditorId,
+              name: name,
+              notes: notes,
+              maxAge: maxAge,
+            ),
           ),
         );
       },

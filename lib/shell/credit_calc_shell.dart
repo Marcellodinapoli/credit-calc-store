@@ -2,23 +2,40 @@ import 'dart:async';
 
 import 'package:credit_calc_core/credit_calc_core.dart'
     hide CommissionsPage, CreditorsPage, DevelopPage;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../auth/biometric_lock_gate.dart';
 import '../core/dimensions.dart';
 import '../offline/credit_calc_runtime.dart';
+import '../session/credit_core_session_runtime.dart';
 import '../offline/services/connectivity_service.dart';
 import '../pages/creditcalc/commissions_page.dart';
 import '../pages/creditcalc/credit_calc_settings_page.dart';
 import '../pages/creditcalc/creditors_page.dart';
 import '../pages/creditcalc/develop_page.dart';
 import '../pages/creditcalc/itinerary/itinerary_hub_page.dart';
+import '../services/itinerary_nav_badge_notifier.dart';
 import '../ui/layout/page_shell.dart';
 import '../widgets/desktop_app_update_button.dart';
 import 'credit_core_account_menu_sheet.dart';
 import 'credit_core_site_actions.dart';
+
+/// Badge monitoraggio rata sulla voce Itinerario (≈2× rispetto al default Material).
+const double _kItineraryNavBadgeSmallSize = 12;
+const double _kItineraryNavBadgeLargeSize = 32;
+
+Widget _itineraryNavBadge({
+  required bool visible,
+  required Widget child,
+}) {
+  return Badge(
+    isLabelVisible: visible,
+    smallSize: _kItineraryNavBadgeSmallSize,
+    largeSize: _kItineraryNavBadgeLargeSize,
+    child: child,
+  );
+}
 
 class CreditCalcShell extends StatefulWidget {
   const CreditCalcShell({super.key});
@@ -110,7 +127,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     }
 
     try {
-      await FirebaseAuth.instance.signOut();
+      await CreditCoreSessionRuntime.signOutWithSessionRelease();
     } catch (_) {}
 
     CreditCalcRuntime.clear();
@@ -163,6 +180,13 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     }
   }
 
+  void _onSectionChanged(CreditCalcNavItem item) {
+    if (item == CreditCalcNavItem.tools) {
+      ItineraryNavBadgeNotifier.instance.clear();
+    }
+    setState(() => _section = item);
+  }
+
   @override
   Widget build(BuildContext context) {
     final compact = Dimensions.useCompactShell(context);
@@ -170,7 +194,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     if (compact) {
       return _MobileShell(
         section: _section,
-        onSectionChanged: (item) => setState(() => _section = item),
+        onSectionChanged: _onSectionChanged,
         onAnnouncements: _openAnnouncements,
         onSettings: _openSettings,
         onMenu: _showAccountMenu,
@@ -180,7 +204,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
 
     return _DesktopShell(
       section: _section,
-      onSectionChanged: (item) => setState(() => _section = item),
+      onSectionChanged: _onSectionChanged,
       onAnnouncements: _openAnnouncements,
       onLogout: _logout,
       onSettings: _openSettings,
@@ -226,34 +250,50 @@ class _MobileShell extends StatelessWidget {
           ),
         ],
       ),
-      body: child,
-      bottomNavigationBar: NavigationBar(
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        selectedIndex: navIndex >= 0 ? navIndex : 0,
-        onDestinationSelected: (index) =>
-            onSectionChanged(creditCalcBottomNavItems[index]),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.account_balance_outlined),
-            selectedIcon: Icon(Icons.account_balance),
-            label: 'Creditori',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.calculate_outlined),
-            selectedIcon: Icon(Icons.calculate),
-            label: 'Sviluppa',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.payments_outlined),
-            selectedIcon: Icon(Icons.payments),
-            label: 'Provvigioni',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.route_outlined),
-            selectedIcon: Icon(Icons.route),
-            label: 'Itinerario',
-          ),
+      body: Column(
+        children: [
+          const CouponExpiryAlertBanner(),
+          Expanded(child: child),
         ],
+      ),
+      bottomNavigationBar: ValueListenableBuilder<bool>(
+        valueListenable: ItineraryNavBadgeNotifier.instance.pending,
+        builder: (context, showItineraryBadge, _) {
+          return NavigationBar(
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            selectedIndex: navIndex >= 0 ? navIndex : 0,
+            onDestinationSelected: (index) =>
+                onSectionChanged(creditCalcBottomNavItems[index]),
+            destinations: [
+              const NavigationDestination(
+                icon: Icon(Icons.account_balance_outlined),
+                selectedIcon: Icon(Icons.account_balance),
+                label: 'Creditori',
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.calculate_outlined),
+                selectedIcon: Icon(Icons.calculate),
+                label: 'Sviluppa',
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.payments_outlined),
+                selectedIcon: Icon(Icons.payments),
+                label: 'Provvigioni',
+              ),
+              NavigationDestination(
+                icon: _itineraryNavBadge(
+                  visible: showItineraryBadge,
+                  child: const Icon(Icons.route_outlined),
+                ),
+                selectedIcon: _itineraryNavBadge(
+                  visible: showItineraryBadge,
+                  child: const Icon(Icons.route),
+                ),
+                label: 'Itinerario',
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -320,6 +360,7 @@ class _DesktopShell extends StatelessWidget {
                     ),
                   ),
                 ),
+                const CouponExpiryAlertBanner(),
                 Expanded(child: child),
               ],
             ),
@@ -345,70 +386,76 @@ class _SideNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: PageShellTheme.drawerBackground,
-      child: SafeArea(
-        child: SizedBox(
-          width: PageShellTheme.sidebarWidth,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 20, 16, 12),
-                child: Text(
-                  'CreditCalc',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: ProjectColors.calc,
+    return ValueListenableBuilder<bool>(
+      valueListenable: ItineraryNavBadgeNotifier.instance.pending,
+      builder: (context, showItineraryBadge, _) {
+        return Material(
+          color: PageShellTheme.drawerBackground,
+          child: SafeArea(
+            child: SizedBox(
+              width: PageShellTheme.sidebarWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 20, 16, 12),
+                    child: Text(
+                      'CreditCalc',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: ProjectColors.calc,
+                      ),
+                    ),
                   ),
-                ),
+                  _NavTile(
+                    icon: Icons.account_balance,
+                    label: 'Creditori',
+                    selected: section == CreditCalcNavItem.creditors,
+                    onTap: () => onSectionChanged(CreditCalcNavItem.creditors),
+                  ),
+                  _NavTile(
+                    icon: Icons.calculate,
+                    label: 'Sviluppa',
+                    selected: section == CreditCalcNavItem.develop,
+                    onTap: () => onSectionChanged(CreditCalcNavItem.develop),
+                  ),
+                  _NavTile(
+                    icon: Icons.payments,
+                    label: 'Provvigioni',
+                    selected: section == CreditCalcNavItem.commissions,
+                    onTap: () => onSectionChanged(CreditCalcNavItem.commissions),
+                  ),
+                  _NavTile(
+                    icon: Icons.route,
+                    label: 'Itinerario',
+                    selected: section == CreditCalcNavItem.tools,
+                    showBadge: showItineraryBadge,
+                    onTap: () => onSectionChanged(CreditCalcNavItem.tools),
+                  ),
+                  const Spacer(),
+                  const CreditCoreSiteListTile(dense: true),
+                  ListTile(
+                    dense: true,
+                    leading: _SettingsNavIcon(),
+                    title: const Text(
+                      'Impostazioni',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    onTap: () => onSettings(),
+                  ),
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.logout, size: 20),
+                    title: const Text('Esci', style: TextStyle(fontSize: 14)),
+                    onTap: () => onLogout(),
+                  ),
+                ],
               ),
-              _NavTile(
-                icon: Icons.account_balance,
-                label: 'Creditori',
-                selected: section == CreditCalcNavItem.creditors,
-                onTap: () => onSectionChanged(CreditCalcNavItem.creditors),
-              ),
-              _NavTile(
-                icon: Icons.calculate,
-                label: 'Sviluppa',
-                selected: section == CreditCalcNavItem.develop,
-                onTap: () => onSectionChanged(CreditCalcNavItem.develop),
-              ),
-              _NavTile(
-                icon: Icons.payments,
-                label: 'Provvigioni',
-                selected: section == CreditCalcNavItem.commissions,
-                onTap: () => onSectionChanged(CreditCalcNavItem.commissions),
-              ),
-              _NavTile(
-                icon: Icons.route,
-                label: 'Itinerario',
-                selected: section == CreditCalcNavItem.tools,
-                onTap: () => onSectionChanged(CreditCalcNavItem.tools),
-              ),
-              const Spacer(),
-              const CreditCoreSiteListTile(dense: true),
-              ListTile(
-                dense: true,
-                leading: _SettingsNavIcon(),
-                title: const Text(
-                  'Impostazioni',
-                  style: TextStyle(fontSize: 14),
-                ),
-                onTap: () => onSettings(),
-              ),
-              ListTile(
-                dense: true,
-                leading: const Icon(Icons.logout, size: 20),
-                title: const Text('Esci', style: TextStyle(fontSize: 14)),
-                onTap: () => onLogout(),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -417,6 +464,7 @@ class _NavTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool selected;
+  final bool showBadge;
   final VoidCallback onTap;
 
   const _NavTile({
@@ -424,15 +472,23 @@ class _NavTile extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.showBadge = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final iconWidget = Icon(
+      icon,
+      color: selected ? ProjectColors.calc : null,
+      size: 22,
+    );
     return ListTile(
       dense: true,
       selected: selected,
       selectedTileColor: ProjectColors.calc.withValues(alpha: 0.12),
-      leading: Icon(icon, color: selected ? ProjectColors.calc : null, size: 22),
+      leading: showBadge
+          ? _itineraryNavBadge(visible: true, child: iconWidget)
+          : iconWidget,
       title: Text(
         label,
         style: TextStyle(

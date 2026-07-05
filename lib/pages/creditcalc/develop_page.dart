@@ -157,6 +157,19 @@ class DevelopPage extends StatelessWidget {
     );
   }
 
+  static String? _sectionKeyForTitle(String title) => switch (title) {
+        'Piano di rientro' => 'repayment_plan',
+        'Saldo e stralcio' => 'balance_write_off',
+        'Riscontro backoffice' => 'develop:backoffice',
+        'Monitoraggio rata' => 'develop:installment_monitor',
+        'WhatsApp e email' => 'develop:debtor_contact',
+        'Ricerca per indirizzo' => 'develop:building_lookup',
+        'Ricerca normativa' => 'develop:normative_search',
+        'Analisi telefonata' => 'develop:phone_analysis',
+        'Calcolatrice' => 'develop:calculator',
+        _ => null,
+      };
+
   Future<void> _openItem(BuildContext context, String title) async {
     final Widget page;
     if (title == 'Piano di rientro') {
@@ -186,8 +199,13 @@ class DevelopPage extends StatelessWidget {
     }
 
     if (!context.mounted) return;
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(builder: (_) => page),
+    final sectionKey = _sectionKeyForTitle(title);
+    if (sectionKey == null) return;
+    await pushSectionOccupancy<void>(
+      context,
+      sectionKey: sectionKey,
+      rootNavigator: true,
+      child: page,
     );
   }
 }

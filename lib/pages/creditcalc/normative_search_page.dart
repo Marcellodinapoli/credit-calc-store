@@ -119,6 +119,18 @@ class _NormativeSearchPageState extends State<NormativeSearchPage> {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: NormativeSearchMyHistorySection(
+                onSelectQuestion: (question) {
+                  _questionCtrl.text = question;
+                  _questionCtrl.selection = TextSelection.collapsed(
+                    offset: question.length,
+                  );
+                },
+              ),
+            ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),

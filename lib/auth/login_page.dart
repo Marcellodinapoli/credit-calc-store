@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../session/credit_core_session_runtime.dart';
 import '../offline/services/connectivity_service.dart';
 import '../services/biometric_service.dart';
 import 'biometric_lock_gate.dart';
@@ -896,7 +897,7 @@ class _LoginPageState extends State<LoginPage> {
         try {
           await user.delete();
         } catch (_) {}
-        await FirebaseAuth.instance.signOut();
+        await CreditCoreSessionRuntime.signOutWithSessionRelease();
         if (!mounted) return;
         setState(() {
           _busy = false;
@@ -914,7 +915,7 @@ class _LoginPageState extends State<LoginPage> {
         try {
           await user.delete();
         } catch (_) {}
-        await FirebaseAuth.instance.signOut();
+        await CreditCoreSessionRuntime.signOutWithSessionRelease();
         if (!mounted) return;
         setState(() {
           _busy = false;
@@ -1152,7 +1153,7 @@ class _LoginPageState extends State<LoginPage> {
         await cred?.user?.delete();
       } catch (_) {}
       try {
-        await FirebaseAuth.instance.signOut();
+        await CreditCoreSessionRuntime.signOutWithSessionRelease();
       } catch (_) {}
       if (!mounted) return;
       setState(() {
@@ -1163,7 +1164,7 @@ class _LoginPageState extends State<LoginPage> {
         await cred?.user?.delete();
       } catch (_) {}
       try {
-        await FirebaseAuth.instance.signOut();
+        await CreditCoreSessionRuntime.signOutWithSessionRelease();
       } catch (_) {}
       if (!mounted) return;
       setState(() {

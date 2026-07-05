@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
+import '../../session/credit_core_session_runtime.dart';
 import '../../core/dimensions.dart';
 import '../../core/work_code_helpers.dart';
 import 'personal_area_shell.dart';
@@ -855,7 +856,7 @@ class _MyDataPageState extends State<MyDataPage> {
                     'disabledAt': FieldValue.serverTimestamp(),
                   });
 
-                  await _auth.signOut();
+                  await CreditCoreSessionRuntime.signOutWithSessionRelease();
                 } else {
                   await _deleteAllUserData(user);
                   await user.delete();

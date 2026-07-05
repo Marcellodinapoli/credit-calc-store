@@ -12,6 +12,7 @@ class DeviceTransferMeta {
     this.transferMode = 'delta',
     this.syncBaselineMs,
     this.sinceMs,
+    this.maxPreparedUpdatedAtMs,
   });
 
   final String status;
@@ -26,6 +27,7 @@ class DeviceTransferMeta {
   final String transferMode;
   final int? syncBaselineMs;
   final int? sinceMs;
+  final int? maxPreparedUpdatedAtMs;
 
   bool get isFullTransfer => transferMode == 'full';
   bool get isDeltaTransfer => transferMode == 'delta';
@@ -63,6 +65,7 @@ class DeviceTransferMeta {
       transferMode: (data['transferMode'] as String?) ?? 'full',
       syncBaselineMs: _readOptionalMs(data['syncBaselineMs']),
       sinceMs: _readOptionalMs(data['sinceMs']),
+      maxPreparedUpdatedAtMs: _readOptionalMs(data['maxPreparedUpdatedAtMs']),
     );
   }
 
@@ -125,6 +128,8 @@ class DeviceTransferPeerState {
     required this.maxUpdatedAtMs,
     required this.pendingChangeCount,
     required this.localRecordCount,
+    this.recordVersions = const {},
+    this.recordVersionsTruncated = false,
   });
 
   final String deviceId;
@@ -133,13 +138,25 @@ class DeviceTransferPeerState {
   final int maxUpdatedAtMs;
   final int pendingChangeCount;
   final int localRecordCount;
+  final Map<String, int> recordVersions;
+  final bool recordVersionsTruncated;
 
   bool get hasPendingChanges => pendingChangeCount > 0;
+  bool get hasReliableVersionIndex =>
+      recordVersions.isNotEmpty && !recordVersionsTruncated;
 
   factory DeviceTransferPeerState.fromFirestore(
     String deviceId,
     Map<String, dynamic> data,
   ) {
+    final versions = <String, int>{};
+    final versionsRaw = data['recordVersions'];
+    if (versionsRaw is Map) {
+      for (final entry in versionsRaw.entries) {
+        final ms = _readMs(entry.value);
+        if (ms > 0) versions[entry.key.toString()] = ms;
+      }
+    }
     return DeviceTransferPeerState(
       deviceId: deviceId,
       lastSeenAtMs: _readMs(data['lastSeenAtMs']),
@@ -147,6 +164,8 @@ class DeviceTransferPeerState {
       maxUpdatedAtMs: _readMs(data['maxUpdatedAtMs']),
       pendingChangeCount: (data['pendingChangeCount'] as num?)?.toInt() ?? 0,
       localRecordCount: (data['localRecordCount'] as num?)?.toInt() ?? 0,
+      recordVersions: versions,
+      recordVersionsTruncated: data['recordVersionsTruncated'] == true,
     );
   }
 
@@ -164,18 +183,45 @@ enum DeviceTransferSyncHint {
   bothHaveChanges,
   peerEmptyNeedsFull,
   waitingForPeer,
+  localChangesAwaitingPeer,
+}
+
+class DeviceTransferExchangeCounts {
+  const DeviceTransferExchangeCounts({
+    required this.localToSend,
+    required this.peerToSend,
+  });
+
+  final int localToSend;
+  final int peerToSend;
+
+  bool get needsLocalSend => localToSend > 0;
+  bool get needsPeerSend => peerToSend > 0;
+  bool get aligned => localToSend == 0 && peerToSend == 0;
 }
 
 abstract final class DeviceTransferSyncAdvisor {
   static DeviceTransferSyncHint advise({
     required DeviceTransferLocalState local,
     DeviceTransferPeerState? peer,
+    DeviceTransferExchangeCounts? exchange,
   }) {
     if (peer == null) {
-      if (local.hasPendingChanges) {
-        return DeviceTransferSyncHint.youShouldSend;
+      final hasLocalChanges = local.hasPendingChanges ||
+          (local.lastSyncAtMs > 0 && local.maxUpdatedAtMs > local.lastSyncAtMs);
+      if (hasLocalChanges) {
+        return DeviceTransferSyncHint.localChangesAwaitingPeer;
       }
       return DeviceTransferSyncHint.waitingForPeer;
+    }
+
+    if (exchange != null) {
+      if (exchange.aligned) return DeviceTransferSyncHint.aligned;
+      if (exchange.needsLocalSend && exchange.needsPeerSend) {
+        return DeviceTransferSyncHint.bothHaveChanges;
+      }
+      if (exchange.needsLocalSend) return DeviceTransferSyncHint.youShouldSend;
+      if (exchange.needsPeerSend) return DeviceTransferSyncHint.peerShouldSend;
     }
 
     if (peer.localRecordCount == 0 && local.localRecordCount > 0) {
@@ -198,12 +244,6 @@ abstract final class DeviceTransferSyncAdvisor {
       return DeviceTransferSyncHint.peerShouldSend;
     }
     if (local.hasPendingChanges && peer.hasPendingChanges) {
-      if (local.maxUpdatedAtMs > peer.maxUpdatedAtMs) {
-        return DeviceTransferSyncHint.youShouldSend;
-      }
-      if (peer.maxUpdatedAtMs > local.maxUpdatedAtMs) {
-        return DeviceTransferSyncHint.peerShouldSend;
-      }
       return DeviceTransferSyncHint.bothHaveChanges;
     }
 
@@ -222,20 +262,24 @@ abstract final class DeviceTransferSyncAdvisor {
   static String hintMessage(DeviceTransferSyncHint hint) {
     return switch (hint) {
       DeviceTransferSyncHint.aligned =>
-        'I dispositivi risultano allineati: nessun aggiornamento da trasferire.',
+        'I dispositivi risultano allineati: nessun record mancante.',
       DeviceTransferSyncHint.youShouldSend =>
-        'Questo dispositivo ha dati da condividere. Prepara il pacchetto.',
+        'Questo dispositivo ha record che mancano sull\'altro. '
+            'Invia i tuoi aggiornamenti.',
       DeviceTransferSyncHint.peerShouldSend =>
-        'L\'altro dispositivo ha dati da condividere. Attendi l\'invio da lì, '
-            'oppure sincronizza prima da questo se hai modifiche recenti.',
+        'L\'altro dispositivo ha record che ti mancano. Attendi il suo invio, '
+            'poi tocca «Ricevi dati».',
       DeviceTransferSyncHint.bothHaveChanges =>
-        'Entrambi hanno dati diversi. Sincronizza da questo dispositivo, '
-            'poi ripeti dall\'altro: i dati si integrano senza cancellazioni.',
+        'Entrambi hanno record che mancano all\'altro. Invia da questo '
+            'dispositivo, ricevi, poi ripeti dall\'altro: uno alla volta.',
       DeviceTransferSyncHint.peerEmptyNeedsFull =>
-        'L\'altro dispositivo è vuoto: invia il tuo archivio (verrà aggiunto, '
-            'non sostituisce nulla).',
+        'L\'altro dispositivo non ha ancora i tuoi dati: invia solo ciò che '
+            'gli manca.',
       DeviceTransferSyncHint.waitingForPeer =>
         'Apri Sincronizza sull\'altro dispositivo con lo stesso account.',
+      DeviceTransferSyncHint.localChangesAwaitingPeer =>
+        'Questo dispositivo ha modifiche da inviare. Tocca «Invia aggiornamenti»: '
+            'sull\'altro dispositivo comparirà «Ricevi dati».',
     };
   }
 }

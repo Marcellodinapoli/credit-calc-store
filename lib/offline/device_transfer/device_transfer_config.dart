@@ -13,4 +13,6 @@ abstract final class DeviceTransferConfig {
   static const prefsLastReceiveBytes = 'device_transfer_last_receive_bytes';
   static const presenceMaxAgeSeconds = 45;
   static const presenceHeartbeatSeconds = 8;
+  /// Indice record pubblicato in presenza (collection::id → updatedAtMs).
+  static const maxPresenceRecordVersions = 2000;
 }

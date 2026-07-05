@@ -359,17 +359,23 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
     );
   }
 
-  double? _handoffAmount() {
+  bool get _canHandoff {
     final value = _value;
-    if (value.isNaN || value.isInfinite) return null;
-    return value.abs();
+    return !value.isNaN && !value.isInfinite && value > 0;
+  }
+
+  double? _handoffAmount() {
+    if (!_canHandoff) return null;
+    return _value;
   }
 
   void _openHandoffPage(Widget Function(double amount) buildPage) {
     final amount = _handoffAmount();
     if (amount == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Importo non valido sul display.')),
+        const SnackBar(
+          content: Text('Inserisci un importo maggiore di zero sul display.'),
+        ),
       );
       return;
     }
@@ -406,25 +412,26 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
   }
 
   Widget _handoffButtonsRow(double height) {
+    final enabled = _canHandoff;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
         children: [
           _handoffButton(
             'Sviluppa\npiano di rientro',
-            _openRepaymentPlan,
+            enabled ? _openRepaymentPlan : null,
             height,
           ),
           const SizedBox(width: 4),
           _handoffButton(
             'Sviluppa\nsaldo e stralcio',
-            _openBalanceWriteOff,
+            enabled ? _openBalanceWriteOff : null,
             height,
           ),
           const SizedBox(width: 4),
           _handoffButton(
             'Inserisci\nincasso',
-            _openCommissionEntry,
+            enabled ? _openCommissionEntry : null,
             height,
           ),
         ],
@@ -432,10 +439,11 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
     );
   }
 
-  Widget _handoffButton(String label, VoidCallback onTap, double height) {
+  Widget _handoffButton(String label, VoidCallback? onTap, double height) {
+    final enabled = onTap != null;
     return Expanded(
       child: Material(
-        color: _handoffColor,
+        color: enabled ? _handoffColor : _handoffColor.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(4),
         child: InkWell(
           onTap: onTap,
@@ -449,8 +457,8 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: enabled ? Colors.white : Colors.white.withValues(alpha: 0.7),
                 fontSize: 10,
                 height: 1.1,
                 fontWeight: FontWeight.w600,

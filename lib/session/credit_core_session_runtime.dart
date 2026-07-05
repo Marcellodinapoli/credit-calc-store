@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
+
 import '../offline/services/session_service.dart';
 
-/// Servizi condivisi CreditCore (senza blocco sessione globale).
+/// Servizi condivisi CreditCore + sessione unica dispositivo.
 abstract final class CreditCoreSessionRuntime {
   static SessionService? sessionService;
   static Future<void>? bootstrapFuture;
@@ -26,10 +28,23 @@ abstract final class CreditCoreSessionRuntime {
     bootstrapFuture = null;
   }
 
+  static Future<void> releaseSession() async {
+    await sessionService?.releaseIfHolder();
+  }
+
   static void clear() {
     sessionService?.dispose();
     sessionService = null;
     bootstrapFuture = null;
     bootstrapComplete = false;
+  }
+
+  /// Libera la sessione Firestore e poi esce dall'account.
+  static Future<void> signOutWithSessionRelease() async {
+    await releaseSession();
+    clear();
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {}
   }
 }

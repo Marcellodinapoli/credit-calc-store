@@ -47,9 +47,7 @@ class _CallAnalysisAdminBodyState extends State<CallAnalysisAdminBody> {
 
   void _syncFromRemote(String stored) {
     if (_dirty) return;
-    final text = stored.trim().isEmpty
-        ? CallAnalysisConfigService.defaultSystemPrompt
-        : stored;
+    final text = CallAnalysisConfigService.resolvePrompt(stored);
     if (_promptCtrl.text != text) {
       _promptCtrl.text = text;
     }

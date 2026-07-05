@@ -22,6 +22,14 @@
       "fields": [
         { "fieldPath": "updatedAtMs", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "normative_search_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

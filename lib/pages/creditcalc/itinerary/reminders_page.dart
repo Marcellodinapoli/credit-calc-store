@@ -6,6 +6,7 @@ import '../../../widgets/field_visit_link_picker.dart';
 import '../../../models/field_reminder.dart';
 import '../../../services/field_reminder_service.dart';
 import '../../../services/installment_monitor_service.dart';
+import '../../../widgets/pdr_card_details.dart';
 import 'itinerary_page_shell.dart';
 
 enum _ReminderMonthFilter {
@@ -72,9 +73,6 @@ class _RemindersPageState extends State<RemindersPage> {
 
   Widget _reminderCard(FieldReminder item, DateTime now) {
     final isPast = item.remindAt.isBefore(now);
-    final visibleNotes =
-        InstallmentMonitorService.rateizzoReminderVisibleNotes(item) ??
-            item.notes;
 
     return Card(
       color: AppCardTheme.surface,
@@ -95,8 +93,10 @@ class _RemindersPageState extends State<RemindersPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(_formatDateTime(item.remindAt)),
-            if (visibleNotes != null && visibleNotes.isNotEmpty)
-              Text(visibleNotes),
+            PdrCardDetailsLines(
+              detailsFuture:
+                  InstallmentMonitorService.resolvePdrDetailsForReminder(item),
+            ),
             if (item.pushSent)
               const Text(
                 'Notifica inviata',

@@ -99,20 +99,22 @@ abstract final class DevelopSyncCoordinator {
     }
     if (LocalItineraryCoordinator.isActive &&
         LocalItineraryCoordinator.store != null) {
-      final repo = DevelopBackofficePendingPlanRepository(
-        LocalItineraryCoordinator.store!,
-      );
+      final store = LocalItineraryCoordinator.store!;
+      final repo = DevelopBackofficePendingPlanRepository(store);
       BackofficePendingPlanStorage.instance =
           DevelopBackofficePendingPlanStorage(repo);
-      PdrScheduleStorage.instance =
-          DevelopPdrScheduleStorage(LocalItineraryCoordinator.store!);
+      PdrScheduleStorage.instance = DevelopPdrScheduleStorage(store);
+      InstallmentMonitorConfigStorage.instance =
+          DevelopInstallmentMonitorConfigStorage(
+        DevelopInstallmentMonitorRepository(store),
+      );
     } else {
       BackofficePendingPlanStorage.instance =
           FirestoreBackofficePendingPlanStorage();
       PdrScheduleStorage.instance = FirestorePdrScheduleStorage();
+      InstallmentMonitorConfigStorage.instance =
+          InMemoryInstallmentMonitorConfigStorage();
     }
-    InstallmentMonitorConfigStorage.instance =
-        InMemoryInstallmentMonitorConfigStorage();
     _itineraryRepository = null;
     _backofficeRepository = null;
     _installmentMonitorRepository = null;
@@ -136,12 +138,21 @@ abstract final class DevelopSyncCoordinator {
 
   /// Dopo trasferimento manuale: refresh UI + allinea Firestore develop sync.
   static Future<void> afterDeviceTransferMerge(String userId) async {
-    if (!_active || _store == null || _store!.userId != userId) return;
-    _store!.notifyAllDevelopRevisions();
-    try {
-      await DevelopSyncService.instance.syncNow(silent: true);
-    } catch (e, st) {
-      debugPrint('DevelopSyncCoordinator: post-transfer sync ($e)\n$st');
+    final store = _active && _store?.userId == userId
+        ? _store
+        : (LocalItineraryCoordinator.isActive &&
+                LocalItineraryCoordinator.store?.userId == userId
+            ? LocalItineraryCoordinator.store
+            : null);
+    if (store == null) return;
+
+    store.notifyAllDevelopRevisions();
+    if (_active && _store?.userId == userId) {
+      try {
+        await DevelopSyncService.instance.syncNow(silent: true);
+      } catch (e, st) {
+        debugPrint('DevelopSyncCoordinator: post-transfer sync ($e)\n$st');
+      }
     }
     await FieldVisitNotificationService.syncAllForCurrentUser();
     await FieldReminderNotificationService.syncAllForCurrentUser();

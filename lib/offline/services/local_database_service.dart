@@ -192,6 +192,118 @@ class LocalDatabaseService {
     return 0;
   }
 
+  static String recordVersionKey(String collection, String id) =>
+      '$collection::$id';
+
+  /// Indice compatto per confronto tra dispositivi (collection::id → updatedAtMs).
+  Future<({Map<String, int> versions, bool truncated})>
+      recordVersionIndexForUser(
+    String userId, {
+    int maxEntries = 2000,
+  }) async {
+    final db = await database;
+    final rows = await db.query(
+      'local_records',
+      columns: ['collection', 'id', 'updated_at'],
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'updated_at DESC',
+    );
+    final versions = <String, int>{};
+    var truncated = false;
+    for (final row in rows) {
+      if (versions.length >= maxEntries) {
+        truncated = true;
+        break;
+      }
+      final collection = row['collection'] as String?;
+      final id = row['id'] as String?;
+      final updatedAt = row['updated_at'];
+      if (collection == null || id == null || updatedAt is! int) continue;
+      versions[recordVersionKey(collection, id)] = updatedAt;
+    }
+    return (versions: versions, truncated: truncated);
+  }
+
+  static int countRecordsNewerThanPeer(
+    Map<String, int> localVersions,
+    Map<String, int> peerVersions,
+  ) {
+    var count = 0;
+    for (final entry in localVersions.entries) {
+      final peerMs = peerVersions[entry.key];
+      if (peerMs == null || entry.value > peerMs) count++;
+    }
+    return count;
+  }
+
+  static List<Map<String, dynamic>> mergeRecordLists(
+    List<Map<String, dynamic>> primary,
+    List<Map<String, dynamic>> secondary,
+  ) {
+    final byKey = <String, Map<String, dynamic>>{};
+    for (final record in [...primary, ...secondary]) {
+      final collection = record['collection'] as String?;
+      final id = record['id'] as String?;
+      if (collection == null || id == null) continue;
+      byKey[recordVersionKey(collection, id)] = record;
+    }
+    final out = byKey.values.toList();
+    out.sort((a, b) {
+      final am = (a['updatedAt'] as DateTime).millisecondsSinceEpoch;
+      final bm = (b['updatedAt'] as DateTime).millisecondsSinceEpoch;
+      return am.compareTo(bm);
+    });
+    return out;
+  }
+
+  /// Record da inviare: modifiche locali dall'ultimo allineamento + delta
+  /// rispetto all'indice versioni del peer (se disponibile).
+  Future<List<Map<String, dynamic>>> recordsPendingSync(
+    String userId, {
+    required int sinceMs,
+    Map<String, int>? peerVersions,
+  }) async {
+    final changed = await recordsChangedSince(userId, sinceMs);
+    if (peerVersions == null || peerVersions.isEmpty) return changed;
+    final missingOnPeer = await recordsMissingOnPeer(userId, peerVersions);
+    return mergeRecordLists(changed, missingOnPeer);
+  }
+
+  Future<int> countRecordsMissingOnPeer(
+    String userId,
+    Map<String, int> peerVersions,
+  ) async {
+    final index = await recordVersionIndexForUser(userId);
+    return countRecordsNewerThanPeer(index.versions, peerVersions);
+  }
+
+  Future<List<Map<String, dynamic>>> recordsMissingOnPeer(
+    String userId,
+    Map<String, int> peerVersions,
+  ) async {
+    final all = await listAllRecordsForUser(userId);
+    final out = <Map<String, dynamic>>[];
+    for (final record in all) {
+      final collection = record['collection'] as String?;
+      final id = record['id'] as String?;
+      final updatedAt = record['updatedAt'] as DateTime?;
+      if (collection == null || id == null || updatedAt == null) continue;
+      final key = recordVersionKey(collection, id);
+      final peerMs = peerVersions[key];
+      final localMs = updatedAt.millisecondsSinceEpoch;
+      if (peerMs == null || localMs > peerMs) {
+        out.add(record);
+      }
+    }
+    out.sort((a, b) {
+      final am = (a['updatedAt'] as DateTime).millisecondsSinceEpoch;
+      final bm = (b['updatedAt'] as DateTime).millisecondsSinceEpoch;
+      return am.compareTo(bm);
+    });
+    return out;
+  }
+
   Future<List<Map<String, dynamic>>> recordsChangedSince(
     String userId,
     int sinceMs,
@@ -407,13 +519,41 @@ class LocalDatabaseService {
         continue;
       }
 
-      if (payload['_deleted'] == true) continue;
-
       final incomingMs = record['updatedAtMs'] as int? ?? 0;
       final local = await recordById(collection: collection, id: id);
       if (local != null) {
         final localMs = (local['updatedAt'] as DateTime).millisecondsSinceEpoch;
         if (incomingMs < localMs) continue;
+      }
+
+      if (payload['_deleted'] == true) {
+        final tombstonePayload = local != null
+            ? (Map<String, dynamic>.from(local['payload'] as Map)
+              ..['_deleted'] = true)
+            : Map<String, dynamic>.from(payload);
+        final encoded = await _encodePayload(tombstonePayload);
+        final createdAtMs = record['createdAtMs'] as int?;
+        final localCreatedMs = local != null
+            ? (local['createdAt'] as DateTime).millisecondsSinceEpoch
+            : null;
+        await db.insert(
+          'local_records',
+          {
+            'id': id,
+            'collection': collection,
+            'user_id': userId,
+            'payload': encoded,
+            'created_at': createdAtMs ?? localCreatedMs ?? incomingMs,
+            'updated_at': incomingMs,
+            'server_updated_at': record['serverUpdatedAtMs'],
+            'sync_status':
+                record['syncStatus'] ?? SyncRecordStatus.synced.storageValue,
+            'origin': record['origin'] ?? 'device_transfer',
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        applied++;
+        continue;
       }
 
       final encoded = await _encodePayload(payload);

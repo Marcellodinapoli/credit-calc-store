@@ -16,7 +16,8 @@ class DeviceSyncPage extends StatefulWidget {
   State<DeviceSyncPage> createState() => _DeviceSyncPageState();
 }
 
-class _DeviceSyncPageState extends State<DeviceSyncPage> {
+class _DeviceSyncPageState extends State<DeviceSyncPage>
+    with WidgetsBindingObserver {
   bool _loading = true;
   bool _busy = false;
   bool _online = true;
@@ -29,6 +30,8 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
   String? _statusMessage;
   String? _error;
   DeviceTransferReceiveResult? _lastReceive;
+  int _recordsToSendToPeer = 0;
+  int _recordsPeerWouldSend = 0;
   StreamSubscription<bool>? _receiverSub;
   StreamSubscription<DeviceTransferPeerState?>? _peerSub;
   StreamSubscription<DeviceTransferMeta?>? _transferSub;
@@ -37,11 +40,76 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refresh();
   }
 
   @override
+  void activate() {
+    super.activate();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      unawaited(_refreshLocalExchangeState(uid));
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        unawaited(_refreshLocalExchangeState(uid));
+      }
+    }
+  }
+
+  Future<void> _refreshLocalExchangeState(String uid) async {
+    try {
+      if (_online) {
+        await DeviceTransferService.pingReceiverPresence(uid);
+      }
+      final localState = await DeviceTransferService.readLocalState(uid);
+      if (!mounted) return;
+      setState(() {
+        _localState = localState;
+        if (_peer == null) {
+          _syncHint = DeviceTransferSyncAdvisor.advise(
+            local: localState,
+            peer: null,
+            exchange: null,
+          );
+        }
+      });
+      await _updateExchangeCounts(uid);
+    } catch (_) {}
+  }
+
+  int get _effectiveSendCount {
+    final pending = _localState?.pendingChangeCount ?? 0;
+    return _recordsToSendToPeer > pending
+        ? _recordsToSendToPeer
+        : pending;
+  }
+
+  int get _localChangeEstimate {
+    final local = _localState;
+    if (local == null) return 0;
+    if (local.pendingChangeCount > 0) return local.pendingChangeCount;
+    if (local.lastSyncAtMs > 0 && local.maxUpdatedAtMs > local.lastSyncAtMs) {
+      return 1;
+    }
+    return 0;
+  }
+
+  String get _displaySendCount {
+    if (_peer != null) return '$_effectiveSendCount';
+    final estimate = _localChangeEstimate;
+    return estimate > 0 ? '$estimate' : '—';
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _receiverSub?.cancel();
     _peerSub?.cancel();
     _transferSub?.cancel();
@@ -73,17 +141,30 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
       if (online) {
         try {
           peer = await DeviceTransferService.readPeerState(uid);
+          peer ??= await DeviceTransferService.readPeerState(
+            uid,
+            preferServer: true,
+          );
           transfer = await DeviceTransferService.readTransferMeta(uid);
-          if (transfer?.isPrepared == true) {
+          if (transfer?.isPrepared == true || transfer?.isPending == true) {
             isSender = await DeviceTransferService.isActiveSender(uid);
           }
         } catch (_) {}
       }
     }
 
+    DeviceTransferExchangeCounts? exchange;
+    if (uid != null && peer != null) {
+      exchange = await DeviceTransferService.exchangeCounts(uid, peer);
+    }
+
     final syncHint = localState == null
         ? DeviceTransferSyncHint.waitingForPeer
-        : DeviceTransferSyncAdvisor.advise(local: localState, peer: peer);
+        : DeviceTransferSyncAdvisor.advise(
+            local: localState,
+            peer: peer,
+            exchange: exchange,
+          );
 
     if (!mounted) return;
     setState(() {
@@ -96,7 +177,39 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
       _loading = false;
     });
 
+    if (uid != null) {
+      await _updateExchangeCounts(uid);
+    }
+
     await _syncPresenceAndWatch(uid, isSender);
+  }
+
+  Future<void> _updateExchangeCounts(String uid) async {
+    final peer = _peer;
+    if (peer == null) {
+      if (!mounted) return;
+      setState(() {
+        _recordsToSendToPeer = 0;
+        _recordsPeerWouldSend = 0;
+      });
+      return;
+    }
+    try {
+      final counts = await DeviceTransferService.exchangeCounts(uid, peer);
+      if (!mounted) return;
+      setState(() {
+        _recordsToSendToPeer = counts.localToSend;
+        _recordsPeerWouldSend = counts.peerToSend;
+        final local = _localState;
+        if (local != null) {
+          _syncHint = DeviceTransferSyncAdvisor.advise(
+            local: local,
+            peer: peer,
+            exchange: counts,
+          );
+        }
+      });
+    } catch (_) {}
   }
 
   Future<void> _syncPresenceAndWatch(String? uid, bool isSender) async {
@@ -111,21 +224,21 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
 
     if (uid == null || !_online) return;
 
-    await DeviceTransferService.pingReceiverPresence(uid);
+    try {
+      await DeviceTransferService.pingReceiverPresence(uid);
+    } catch (_) {}
     _presenceTimer = Timer.periodic(
       const Duration(seconds: DeviceTransferConfig.presenceHeartbeatSeconds),
-      (_) => DeviceTransferService.pingReceiverPresence(uid),
+      (_) {
+        unawaited(DeviceTransferService.pingReceiverPresence(uid));
+        unawaited(_refreshLocalExchangeState(uid));
+      },
     );
 
     _peerSub = DeviceTransferService.watchPeerState(uid).listen((peer) {
       if (!mounted) return;
-      final local = _localState;
-      setState(() {
-        _peer = peer;
-        if (local != null) {
-          _syncHint = DeviceTransferSyncAdvisor.advise(local: local, peer: peer);
-        }
-      });
+      setState(() => _peer = peer);
+      unawaited(_updateExchangeCounts(uid));
     });
 
     _transferSub = DeviceTransferService.watchTransferMeta(uid).listen(
@@ -140,7 +253,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
     DeviceTransferMeta? transfer,
   ) async {
     var isSender = false;
-    if (transfer?.isPrepared == true) {
+    if (transfer?.isPrepared == true || transfer?.isPending == true) {
       isSender = await DeviceTransferService.isActiveSender(uid);
     }
     if (!mounted) return;
@@ -155,6 +268,10 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
             'entro ${DeviceTransferFormat.dateTime(
               DateTime.fromMillisecondsSinceEpoch(transfer!.expiresAtMs),
             )}.';
+      } else if (transfer?.isPending == true && isSender) {
+        _statusMessage =
+            'Pacchetto inviato. Attendi che l\'altro dispositivo '
+            'tocchi «Ricevi dati».';
       }
     });
 
@@ -184,29 +301,33 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
     );
   }
 
-  Future<void> _prepare() async {
+  Future<void> _sendUpdatesToPeer() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
     setState(() {
       _busy = true;
       _error = null;
-      _statusMessage = 'Cifratura e preparazione pacchetto…';
+      _statusMessage = 'Invio aggiornamenti all\'altro dispositivo…';
       _lastReceive = null;
       _receiverReady = false;
     });
 
     try {
-      final result = await DeviceTransferService.preparePackage(uid);
+      final prepared = await DeviceTransferService.preparePackage(uid);
       if (!mounted) return;
       setState(() {
-        final kind = result.isDelta ? 'aggiornamenti' : 'archivio completo';
         _statusMessage =
-            'Pacchetto pronto ($kind: ${result.recordCount} record, '
-            '${DeviceTransferFormat.bytes(result.totalBytes)}).\n\n'
-            'Ora apri l\'altra app, accedi con lo stesso account '
-            'e apri la pagina «Sincronizza» dal menu ⋮.\n\n'
-            'Attendo il secondo dispositivo…';
+            'Invio di ${prepared.recordCount} record '
+            '(${DeviceTransferFormat.bytes(prepared.totalBytes)})…';
+      });
+      final result = await DeviceTransferService.releasePackage(uid);
+      if (!mounted) return;
+      setState(() {
+        _statusMessage =
+            'Aggiornamenti inviati. Sull\'altro dispositivo tocca «Ricevi dati» '
+            'entro ${DeviceTransferFormat.dateTime(result.expiresAt)}.\n\n'
+            'Poi ripeti dall\'altro dispositivo se ha ancora record da inviare.';
       });
       await _refresh();
     } catch (e) {
@@ -260,32 +381,42 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
       setState(() {
         _activeTransfer = null;
         _lastReceive = result;
+      });
+      await _refresh();
+      if (!mounted) return;
+      final followUp = _recordsToSendToPeer > 0
+          ? 'Se hai ancora record da inviare, tocca «Invia aggiornamenti».'
+          : _recordsPeerWouldSend > 0
+              ? 'L\'altro dispositivo può ancora inviare: ripeti lì.'
+              : 'I dispositivi risultano allineati.';
+      setState(() {
         _statusMessage =
-            'Trasferimento completato: ${result.importedRecords} record '
-            '(${DeviceTransferFormat.bytes(result.totalBytes)}) importati.';
+            'Ricevuti ${result.importedRecords} record '
+            '(${DeviceTransferFormat.bytes(result.totalBytes)}).\n\n'
+            '$followUp';
       });
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-        await _refresh();
-      }
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  bool get _canPrepare {
+  int get _sendCountForAction {
+    if (_peer != null) return _effectiveSendCount;
+    return _localChangeEstimate;
+  }
+
+  bool get _canSendUpdates {
     if (_busy || !_online || _activeTransfer != null || _isSender) {
       return false;
     }
-    return _syncHint == DeviceTransferSyncHint.youShouldSend ||
-        _syncHint == DeviceTransferSyncHint.peerEmptyNeedsFull ||
-        _syncHint == DeviceTransferSyncHint.bothHaveChanges;
+    return _sendCountForAction > 0;
   }
 
   bool get _canRelease =>
-      _isSender && _activeTransfer?.isPrepared == true && _receiverReady;
+      _isSender && _activeTransfer?.isPrepared == true && _online;
 
   bool get _canReceive => _activeTransfer?.isReceivable == true && !_isSender;
 
@@ -315,9 +446,11 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Ogni dispositivo condivide i propri dati: l\'altro li integra '
-                  'senza cancellare i suoi. Ripeti da entrambi per tenere tutto '
-                  'aggiornato.',
+                  'Scambio manuale tra dispositivi: ogni app invia solo i record '
+                  'che mancano sull\'altro (uno alla volta). I dati si integrano '
+                  'senza cancellare quelli già presenti.\n\n'
+                  'Per vedere se ci sono dati da inviare o ricevere, apri la '
+                  'pagina Sincronizza su entrambi i dispositivi con lo stesso account.',
                   style: TextStyle(
                     color: Colors.grey.shade700,
                     height: 1.45,
@@ -333,8 +466,14 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                         value: '${_localState!.localRecordCount}',
                       ),
                       _InfoRow(
-                        label: 'Da condividere',
-                        value: '${_localState!.pendingChangeCount}',
+                        label: 'Da inviare all\'altro',
+                        value: _displaySendCount,
+                      ),
+                      _InfoRow(
+                        label: 'In arrivo dall\'altro',
+                        value: _peer == null
+                            ? '—'
+                            : '$_recordsPeerWouldSend',
                       ),
                       if (_localState!.lastSyncAtMs > 0)
                         _InfoRow(
@@ -358,14 +497,15 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                         value: '${_peer!.localRecordCount}',
                       ),
                       _InfoRow(
-                        label: 'Da condividere',
-                        value: '${_peer!.pendingChangeCount}',
+                        label: 'Da inviare a te',
+                        value: '$_recordsPeerWouldSend',
                       ),
                     ],
                   ),
                 ],
                 if (_activeTransfer == null &&
-                    _syncHint != DeviceTransferSyncHint.waitingForPeer) ...[
+                    _syncHint !=
+                        DeviceTransferSyncHint.waitingForPeer) ...[
                   const SizedBox(height: 12),
                   _Banner(
                     color: _syncHint == DeviceTransferSyncHint.aligned
@@ -460,12 +600,39 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                   ),
                 ],
                 const SizedBox(height: 24),
-                if (_canPrepare)
+                if (_canSendUpdates)
                   FilledButton.icon(
-                    onPressed: _prepare,
-                    icon: const Icon(Icons.lock_outline),
-                    label: const Text('Prepara pacchetto da trasferire'),
+                    onPressed: _sendUpdatesToPeer,
+                    icon: const Icon(Icons.sync_alt),
+                    label: Text(
+                      'Invia aggiornamenti all\'altro '
+                      '($_sendCountForAction)',
+                    ),
                   ),
+                if (_peer == null &&
+                    _sendCountForAction > 0 &&
+                    _online &&
+                    _activeTransfer == null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'L\'altro dispositivo non è ancora visibile qui, ma puoi '
+                    'inviare lo stesso: sul PC comparirà «Ricevi dati».',
+                    style: TextStyle(
+                      color: Colors.grey.shade700,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                if (_isSender && _activeTransfer?.isPending == true) ...[
+                  const SizedBox(height: 16),
+                  _Banner(
+                    color: const Color(0xFF0A66C2),
+                    text:
+                        'Pacchetto inviato. Attendi che l\'altro dispositivo '
+                        'tocchi «Ricevi dati».',
+                  ),
+                ],
                 if (_isSender && _activeTransfer?.isPrepared == true) ...[
                   FilledButton.icon(
                     onPressed: _busy || !_online || !_canRelease ? null : _release,
@@ -475,9 +642,9 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                   const SizedBox(height: 8),
                   Text(
                     _receiverReady
-                        ? 'Secondo dispositivo rilevato.'
-                        : 'Il pulsante si attiva quando l\'altra app è aperta '
-                            'su Sincronizza con lo stesso account.',
+                        ? 'Secondo dispositivo rilevato su Sincronizza.'
+                        : 'Apri Sincronizza sull\'altro dispositivo prima di '
+                            'ricevere, poi tocca «Invia dati ora».',
                     style: TextStyle(
                       color: Colors.grey.shade700,
                       fontSize: 13,
@@ -485,10 +652,10 @@ class _DeviceSyncPageState extends State<DeviceSyncPage> {
                     ),
                   ),
                 ],
-                if (!_isSender) ...[
+                if (!_isSender && _canReceive) ...[
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
-                    onPressed: _busy || !_online || !_canReceive ? null : _receive,
+                    onPressed: _busy || !_online ? null : _receive,
                     icon: const Icon(Icons.download_outlined),
                     label: const Text('Ricevi dati'),
                   ),

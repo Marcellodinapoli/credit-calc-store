@@ -7,7 +7,7 @@ import '../offline/credit_calc_runtime.dart';
 import '../offline/services/session_service.dart';
 import 'credit_core_session_runtime.dart';
 
-/// Consente l'accesso a tutti gli utenti autenticati senza blocco globale.
+/// Consente l'accesso agli utenti autenticati con sessione unica per dispositivo.
 class CreditCoreSessionCoordinator extends StatefulWidget {
   const CreditCoreSessionCoordinator({super.key, required this.child});
 
@@ -71,6 +71,7 @@ class _CreditCoreSessionCoordinatorState
     if (existing != null &&
         existing.userId == user.uid &&
         CreditCoreSessionRuntime.bootstrapComplete) {
+      await existing.retryClaim();
       if (!mounted) return;
       setState(() => _ready = true);
       return;
@@ -94,7 +95,9 @@ class _CreditCoreSessionCoordinatorState
   }
 
   Future<void> _runBootstrap(User user) async {
-    CreditCoreSessionRuntime.sessionService = SessionService(userId: user.uid);
+    final service = SessionService(userId: user.uid);
+    await service.initialize();
+    CreditCoreSessionRuntime.sessionService = service;
     CreditCoreSessionRuntime.bootstrapComplete = true;
   }
 

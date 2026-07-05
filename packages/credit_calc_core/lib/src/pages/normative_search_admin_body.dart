@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ai/normative_search_admin_service.dart';
 import '../ai/normative_search_config_service.dart';
+import '../widgets/normative_search_history_section.dart';
 
 /// Editor prompt Ricerca normativa (BackOffice app e web).
 class NormativeSearchAdminBody extends StatefulWidget {
@@ -212,6 +213,8 @@ class _NormativeSearchAdminBodyState extends State<NormativeSearchAdminBody> {
                   ),
                 ),
               ),
+              const SizedBox(height: 24),
+              const NormativeSearchHistorySection(),
             ],
           ),
         );

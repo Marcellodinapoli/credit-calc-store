@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../models/sync_record_status.dart';
 import '../services/local_database_service.dart';
 import 'models/develop_local_collection.dart';
@@ -102,7 +104,17 @@ class DevelopSyncSqliteStore {
     final now = DateTime.now();
     final existing = await recordById(collection: collection, id: id);
     final created = createdAt ?? existing?.createdAt ?? now;
-    final updated = updatedAt ?? now;
+    var updated = updatedAt ?? now;
+    if (!_applyingRemoteSync && existing != null) {
+      final existingMs = existing.updatedAt.millisecondsSinceEpoch;
+      if (updated.millisecondsSinceEpoch <= existingMs) {
+        updated = DateTime.fromMillisecondsSinceEpoch(existingMs + 1);
+      }
+    }
+    if (!_applyingRemoteSync) {
+      payload = Map<String, dynamic>.from(payload)
+        ..['updatedAt'] = Timestamp.fromDate(updated);
+    }
 
     await _db.upsertRecord(
       collection: collection.storageKey,
@@ -125,11 +137,33 @@ class DevelopSyncSqliteStore {
     required String id,
   }) async {
     final now = DateTime.now();
-    if (!_applyingRemoteSync) {
-      onMutation?.call(collection, id, deleted: true, updatedAt: now);
+    final existing = await recordById(collection: collection, id: id);
+    if (existing == null) return;
+
+    var updated = now;
+    final existingMs = existing.updatedAt.millisecondsSinceEpoch;
+    if (updated.millisecondsSinceEpoch <= existingMs) {
+      updated = DateTime.fromMillisecondsSinceEpoch(existingMs + 1);
     }
-    await _db.deleteRecord(collection: collection.storageKey, id: id);
+
+    final payload = Map<String, dynamic>.from(existing.payload)
+      ..['_deleted'] = true
+      ..['updatedAt'] = Timestamp.fromDate(updated);
+
+    await _db.upsertRecord(
+      collection: collection.storageKey,
+      id: id,
+      userId: userId,
+      payload: payload,
+      createdAt: existing.createdAt,
+      updatedAt: updated,
+      syncStatus: SyncRecordStatus.synced,
+      origin: 'local',
+    );
     _notifyRevision(collection);
+    if (!_applyingRemoteSync) {
+      onMutation?.call(collection, id, deleted: true, updatedAt: updated);
+    }
   }
 
   Future<void> applyRemoteRecord({

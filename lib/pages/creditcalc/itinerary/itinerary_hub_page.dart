@@ -1,3 +1,4 @@
+import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
 import '../../../models/field_reminder.dart';
@@ -17,9 +18,11 @@ import 'visit_history_page.dart';
 class ItineraryHubPage extends StatelessWidget {
   const ItineraryHubPage({super.key});
 
-  void _open(BuildContext context, Widget page) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => page),
+  void _open(BuildContext context, String sectionKey, Widget page) {
+    pushSectionOccupancy<void>(
+      context,
+      sectionKey: sectionKey,
+      child: page,
     );
   }
 
@@ -64,6 +67,7 @@ class ItineraryHubPage extends StatelessWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _open(
                     context,
+                    'itinerary:appointments',
                     const PracticeAgendaPage(
                       pageTitle: 'Appuntamenti',
                     ),
@@ -81,7 +85,7 @@ class ItineraryHubPage extends StatelessWidget {
                 'Compiti e follow-up da completare, con scadenza opzionale.',
               ),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => _open(context, const ActivitiesPage()),
+              onTap: () => _open(context, 'itinerary:activities', const ActivitiesPage()),
             ),
           ),
           const SizedBox(height: 12),
@@ -108,7 +112,7 @@ class ItineraryHubPage extends StatelessWidget {
                     'Avvisi programmati per richiami e scadenze importanti.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _open(context, const RemindersPage()),
+                  onTap: () => _open(context, 'itinerary:reminders', const RemindersPage()),
                 );
               },
             ),
@@ -124,6 +128,7 @@ class ItineraryHubPage extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _open(
                 context,
+                'itinerary:map',
                 const TerritoryMapPage(
                   pageTitle: 'Pianificazione territoriale',
                 ),
@@ -139,7 +144,7 @@ class ItineraryHubPage extends StatelessWidget {
                 'Riepilogo per mese e zona territoriale.',
               ),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => _open(context, const VisitHistoryPage()),
+              onTap: () => _open(context, 'itinerary:history', const VisitHistoryPage()),
             ),
           ),
         ],

@@ -6,6 +6,7 @@ import '../core/theme/app_card_theme.dart';
 import '../layout/credit_calc_page_host.dart';
 import '../nav/credit_calc_nav.dart';
 import '../section_lock/section_lock_scope.dart';
+import '../section_lock/section_occupancy_scope.dart';
 import '../subscription/public_usage_guard.dart';
 import '../subscription/public_plan_limits.dart';
 
@@ -97,12 +98,12 @@ class CommissionCreditorPicker {
     final selected = await _pickFromDialog(context);
     if (selected == null || !context.mounted) return;
 
-    final saved = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => CommissionSettingsPage(
-          creditorId: selected.id,
-          creditorName: selected.name,
-        ),
+    final saved = await pushSectionOccupancy<bool>(
+      context,
+      sectionKey: 'commission_settings:${selected.id}',
+      child: CommissionSettingsPage(
+        creditorId: selected.id,
+        creditorName: selected.name,
       ),
     );
 

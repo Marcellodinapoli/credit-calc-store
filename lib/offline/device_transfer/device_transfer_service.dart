@@ -111,9 +111,16 @@ abstract final class DeviceTransferService {
     return best;
   }
 
-  static Future<DeviceTransferPeerState?> readPeerState(String userId) async {
+  static Future<DeviceTransferPeerState?> readPeerState(
+    String userId, {
+    bool preferServer = false,
+  }) async {
     final localId = await DevelopSyncDevice.id();
-    final snap = await _presenceRef(userId).get();
+    final snap = preferServer
+        ? await _presenceRef(userId).get(
+            const GetOptions(source: Source.server),
+          )
+        : await _presenceRef(userId).get();
     return _readPeerFromSnapshot(snap, localId);
   }
 
@@ -131,26 +138,78 @@ abstract final class DeviceTransferService {
     return 'delta';
   }
 
-  /// Quando i dispositivi non condividono lo stesso baseline si inviano tutti i
-  /// record locali: il ricevente li integra senza cancellare i propri.
+  /// Record locali modificati dopo l'ultimo allineamento di questo dispositivo.
   static int resolveSinceMs({
     required DeviceTransferLocalState local,
     DeviceTransferPeerState? peer,
   }) {
     if (local.neverSynced) return 0;
     if (peer == null) return local.lastSyncAtMs;
-    if (peer.localRecordCount == 0) return 0;
-    if (peer.lastSyncAtMs != local.lastSyncAtMs) return 0;
-    // Stesso baseline ma conteggi diversi: il peer non ha record più vecchi
-    // non inclusi nel delta (es. monitoraggio rata attivato solo su un device).
-    if (peer.localRecordCount != local.localRecordCount) return 0;
     return local.lastSyncAtMs;
   }
 
   static Future<DeviceTransferSyncHint> adviseSync(String userId) async {
     final local = await readLocalState(userId);
     final peer = await readPeerState(userId);
-    return DeviceTransferSyncAdvisor.advise(local: local, peer: peer);
+    final exchange =
+        peer == null ? null : await exchangeCounts(userId, peer);
+    return DeviceTransferSyncAdvisor.advise(
+      local: local,
+      peer: peer,
+      exchange: exchange,
+    );
+  }
+
+  static Future<DeviceTransferExchangeCounts> exchangeCounts(
+    String userId,
+    DeviceTransferPeerState peer,
+  ) async {
+    final local = await readLocalState(userId);
+    final db = LocalDatabaseService.instance;
+    final localIndex = await db.recordVersionIndexForUser(
+      userId,
+      maxEntries: DeviceTransferConfig.maxPresenceRecordVersions,
+    );
+
+    final localToSend = (await resolveRecordsToSend(
+      userId,
+      peer: peer,
+      local: local,
+    )).length;
+
+    var peerToSend = !localIndex.truncated && localIndex.versions.isNotEmpty
+        ? LocalDatabaseService.countRecordsNewerThanPeer(
+            peer.recordVersions,
+            localIndex.versions,
+          )
+        : peer.pendingChangeCount;
+
+    if (peer.pendingChangeCount > peerToSend) {
+      peerToSend = peer.pendingChangeCount;
+    }
+
+    return DeviceTransferExchangeCounts(
+      localToSend: localToSend,
+      peerToSend: peerToSend,
+    );
+  }
+
+  static Future<List<Map<String, dynamic>>> resolveRecordsToSend(
+    String userId, {
+    DeviceTransferPeerState? peer,
+    required DeviceTransferLocalState local,
+  }) async {
+    final db = LocalDatabaseService.instance;
+    final sinceMs = peer != null
+        ? resolveSinceMs(local: local, peer: peer)
+        : (local.neverSynced ? 0 : local.lastSyncAtMs);
+    final peerVersions =
+        peer != null && peer.hasReliableVersionIndex ? peer.recordVersions : null;
+    return db.recordsPendingSync(
+      userId,
+      sinceMs: sinceMs,
+      peerVersions: peerVersions,
+    );
   }
 
   static Future<DeviceTransferLocalHistory> readLocalHistory(
@@ -241,7 +300,7 @@ abstract final class DeviceTransferService {
 
   static Future<bool> isActiveSender(String userId) async {
     final meta = await readTransferMeta(userId);
-    if (meta == null || !meta.isPrepared) return false;
+    if (meta == null || (!meta.isPrepared && !meta.isPending)) return false;
     final deviceId = await DevelopSyncDevice.id();
     return meta.senderDeviceId == deviceId;
   }
@@ -267,14 +326,25 @@ abstract final class DeviceTransferService {
   static Future<void> pingReceiverPresence(String userId) async {
     final deviceId = await DevelopSyncDevice.id();
     final state = await readLocalState(userId);
-    await _presenceRef(userId).doc(deviceId).set({
-      'lastSeenAtMs': DateTime.now().millisecondsSinceEpoch,
-      'onSyncPage': true,
-      'lastSyncAtMs': state.lastSyncAtMs,
-      'maxUpdatedAtMs': state.maxUpdatedAtMs,
-      'pendingChangeCount': state.pendingChangeCount,
-      'localRecordCount': state.localRecordCount,
-    }, SetOptions(merge: true));
+    final versionIndex = await LocalDatabaseService.instance
+        .recordVersionIndexForUser(
+      userId,
+      maxEntries: DeviceTransferConfig.maxPresenceRecordVersions,
+    );
+    try {
+      await _presenceRef(userId).doc(deviceId).set({
+        'lastSeenAtMs': DateTime.now().millisecondsSinceEpoch,
+        'onSyncPage': true,
+        'lastSyncAtMs': state.lastSyncAtMs,
+        'maxUpdatedAtMs': state.maxUpdatedAtMs,
+        'pendingChangeCount': state.pendingChangeCount,
+        'localRecordCount': state.localRecordCount,
+        'recordVersions': versionIndex.versions,
+        'recordVersionsTruncated': versionIndex.truncated,
+      }, SetOptions(merge: true));
+    } catch (e, st) {
+      debugPrint('DeviceTransferService: pingReceiverPresence failed: $e\n$st');
+    }
   }
 
   static Future<void> clearReceiverPresence(String userId) async {
@@ -299,31 +369,35 @@ abstract final class DeviceTransferService {
   ) async {
     final local = await readLocalState(userId);
     final peer = await readPeerState(userId);
-    final transferMode = resolveTransferMode(local: local, peer: peer);
-    final sinceMs = resolveSinceMs(local: local, peer: peer);
 
-    final db = LocalDatabaseService.instance;
-    final toSend = await db.recordsChangedSince(userId, sinceMs);
+    final toSend = await resolveRecordsToSend(
+      userId,
+      peer: peer,
+      local: local,
+    );
     if (toSend.isEmpty) {
       throw StateError(
-        'Nessun dato da condividere da questo dispositivo. '
-        'Ricevi prima dall\'altro se ha modifiche.',
+        'Nessun record da inviare: l\'altro dispositivo ha già tutti i tuoi dati.',
       );
     }
+
+    final transferMode = resolveTransferMode(local: local, peer: peer);
+    final isDelta = toSend.length < local.localRecordCount;
 
     final built = await _buildAndUploadPackage(
       userId: userId,
       status: 'prepared',
       transferMode: transferMode,
-      sinceMs: sinceMs,
+      rows: toSend,
+      isDelta: isDelta,
     );
     return DeviceTransferPrepareResult(
       recordCount: built.recordCount,
       totalBytes: built.totalBytes,
       companyNames: built.companyNames,
       preparedAt: built.timestamp,
-      isDelta: sinceMs > 0,
-      pendingChanges: local.pendingChangeCount,
+      isDelta: isDelta,
+      pendingChanges: toSend.length,
     );
   }
 
@@ -362,7 +436,8 @@ abstract final class DeviceTransferService {
       sentAt: now,
       totalBytes: meta.totalBytes,
     );
-    await _saveLastSyncAt(userId, syncBaselineMs);
+    final alignedAtMs = meta.maxPreparedUpdatedAtMs ?? syncBaselineMs;
+    await _saveLastSyncAt(userId, alignedAtMs);
 
     return DeviceTransferSendResult(
       recordCount: meta.recordCount,
@@ -378,12 +453,11 @@ abstract final class DeviceTransferService {
     required String userId,
     required String status,
     required String transferMode,
-    required int sinceMs,
+    required List<Map<String, dynamic>> rows,
+    required bool isDelta,
   }) async {
     await _deleteRemotePackage(userId);
 
-    final db = LocalDatabaseService.instance;
-    final rows = await db.recordsChangedSince(userId, sinceMs);
     final appMeta = _filterAppMeta(
       await LocalDatabaseService.instance.listAllMeta(),
     );
@@ -399,18 +473,21 @@ abstract final class DeviceTransferService {
       final id = row['id'] as String;
       final payload = Map<String, dynamic>.from(row['payload'] as Map);
       final isDeleted = payload['_deleted'] == true;
-      if (isDeleted) continue;
 
-      final company = _readCompanyName(payload);
-      if (company != null) {
-        companyNames[_companyNameKey(collection, id)] = company;
-        companyPreview.add(company);
+      if (!isDeleted) {
+        final company = _readCompanyName(payload);
+        if (company != null) {
+          companyNames[_companyNameKey(collection, id)] = company;
+          companyPreview.add(company);
+        }
       }
 
       wireRecords.add({
         'collection': collection,
         'id': id,
-        'payload': _payloadWithoutCompanyName(payload),
+        'payload': isDeleted
+            ? const {'_deleted': true}
+            : _payloadWithoutCompanyName(payload),
         'createdAtMs': (row['createdAt'] as DateTime).millisecondsSinceEpoch,
         'updatedAtMs': (row['updatedAt'] as DateTime).millisecondsSinceEpoch,
         'serverUpdatedAtMs':
@@ -435,6 +512,13 @@ abstract final class DeviceTransferService {
 
     final senderDeviceId = await DevelopSyncDevice.id();
     final now = DateTime.now();
+    var maxPreparedUpdatedAtMs = 0;
+    for (final row in rows) {
+      final updatedAt = row['updatedAt'];
+      if (updatedAt is! DateTime) continue;
+      final ms = updatedAt.millisecondsSinceEpoch;
+      if (ms > maxPreparedUpdatedAtMs) maxPreparedUpdatedAtMs = ms;
+    }
     final expiresAt = now.add(
       const Duration(minutes: DeviceTransferConfig.ttlMinutes),
     );
@@ -466,7 +550,7 @@ abstract final class DeviceTransferService {
       'status': status,
       'schemaVersion': DeviceTransferConfig.schemaVersion,
       'transferMode': transferMode,
-      'sinceMs': sinceMs > 0 ? sinceMs : null,
+      'isDelta': isDelta,
       'createdAtMs': now.millisecondsSinceEpoch,
       'expiresAtMs': expiresAt.millisecondsSinceEpoch,
       'senderDeviceId': senderDeviceId,
@@ -474,6 +558,8 @@ abstract final class DeviceTransferService {
       'chunkCount': chunks.length,
       'totalBytes': totalBytes,
       'companyNames': companyNames,
+      if (maxPreparedUpdatedAtMs > 0)
+        'maxPreparedUpdatedAtMs': maxPreparedUpdatedAtMs,
     });
 
     return _BuiltPackage(
@@ -506,6 +592,14 @@ abstract final class DeviceTransferService {
     if (meta.isExpired) {
       await _deleteRemotePackage(userId);
       throw StateError('Il pacchetto è scaduto. Richiedi un nuovo invio.');
+    }
+
+    final localDeviceId = await DevelopSyncDevice.id();
+    if (meta.senderDeviceId == localDeviceId) {
+      throw StateError(
+        'Hai inviato tu questo pacchetto. Attendi che l\'altro dispositivo '
+        'tocchi «Ricevi dati».',
+      );
     }
 
     final imported = <Map<String, dynamic>>[];
@@ -582,6 +676,12 @@ abstract final class DeviceTransferService {
       'DeviceTransferService: integrati $applied record per $userId',
     );
 
+    var alignedAtMs = syncBaselineMs;
+    for (final record in imported) {
+      final ms = (record['updatedAtMs'] as num?)?.toInt() ?? 0;
+      if (ms > alignedAtMs) alignedAtMs = ms;
+    }
+
     for (final entry in appMeta.entries) {
       await LocalDatabaseService.instance.setMeta(entry.key, entry.value);
     }
@@ -597,7 +697,7 @@ abstract final class DeviceTransferService {
       receivedAt: receivedAt,
       totalBytes: totalBytes,
     );
-    await _saveLastSyncAt(userId, syncBaselineMs);
+    await _saveLastSyncAt(userId, alignedAtMs);
     CreditCalcRepositorySetup.notifyDataChanged();
     await DevelopSyncCoordinator.afterDeviceTransferMerge(userId);
 

@@ -8,6 +8,7 @@ import '../../services/creditor_visit_address_service.dart';
 import '../../services/field_reminder_service.dart';
 import '../../services/field_visit_service.dart';
 import '../../services/installment_monitor_service.dart';
+import '../../services/itinerary_nav_badge_notifier.dart';
 import '../../widgets/address_field_with_scan.dart';
 
 class InstallmentMonitorPage extends StatefulWidget {
@@ -46,6 +47,7 @@ class _InstallmentMonitorPageState extends State<InstallmentMonitorPage> {
 
     try {
       await InstallmentMonitorService.activate(practice: practice, plan: plan);
+      ItineraryNavBadgeNotifier.instance.markPending();
       await _reloadConfigs();
       if (!mounted) return;
       final modeLabel = plan.followUpMode.shortLabel.toLowerCase();

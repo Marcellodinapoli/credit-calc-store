@@ -2,12 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:credit_calc_core/credit_calc_core.dart';
 
-import 'package:firebase_auth/firebase_auth.dart';
-
 import 'package:flutter/material.dart';
 
 
 
+import '../session/credit_core_session_runtime.dart';
 import '../core/maintenance_service.dart';
 
 import '../shell/credit_core_account_menu_sheet.dart';
@@ -68,7 +67,7 @@ class _MaintenanceSectionGateState extends State<MaintenanceSectionGate> {
 
   Future<void> _logout() async {
 
-    await FirebaseAuth.instance.signOut();
+    await CreditCoreSessionRuntime.signOutWithSessionRelease();
 
   }
 

@@ -6,14 +6,17 @@ import '../../../core/theme/app_card_theme.dart';
 import '../../../models/field_visit.dart';
 import '../../../offline/repository/credit_calc_repository.dart';
 import '../../../services/field_visit_service.dart';
+import '../../../services/installment_monitor_service.dart';
 import '../../../utils/field_visit_route_planner.dart';
 import '../../../utils/itinerary_calendar_export.dart';
 import '../../../widgets/address_field_with_scan.dart';
 import '../../../widgets/field_visit_day_picker.dart';
 import '../../../widgets/schedule_field_visit_dialog.dart';
+import '../../../widgets/pdr_card_details.dart';
 import '../../../widgets/visit_practice_links.dart';
 import '../../../widgets/voice_note_field.dart';
 import '../commission_collections_shared.dart';
+import '../debtor_contact_page.dart';
 import 'itinerary_page_shell.dart';
 import 'territory_map_page.dart';
 
@@ -182,6 +185,12 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
     final h = value.hour.toString().padLeft(2, '0');
     final min = value.minute.toString().padLeft(2, '0');
     return '$d/$m/${value.year} $h:$min';
+  }
+
+  Future<void> _openDebtorContact() async {
+    await Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(builder: (_) => const DebtorContactPage()),
+    );
   }
 
   Future<void> _regeocodeVisit(FieldVisit visit) async {
@@ -413,6 +422,11 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
                                 if (visit.creditorName != null &&
                                     visit.creditorName!.isNotEmpty)
                                   Text('Creditore: ${visit.creditorName}'),
+                                PdrCardDetailsLines(
+                                  detailsFuture:
+                                      InstallmentMonitorService
+                                          .resolvePdrDetailsForVisit(visit),
+                                ),
                                 VisitPracticeLinks(visit: visit),
                               ],
                             ),
@@ -428,11 +442,8 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
                               onSelected: (action) async {
                                 if (action == 'regeocode') {
                                   await _regeocodeVisit(visit);
-                                } else if (action == 'planned') {
-                                  await _setVisitStatus(
-                                    visit,
-                                    FieldVisitStatus.planned,
-                                  );
+                                } else if (action == 'message') {
+                                  await _openDebtorContact();
                                 } else if (action == 'completed') {
                                   await _setVisitStatus(
                                     visit,
@@ -458,8 +469,8 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
                                     child: Text('Aggiorna geolocalizzazione'),
                                   ),
                                 const PopupMenuItem(
-                                  value: 'planned',
-                                  child: Text('Segna in programma'),
+                                  value: 'message',
+                                  child: Text('Invia messaggio'),
                                 ),
                                 const PopupMenuItem(
                                   value: 'completed',

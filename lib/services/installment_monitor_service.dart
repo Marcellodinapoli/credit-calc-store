@@ -2,6 +2,7 @@ import 'package:credit_calc_core/credit_calc_core.dart';
 
 import '../models/field_reminder.dart';
 import '../models/field_visit.dart';
+import '../offline/repository/credit_calc_repository.dart';
 import 'field_reminder_service.dart';
 import 'field_visit_service.dart';
 import 'installment_monitor_config_storage.dart';
@@ -127,6 +128,30 @@ class InstallmentMonitorPlan {
   final int ratesToMonitor;
   final InstallmentMonitorFollowUpMode followUpMode;
   final String visitAddress;
+}
+
+/// Dettagli PDR mostrati sulle card appuntamenti e promemoria.
+class InstallmentMonitorPdrDetails {
+  const InstallmentMonitorPdrDetails({
+    required this.rateIndex,
+    required this.totalRates,
+    this.installmentAmount,
+    this.pdrTotalAmount,
+    this.pdrDevelopedAt,
+  });
+
+  final int rateIndex;
+  final int totalRates;
+  final double? installmentAmount;
+  final double? pdrTotalAmount;
+  final DateTime? pdrDevelopedAt;
+
+  bool get hasData =>
+      rateIndex > 0 &&
+      totalRates > 0 &&
+      (installmentAmount != null ||
+          pdrTotalAmount != null ||
+          pdrDevelopedAt != null);
 }
 
 /// Monitoraggio scadenze rate da piani esportati in provvigioni.
@@ -300,6 +325,252 @@ abstract final class InstallmentMonitorService {
 
   static bool isRateizzoVisit(FieldVisit visit) =>
       visit.notes?.startsWith(notesPrefix) == true;
+
+  static Future<List<PdrScheduleRecord>>? _schedulesCache;
+
+  static Future<List<PdrScheduleRecord>> _cachedSchedules() {
+    _schedulesCache ??= PdrScheduleStorage.instance.listSchedules();
+    return _schedulesCache!;
+  }
+
+  static ({int rateIndex, int totalRates, double? amount})? _parseRateFromNotes(
+    String? notes,
+  ) {
+    if (notes == null) return null;
+    for (final line in notes.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty || trimmed.startsWith(notesPrefix)) continue;
+      final match = RegExp(
+        r'^Rata (\d+)/(\d+) · Scadenza PDR: .+? · (.+)$',
+      ).firstMatch(trimmed);
+      if (match == null) continue;
+      return (
+        rateIndex: int.tryParse(match.group(1)!) ?? 0,
+        totalRates: int.tryParse(match.group(2)!) ?? 0,
+        amount: EuroFormat.parse(match.group(3)),
+      );
+    }
+    return null;
+  }
+
+  static ({int rateIndex, int totalRates})? _parseRateFromTitle(String title) {
+    final match = RegExp(r'\(rata (\d+)/(\d+)\)').firstMatch(title);
+    if (match == null) return null;
+    return (
+      rateIndex: int.tryParse(match.group(1)!) ?? 0,
+      totalRates: int.tryParse(match.group(2)!) ?? 0,
+    );
+  }
+
+  static PdrInstallment? _matchInstallmentByDay(
+    List<PdrInstallment> installments,
+    DateTime when,
+  ) {
+    for (final installment in installments) {
+      final due = installment.dueDate;
+      if (due.year == when.year &&
+          due.month == when.month &&
+          due.day == when.day) {
+        return installment;
+      }
+    }
+    return null;
+  }
+
+  static PdrInstallment? _installmentAtIndex(
+    List<PdrInstallment> installments,
+    int rateIndex,
+  ) {
+    if (rateIndex <= 0) return null;
+    for (final installment in installments) {
+      if (installment.index == rateIndex) return installment;
+    }
+    if (rateIndex <= installments.length) {
+      return installments[rateIndex - 1];
+    }
+    return null;
+  }
+
+  static Future<InstallmentMonitorPdrDetails?> resolvePdrDetailsForVisit(
+    FieldVisit visit,
+  ) async {
+    final parsedNotes = _parseRateFromNotes(visit.notes);
+    final schedules = await _cachedSchedules();
+
+    PdrScheduleRecord? schedule;
+    final creditorId = visit.creditorId?.trim() ?? '';
+    final company = visit.companyName.trim();
+    if (creditorId.isNotEmpty && company.isNotEmpty) {
+      schedule = _findSchedule(
+        schedules,
+        InstallmentMonitorPractice(
+          groupKey: '$creditorId::$company',
+          companyName: company,
+          creditorId: creditorId,
+          creditorName: visit.creditorName ?? '',
+          installments: const [],
+        ),
+      );
+    }
+
+    var installments = schedule?.installments ?? const <PdrInstallment>[];
+    var developedAt = schedule?.createdAt;
+
+    if (installments.isEmpty) {
+      final entryId = visit.calculationId?.trim() ?? '';
+      if (entryId.isNotEmpty) {
+        final entry = await CreditCalcRepository.instance.getCalculation(entryId);
+        if (entry != null) {
+          installments = _pdrInstallmentsFromEntryData(entry.data);
+        }
+      }
+    }
+
+    if (installments.isEmpty) return null;
+
+    final totalRates = parsedNotes?.totalRates ?? installments.length;
+    var rateIndex = parsedNotes?.rateIndex ?? 0;
+    var installmentAmount = parsedNotes?.amount;
+
+    if (rateIndex <= 0) {
+      final matched = _matchInstallmentByDay(installments, visit.scheduledAt);
+      if (matched != null) {
+        rateIndex = matched.index > 0
+            ? matched.index
+            : installments.indexOf(matched) + 1;
+        installmentAmount ??= matched.amount;
+      }
+    }
+
+    if (rateIndex <= 0) rateIndex = 1;
+    installmentAmount ??=
+        _installmentAtIndex(installments, rateIndex)?.amount;
+
+    final monitored = await _ratesMonitoredForVisit(visit.id);
+    final displayTotalRates =
+        monitored != null && monitored > 0 ? monitored : totalRates;
+
+    return InstallmentMonitorPdrDetails(
+      rateIndex: rateIndex,
+      totalRates: displayTotalRates,
+      installmentAmount: installmentAmount,
+      pdrTotalAmount: installments.fold<double>(0, (sum, i) => sum + i.amount),
+      pdrDevelopedAt: developedAt,
+    );
+  }
+
+  static Future<InstallmentMonitorPdrDetails?> resolvePdrDetailsForReminder(
+    FieldReminder reminder,
+  ) async {
+    final parsedNotes = _parseRateFromNotes(reminder.notes);
+    final parsedTitle = _parseRateFromTitle(reminder.title);
+    final schedules = await _cachedSchedules();
+
+    final company = _companyFromReminderTitle(reminder.title);
+    final creditorId = await _creditorIdFromReminderNotes(reminder.notes);
+
+    PdrScheduleRecord? schedule;
+    if (creditorId != null &&
+        creditorId.isNotEmpty &&
+        company != null &&
+        company.isNotEmpty) {
+      schedule = _findSchedule(
+        schedules,
+        InstallmentMonitorPractice(
+          groupKey: '$creditorId::$company',
+          companyName: company,
+          creditorId: creditorId,
+          creditorName: '',
+          installments: const [],
+        ),
+      );
+    }
+
+    var installments = schedule?.installments ?? const <PdrInstallment>[];
+    final developedAt = schedule?.createdAt;
+
+    if (installments.isEmpty) {
+      final entryId = _entryIdFromReminderNotes(reminder.notes);
+      if (entryId != null && entryId.isNotEmpty) {
+        final entry = await CreditCalcRepository.instance.getCalculation(entryId);
+        if (entry != null) {
+          installments = _pdrInstallmentsFromEntryData(entry.data);
+        }
+      }
+    }
+
+    if (installments.isEmpty) return null;
+
+    final totalRates =
+        parsedNotes?.totalRates ?? parsedTitle?.totalRates ?? installments.length;
+    var rateIndex = parsedNotes?.rateIndex ?? parsedTitle?.rateIndex ?? 0;
+    var installmentAmount = parsedNotes?.amount;
+
+    if (rateIndex <= 0) {
+      final matched = _matchInstallmentByDay(installments, reminder.remindAt);
+      if (matched != null) {
+        rateIndex = matched.index > 0
+            ? matched.index
+            : installments.indexOf(matched) + 1;
+        installmentAmount ??= matched.amount;
+      }
+    }
+
+    if (rateIndex <= 0) rateIndex = 1;
+    installmentAmount ??=
+        _installmentAtIndex(installments, rateIndex)?.amount;
+
+    final monitored = await _ratesMonitoredForReminder(reminder.id);
+    final displayTotalRates =
+        monitored != null && monitored > 0 ? monitored : totalRates;
+
+    return InstallmentMonitorPdrDetails(
+      rateIndex: rateIndex,
+      totalRates: displayTotalRates,
+      installmentAmount: installmentAmount,
+      pdrTotalAmount: installments.fold<double>(0, (sum, i) => sum + i.amount),
+      pdrDevelopedAt: developedAt,
+    );
+  }
+
+  static Future<int?> _ratesMonitoredForVisit(String visitId) async {
+    final configs = await loadConfigs();
+    for (final config in configs) {
+      if (config.visitIds.contains(visitId)) return config.ratesMonitored;
+    }
+    return null;
+  }
+
+  static Future<int?> _ratesMonitoredForReminder(String reminderId) async {
+    final configs = await loadConfigs();
+    for (final config in configs) {
+      if (config.reminderIds.contains(reminderId)) return config.ratesMonitored;
+    }
+    return null;
+  }
+
+  static String? _companyFromReminderTitle(String title) {
+    final match = RegExp(r'^Sollecito telefonico:\s*(.+?)\s*\(rata').firstMatch(
+      title.trim(),
+    );
+    return match?.group(1)?.trim();
+  }
+
+  static String? _entryIdFromReminderNotes(String? notes) {
+    if (notes == null || !notes.startsWith(notesPrefix)) return null;
+    final firstLine = notes.split('\n').first.trim();
+    final payload = firstLine.substring(notesPrefix.length);
+    final parts = payload.split(':');
+    if (parts.length < 2) return null;
+    return parts.sublist(1).join(':').trim();
+  }
+
+  static Future<String?> _creditorIdFromReminderNotes(String? notes) async {
+    final entryId = _entryIdFromReminderNotes(notes);
+    if (entryId == null || entryId.isEmpty) return null;
+    final entry = await CreditCalcRepository.instance.getCalculation(entryId);
+    return (entry?.data['creditorId'] ?? '').toString().trim();
+  }
 
   static int upcomingTelefonicoCount(List<FieldReminder> reminders) {
     final now = DateTime.now();
@@ -515,7 +786,7 @@ abstract final class InstallmentMonitorService {
           monitorId: monitorId,
           entryId: linkedEntryId,
           rateIndex: rateIndex,
-          totalRates: practice.totalRates,
+          totalRates: count,
           dateLabel: dateLabel,
           amount: amount,
         );
@@ -524,7 +795,7 @@ abstract final class InstallmentMonitorService {
           final result = await FieldReminderService.save(
             title:
                 'Sollecito telefonico: ${practice.companyName} '
-                '(rata $rateIndex/${practice.totalRates})',
+                '(rata $rateIndex/$count)',
             remindAt: scheduledAt,
             notes: notes,
           );

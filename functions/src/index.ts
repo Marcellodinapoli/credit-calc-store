@@ -5,6 +5,11 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 
 import { contactEmail, NOTIFICATION_TYPES } from "./config";
+import { normativeSearch } from "./ai_normative_search";
+import { callAnalysis } from "./ai_call_analysis";
+import { roleplayStep } from "./ai_roleplay_step";
+import { roleplaySuggestion } from "./ai_roleplay_suggestion";
+import { warmupEvaluate } from "./ai_warmup_evaluate";
 import {
   db,
   formatDateTime,
@@ -266,4 +271,4 @@ export const onFieldReminderRescheduled = onDocumentUpdated(
 );
 
 // Esportato per test/manutenzione: invio singolo a utente con preferenze attive.
-export { sendPushToUser };
+export { sendPushToUser, normativeSearch, callAnalysis, roleplayStep, roleplaySuggestion, warmupEvaluate };

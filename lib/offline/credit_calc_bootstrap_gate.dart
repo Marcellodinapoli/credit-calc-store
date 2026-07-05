@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../core/maintenance_service.dart';
 import '../session/credit_core_session_runtime.dart';
+import '../session/app_session_gate.dart';
 import '../shell/credit_calc_shell.dart';
 import '../widgets/maintenance_section_gate.dart';
 import 'credit_calc_repository_setup.dart';
@@ -70,26 +71,19 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     }
   }
 
-  void _ensurePlatformSession(String userId) {
-    final existing = CreditCoreSessionRuntime.sessionService;
-    if (existing != null && existing.userId == userId) return;
-    CreditCoreSessionRuntime.sessionService = SessionService(userId: userId);
-    CreditCoreSessionRuntime.bootstrapComplete = true;
-    CreditCoreSessionRuntime.bootstrapFuture = null;
-  }
-
   Future<void> _bootstrapCore(User user) async {
     await _waitForPlatformSession(user.uid);
-    _ensurePlatformSession(user.uid);
     _sessionService = CreditCoreSessionRuntime.sessionService;
     await _continueAfterLogin(user.uid);
   }
 
   Future<void> _waitForPlatformSession(String userId) async {
-    const attempts = 20;
+    const attempts = 30;
     for (var i = 0; i < attempts; i++) {
-      final session = CreditCoreSessionRuntime.sessionService;
-      if (session != null && session.userId == userId) return;
+      if (CreditCoreSessionRuntime.isSessionReady &&
+          CreditCoreSessionRuntime.sessionService?.userId == userId) {
+        return;
+      }
       await CreditCoreSessionRuntime.waitUntilReady();
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
@@ -210,10 +204,13 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
           ),
         );
       case _BootstrapStep.ready:
-        return const MaintenanceSectionGate(
+        return MaintenanceSectionGate(
           sectionName: MaintenanceService.creditCalc,
           fullScreen: true,
-          child: CreditCalcShell(),
+          child: AppSessionGate(
+            key: ValueKey(FirebaseAuth.instance.currentUser?.uid ?? 'guest'),
+            child: const CreditCalcShell(),
+          ),
         );
     }
   }

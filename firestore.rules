@@ -707,6 +707,17 @@ match /settings/{docId} {
 }
 
     // ------------------------------------------------------------------
+    // RICERCA NORMATIVA — storico (admin: tutti; utente: solo i propri)
+    // ------------------------------------------------------------------
+    match /normative_search_logs/{logId} {
+      allow read: if request.auth != null && (
+        request.auth.token.admin == true ||
+        resource.data.userId == request.auth.uid
+      );
+      allow write: if false;
+    }
+
+    // ------------------------------------------------------------------
     // NOTIFICATIONS
     // ------------------------------------------------------------------
     match /notifications/{docId} {

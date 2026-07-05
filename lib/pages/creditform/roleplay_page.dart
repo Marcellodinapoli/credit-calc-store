@@ -4,7 +4,6 @@
 // ============================================================
 
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,11 +11,11 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
 import '../../services/read_state_service.dart';
 import '../../services/roleplay_progress_service.dart';
+import '../../services/roleplay_conversation_service.dart';
 import 'personal_form_shell.dart';
 
 class RoleplayPage extends StatefulWidget {
@@ -31,7 +30,6 @@ class _RoleplayPageState extends State<RoleplayPage> {
   int _lastSeen = 0;
   bool _readStateReady = false;
 
-  WebSocketChannel? _channel;
   SpeechToText _speech = SpeechToText();
   final FlutterTts _tts = FlutterTts();
   bool _speechReady = false;
@@ -40,14 +38,10 @@ class _RoleplayPageState extends State<RoleplayPage> {
   String _lastUserText = '';
   String? _sessionId;
   bool _awaitingReply = false;
-  bool _needsMicTap = false;
-  bool _micActive = false;
-  bool _pttHeld = false;
+  bool _micListening = false;
   String? _responderRole;
   int _micRestartToken = 0;
   bool _startingListen = false;
-
-  static const String _metaPrefix = '__META__:';
 
   bool _simulationActive = false;
   bool _isSpeaking = false;
@@ -66,8 +60,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
   }
 
   bool get _shouldKeepListening =>
-      _simulationActive && _pttHeld && !_isSpeaking && !_awaitingReply;
-
+      _simulationActive && !_isSpeaking && !_awaitingReply;
   bool _isBenignSpeechError(String msg) =>
       msg == 'error_no_match' ||
       msg == 'error_speech_timeout' ||
@@ -120,20 +113,18 @@ class _RoleplayPageState extends State<RoleplayPage> {
     if (!mounted) return;
 
     if (status == 'listening') {
-      if (!_micActive || _needsMicTap) {
-        setState(() {
-          _micActive = true;
-          _needsMicTap = false;
-        });
+      if (!_micListening && mounted) {
+        setState(() => _micListening = true);
       }
       return;
     }
 
     if (status == 'done' || status == 'notListening') {
-      if (_pttHeld && _shouldKeepListening) {
+      if (_micListening && mounted) {
+        setState(() => _micListening = false);
+      }
+      if (_shouldKeepListening) {
         _scheduleContinuousListening();
-      } else if (_micActive && !_pttHeld) {
-        setState(() => _micActive = false);
       }
     }
   }
@@ -143,15 +134,13 @@ class _RoleplayPageState extends State<RoleplayPage> {
 
     final benign = _isBenignSpeechError(error.errorMsg);
 
-    if (benign && _pttHeld && _shouldKeepListening) {
+    if (benign && _shouldKeepListening) {
       _scheduleContinuousListening();
       return;
     }
 
-    if (_micActive) setState(() => _micActive = false);
-
-    if (_pttHeld) {
-      _scheduleContinuousListening(delay: const Duration(milliseconds: 1200));
+    if (_shouldKeepListening) {
+      _scheduleContinuousListening(delay: const Duration(milliseconds: 600));
     }
   }
 
@@ -193,70 +182,107 @@ class _RoleplayPageState extends State<RoleplayPage> {
     }
   }
 
-  String _extractSpeakableReply(String raw) {
-    var trimmed = raw.trim();
-    if (trimmed.isEmpty) return trimmed;
-
-    final metaIdx = trimmed.indexOf(_metaPrefix);
-    if (metaIdx >= 0) {
-      trimmed = trimmed.substring(0, metaIdx).trim();
-    }
-
-    if (!trimmed.startsWith('{')) return trimmed;
-
-    try {
-      final parsed = jsonDecode(trimmed);
-      if (parsed is Map && parsed['reply'] != null) {
-        if (parsed['role'] != null) {
-          _responderRole = parsed['role'].toString();
-        }
-        return parsed['reply'].toString().trim();
-      }
-    } catch (_) {}
-
-    return trimmed;
-  }
-
-  Map<String, dynamic> _wsPayload({required String userText}) {
+  Map<String, dynamic> _conversationPayload({required String userText}) {
     return {
       'userText': userText,
       'history': _chatHistory,
       'practiceData': _currentSimulation?['practiceData'] ?? [],
       'sessionId': _sessionId ?? 'default',
-      'prompt': (_currentSimulation?['prompt'] ?? '').toString(),
-      'supportsMeta': true,
+      'prompt': RoleplayConfigService.resolveSimulationPrompt(
+        Map<String, dynamic>.from(_currentSimulation ?? const {}),
+      ),
       if (_currentSimulation?['scenarioWeights'] != null)
         'scenarioWeights': _currentSimulation!['scenarioWeights'],
+      if (_responderRole != null) 'responderRole': _responderRole,
+      'difficulty': RoleplayConfigService.resolveDifficulty(
+        Map<String, dynamic>.from(_currentSimulation ?? const {}),
+      ),
+      'personality': RoleplayConfigService.resolvePersonality(
+        Map<String, dynamic>.from(_currentSimulation ?? const {}),
+      ),
     };
+  }
+
+  Future<void> _requestRoleplayReply({required String userText}) async {
+    if (!_simulationActive || _currentSimulation == null) return;
+
+    setState(() => _awaitingReply = true);
+
+    try {
+      await _speech.stop();
+    } catch (_) {}
+    if (mounted) setState(() => _micListening = false);
+
+    final payload = _conversationPayload(userText: userText);
+    final priorHistory = userText.isEmpty
+        ? _chatHistory
+            .map((m) => {
+                  'role': m['role'] ?? 'user',
+                  'content': m['content'] ?? '',
+                })
+            .toList()
+        : _chatHistory
+            .where((m) =>
+                m['role'] != 'user' || m['content'] != userText)
+            .map((m) => {
+                  'role': m['role'] ?? 'user',
+                  'content': m['content'] ?? '',
+                })
+            .toList();
+
+    final result = await RoleplayConversationService.step(
+      userText: userText,
+      prompt: payload['prompt'] as String,
+      sessionId: payload['sessionId'] as String,
+      history: priorHistory,
+      practiceData: payload['practiceData'] as List<dynamic>,
+      scenarioWeights: payload['scenarioWeights'] as Map<String, dynamic>?,
+      responderRole: payload['responderRole'] as String?,
+      difficulty: payload['difficulty'] as String?,
+      personality: payload['personality'] as String?,
+    );
+
+    if (!mounted || !_simulationActive) return;
+
+    final reply = (result['reply'] ?? '').toString().trim();
+    if (result['role'] != null) {
+      _responderRole = result['role'].toString();
+    }
+
+    setState(() => _awaitingReply = false);
+
+    if (reply.isNotEmpty) {
+      _chatHistory.add({'role': 'assistant', 'content': reply});
+      if (mounted) setState(() {});
+      await _speak(reply);
+    } else if (_simulationActive && mounted) {
+      _scheduleContinuousListening();
+    }
   }
 
   void _cancelMicRestart() {
     _micRestartToken++;
   }
 
-  Future<void> _onPttStart() async {
-    if (!_simulationActive || _isSpeaking || _awaitingReply || _pttHeld) return;
-    _cancelMicRestart();
-    setState(() {
-      _pttHeld = true;
-      _needsMicTap = false;
-      _micActive = true;
-    });
-    await _startListeningOnce();
-  }
+  Future<void> _handleUserTranscript(SpeechRecognitionResult result) async {
+    if (!result.finalResult || !_simulationActive || _awaitingReply) return;
+    final transcript = result.recognizedWords.trim();
+    if (transcript.isEmpty || transcript == _lastUserText) return;
 
-  Future<void> _onPttEnd() async {
-    if (!_pttHeld) return;
-    setState(() => _pttHeld = false);
+    _lastUserText = transcript;
     _cancelMicRestart();
-    try {
-      await _speech.stop();
-    } catch (_) {}
-    if (mounted) setState(() => _micActive = false);
+
+    _chatHistory.add({
+      'role': 'user',
+      'content': transcript,
+    });
+
+    if (!mounted || !_simulationActive) return;
+    await _requestRoleplayReply(userText: transcript);
   }
 
   void _scheduleContinuousListening({
-    Duration delay = const Duration(milliseconds: 450),
+    Duration delay = const Duration(milliseconds: 250),
   }) {
     if (!_shouldKeepListening) return;
     final token = ++_micRestartToken;
@@ -265,7 +291,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
       await _startListeningOnce();
       if (!mounted || !_shouldKeepListening) return;
       if (!_speech.isListening) {
-        _scheduleContinuousListening(delay: const Duration(milliseconds: 900));
+        _scheduleContinuousListening(delay: const Duration(milliseconds: 500));
       }
     });
   }
@@ -295,9 +321,6 @@ class _RoleplayPageState extends State<RoleplayPage> {
   @override
   void dispose() {
     _stopSpeech();
-    try {
-      _channel?.sink.close();
-    } catch (_) {}
     _tts.stop();
     super.dispose();
   }
@@ -337,60 +360,23 @@ class _RoleplayPageState extends State<RoleplayPage> {
         listenOptions: SpeechListenOptions(
           localeId: _speechLocaleId,
           listenMode: ListenMode.dictation,
-          listenFor: const Duration(seconds: 120),
-          pauseFor: const Duration(seconds: 4),
-          cancelOnError: true,
+          listenFor: const Duration(minutes: 30),
+          pauseFor: const Duration(seconds: 8),
+          cancelOnError: false,
           partialResults: true,
         ),
         onResult: (result) {
           unawaited(_handleUserTranscript(result));
         },
       );
-      if (mounted) {
-        setState(() {
-          _needsMicTap = false;
-          _micActive = true;
-        });
-      }
     } catch (e) {
       debugPrint('Speech listen error: $e');
       if (_shouldKeepListening) {
         _scheduleContinuousListening(delay: const Duration(milliseconds: 900));
-      } else if (mounted) {
-        setState(() => _needsMicTap = true);
       }
     } finally {
       _startingListen = false;
     }
-  }
-
-  Future<void> _handleUserTranscript(SpeechRecognitionResult result) async {
-    if (!result.finalResult || !_simulationActive) return;
-    final transcript = result.recognizedWords.trim();
-    if (transcript.isEmpty || transcript == _lastUserText) return;
-
-    _lastUserText = transcript;
-    _cancelMicRestart();
-
-    if (mounted) {
-      setState(() {
-        _awaitingReply = true;
-        _micActive = false;
-        _pttHeld = false;
-      });
-    }
-
-    try {
-      await _speech.stop();
-    } catch (_) {}
-
-    _chatHistory.add({
-      'role': 'user',
-      'content': transcript,
-    });
-
-    if (!mounted || !_simulationActive) return;
-    _channel?.sink.add(jsonEncode(_wsPayload(userText: transcript)));
   }
 
   Future<void> _startSimulation(
@@ -414,9 +400,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _lastUserText = '';
     _sessionId = '${simulationId}_${DateTime.now().millisecondsSinceEpoch}';
     _awaitingReply = false;
-    _needsMicTap = false;
-    _micActive = false;
-    _pttHeld = false;
+    _micListening = false;
     _responderRole = null;
 
     _simulationActive = true;
@@ -425,60 +409,10 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _stopSpeech();
     unawaited(_refreshSpeechEngine());
 
-    try {
-      _channel?.sink.close();
-    } catch (_) {}
-
-    _channel = WebSocketChannel.connect(
-      Uri.parse('ws://162.55.210.130:3001'),
-    );
-
-    final aiBuffer = StringBuffer();
-
-    _channel!.stream.listen((event) {
-      final msg = event.toString();
-
-      if (msg == '[END]') {
-        final reply = _extractSpeakableReply(aiBuffer.toString());
-        aiBuffer.clear();
-        if (mounted) {
-          setState(() => _awaitingReply = false);
-        } else {
-          _awaitingReply = false;
-        }
-        _cancelMicRestart();
-
-        if (reply.isNotEmpty) {
-          _chatHistory.add({
-            'role': 'assistant',
-            'content': reply,
-          });
-          if (mounted) setState(() {});
-          _speak(reply);
-        } else {
-          setState(() => _needsMicTap = true);
-        }
-        return;
-      }
-
-      if (msg.startsWith(_metaPrefix)) {
-        try {
-          final meta = jsonDecode(msg.substring(_metaPrefix.length));
-          if (meta is Map && meta['role'] != null) {
-            _responderRole = meta['role'].toString();
-          }
-        } catch (_) {}
-        return;
-      }
-
-      aiBuffer.write(msg);
-    });
-
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (!_simulationActive) return;
-      _awaitingReply = true;
-      _channel?.sink.add(jsonEncode(_wsPayload(userText: '')));
-    });
+    await _requestRoleplayReply(userText: '');
+    if (_simulationActive && mounted) {
+      _scheduleContinuousListening();
+    }
   }
 
   Future<void> _stopSimulation() async {
@@ -504,20 +438,149 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _currentSimulationCategory = null;
 
     _stopSpeech();
-    try {
-      _channel?.sink.close();
-    } catch (_) {}
     _tts.stop();
     _isSpeaking = false;
-    _micActive = false;
-    _pttHeld = false;
+    _micListening = false;
     setState(() {});
   }
+
+  Future<void> _showAiSuggestion({
+    required Map<String, dynamic> simulationData,
+    required String title,
+  }) async {
+    if (_chatHistory.isEmpty) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Suggerimento AI'),
+          content: const Text(
+            'Avvia e completa almeno uno scambio nella simulazione '
+            'prima di richiedere il suggerimento.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Chiudi'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Expanded(child: Text('Generazione suggerimento…')),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final practiceData =
+          simulationData['practiceData'] as List<dynamic>? ?? [];
+      final practiceText = practiceData
+          .whereType<Map>()
+          .map((row) => '${row['label'] ?? ''}: ${row['value'] ?? ''}')
+          .join('; ');
+
+      final suggestion = await RoleplayConversationService.suggestion(
+        prompt: RoleplayConfigService.resolveSimulationPrompt(simulationData),
+        title: title,
+        history: _chatHistory,
+        practiceText: practiceText,
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context);
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Suggerimento AI'),
+          content: SingleChildScrollView(child: Text(suggestion)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Chiudi'),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossibile generare il suggerimento. Riprova.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showRecordingReplay() async {
+    if (_chatHistory.isEmpty) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Riascolta registrazione'),
+          content: const Text(
+            'Avvia e termina una simulazione prima di riascoltare '
+            'la registrazione.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Chiudi'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Riascolta registrazione'),
+        content: SingleChildScrollView(
+          child: Text(
+            _chatHistory
+                .map((message) {
+                  final who =
+                      message['role'] == 'user' ? 'Consulente' : 'Debitore';
+                  return '$who: ${message['content'] ?? ''}';
+                })
+                .join('\n\n'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Chiudi'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   Future<void> _speak(String text) async {
     _cancelMicRestart();
     _isSpeaking = true;
-    if (mounted) setState(() => _micActive = false);
+    if (mounted) setState(() => _micListening = false);
     try {
       await _speech.stop();
     } catch (_) {}
@@ -530,15 +593,11 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _tts.setCompletionHandler(() {
       _isSpeaking = false;
       if (_simulationActive && mounted) {
-        setState(() => _needsMicTap = true);
+        _scheduleContinuousListening();
       }
     });
     await _tts.speak(text);
   }
-
-  // ============================================================
-  // BUILD
-  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -563,53 +622,45 @@ class _RoleplayPageState extends State<RoleplayPage> {
                           ? 'Il debitore sta pensando...'
                           : _isSpeaking
                               ? 'Il debitore parla...'
-                              : _pttHeld
-                                  ? 'Parla ora — rilascia per inviare'
-                                  : 'Tieni premuto il microfono per parlare',
+                              : 'Chiamata attiva — parla liberamente',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 10),
-                    AbsorbPointer(
-                      absorbing: _awaitingReply || _isSpeaking,
-                      child: Listener(
-                        onPointerDown: (_) => _onPttStart(),
-                        onPointerUp: (_) => _onPttEnd(),
-                        onPointerCancel: (_) => _onPttEnd(),
-                        child: Container(
-                          height: 72,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: _pttHeld
-                                ? const Color(0xFFC62828)
-                                : (_awaitingReply || _isSpeaking)
-                                    ? Colors.grey.shade600
-                                    : Colors.lightBlueAccent.shade700,
-                            borderRadius: BorderRadius.circular(12),
+                    Container(
+                      height: 72,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: _awaitingReply || _isSpeaking
+                            ? Colors.grey.shade600
+                            : const Color(0xFF1B5E20),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _awaitingReply || _isSpeaking
+                                ? Icons.phone_in_talk_outlined
+                                : Icons.phone_callback_outlined,
+                            color: Colors.white,
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                _pttHeld ? Icons.mic : Icons.mic_none_outlined,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _pttHeld
-                                    ? 'Rilascia per inviare'
-                                    : 'Tieni premuto per parlare',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
-                                ),
-                              ),
-                            ],
+                          const SizedBox(width: 8),
+                          Text(
+                            _awaitingReply
+                                ? 'In attesa risposta'
+                                : _isSpeaking
+                                    ? 'Linea occupata'
+                                    : 'Linea aperta',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ],
@@ -765,34 +816,29 @@ class _RoleplayPageState extends State<RoleplayPage> {
                 {
                   'title': title,
                   'prompt': data['prompt'] ?? '',
+                  'gptPrompt': data['gptPrompt'] ?? '',
                   'practiceData': practiceData,
                   'scenarioWeights':
                       data['scenarioWeights'] as Map<String, dynamic>?,
+                  'difficulty': data['difficulty'] ?? '',
+                  'personality': data['personality'] ?? '',
                 },
                 simulationId: doc.id,
                 category: type,
               ),
               onStopSimulation: () => _stopSimulation(),
-              onShowHint: completed
-                  ? () {
-                      showDialog<void>(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text('Suggerimento AI'),
-                          content: const Text(
-                            'Qui verrà mostrato il suggerimento generato '
-                            "dall'intelligenza artificiale.",
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Chiudi'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-                  : null,
+              onShowHint: () => _showAiSuggestion(
+                simulationData: {
+                  'title': title,
+                  'prompt': data['prompt'] ?? '',
+                  'gptPrompt': data['gptPrompt'] ?? '',
+                  'practiceData': practiceData,
+                  'difficulty': data['difficulty'] ?? '',
+                  'personality': data['personality'] ?? '',
+                },
+                title: title,
+              ),
+              onReplay: _showRecordingReplay,
             );
           },
         );
@@ -809,7 +855,8 @@ class _RoleplaySimulationCard extends StatelessWidget {
   final bool simulationActive;
   final VoidCallback onOpenSimulation;
   final VoidCallback onStopSimulation;
-  final VoidCallback? onShowHint;
+  final VoidCallback onShowHint;
+  final VoidCallback onReplay;
 
   const _RoleplaySimulationCard({
     required this.title,
@@ -819,7 +866,8 @@ class _RoleplaySimulationCard extends StatelessWidget {
     required this.simulationActive,
     required this.onOpenSimulation,
     required this.onStopSimulation,
-    this.onShowHint,
+    required this.onShowHint,
+    required this.onReplay,
   });
 
   @override
@@ -907,14 +955,14 @@ class _RoleplaySimulationCard extends StatelessWidget {
           const SizedBox(height: 12),
           _actionButton(
             label: 'Vedi suggerimento AI',
-            enabled: onShowHint != null,
+            enabled: true,
             onPressed: onShowHint,
           ),
           const SizedBox(height: 8),
           _actionButton(
             label: 'Riascolta registrazione',
-            enabled: false,
-            onPressed: null,
+            enabled: true,
+            onPressed: onReplay,
           ),
           const SizedBox(height: 8),
           _actionButton(

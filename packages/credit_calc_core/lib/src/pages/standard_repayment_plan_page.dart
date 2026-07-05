@@ -735,7 +735,7 @@ List<_PracticeDilazionePhase> _buildDilazionePhasesFromSegments({
     String frequency,
   ) {
     if (dates.isEmpty || amounts.isEmpty) return;
-    assert(dates.length == amounts.length);
+    if (dates.length != amounts.length) return;
 
     var runStart = 0;
     for (var i = 0; i <= amounts.length; i++) {
@@ -3112,18 +3112,33 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   }
 
   void _scrollToSimulations() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    void scheduleAttempt(int attempt) {
+      if (!mounted || attempt > 5) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         final target = _simulationsKey.currentContext;
-        if (target == null) return;
-        Scrollable.ensureVisible(
-          target,
-          duration: const Duration(milliseconds: 450),
-          curve: Curves.easeInOut,
-          alignment: 0.08,
-        );
+        if (target == null || !target.mounted) {
+          scheduleAttempt(attempt + 1);
+          return;
+        }
+        if (Scrollable.maybeOf(target) == null) {
+          scheduleAttempt(attempt + 1);
+          return;
+        }
+        try {
+          Scrollable.ensureVisible(
+            target,
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeInOut,
+            alignment: 0.08,
+          );
+        } catch (_) {
+          scheduleAttempt(attempt + 1);
+        }
       });
-    });
+    }
+
+    scheduleAttempt(0);
   }
 
   Future<void> _pickDataInizio() async {
@@ -5057,6 +5072,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
             Expanded(
               child: ListView(
                 controller: _mobileScrollController,
+                primary: false,
                 children: [
                   _formCard(options),
                   const SizedBox(height: 16),
@@ -5152,7 +5168,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       child: appTabFocusShell(
         context,
         child: DropdownButtonFormField<String>(
-          value: _creditorId,
+          value: options.any((o) => o.id == _creditorId) ? _creditorId : null,
           items: options
               .map(
                 (c) => DropdownMenuItem(

@@ -2,11 +2,11 @@
 // -----------------------------------------------------------------------------
 // CONFIG / IMPORT
 // -----------------------------------------------------------------------------
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
-import 'personal_form_shell.dart';
+
 import '../../core/platform/native_audio_helper.dart';
+import '../../services/warmup_evaluation_service.dart';
+import 'personal_form_shell.dart';
 
 // -----------------------------------------------------------------------------
 // MODEL
@@ -256,43 +256,15 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   }
 
   Future<Map<String, dynamic>> _sendToAI(List<int> bytes) async {
-    final request = http.MultipartRequest(
-      'POST',
-      Uri.parse('https://api.dinapolimarcello.it/evaluate'),
+    return WarmupEvaluationService.evaluate(
+      audioBytes: bytes,
+      phase: _config.sectionTitle,
+      expectedText: _config.evaluationCriteria,
+      phaseExplanation:
+          'Risposta del cliente: ${_config.customerLine}\n${_config.spiegazione}',
+      customerLine: _config.customerLine,
+      kind: 'warmup',
     );
-
-    request.fields['phase'] = _config.sectionTitle;
-    request.fields['expectedText'] = _config.evaluationCriteria;
-    request.fields['phaseExplanation'] =
-        'Risposta del cliente: ${_config.customerLine}\n${_config.spiegazione}';
-    request.fields['customerLine'] = _config.customerLine;
-
-    request.files.add(
-      http.MultipartFile.fromBytes(
-        'audio',
-        bytes,
-        filename: 'audio.m4a',
-      ),
-    );
-
-    final streamedResponse = await request.send().timeout(
-      const Duration(seconds: 40),
-      onTimeout: () {
-        throw Exception('Timeout AI backend');
-      },
-    );
-
-    final response = await http.Response.fromStream(streamedResponse);
-
-    if (response.statusCode != 200) {
-      throw Exception(response.body);
-    }
-
-    final decoded = jsonDecode(response.body);
-
-    return decoded is Map<String, dynamic>
-        ? decoded
-        : Map<String, dynamic>.from(decoded);
   }
 
   void _playRecording() {

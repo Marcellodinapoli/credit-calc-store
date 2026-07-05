@@ -167,10 +167,10 @@ class _CommissionsPageState extends State<CommissionsPage> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: OutlinedButton.icon(
               onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const CommissionCollectionsPage(),
-                  ),
+                pushSectionOccupancy<void>(
+                  context,
+                  sectionKey: 'commission_collections',
+                  child: const CommissionCollectionsPage(),
                 );
               },
               style: OutlinedButton.styleFrom(
@@ -214,10 +214,10 @@ class _CommissionsPageState extends State<CommissionsPage> {
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const CommissionStatisticsPage(),
-                  ),
+                pushSectionOccupancy<void>(
+                  context,
+                  sectionKey: 'commissions:statistics',
+                  child: const CommissionStatisticsPage(),
                 );
               },
             ),
@@ -232,10 +232,10 @@ class _CommissionsPageState extends State<CommissionsPage> {
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
-                final saved = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute(
-                    builder: (_) => const CommissionEntryPage(),
-                  ),
+                final saved = await pushSectionOccupancy<bool>(
+                  context,
+                  sectionKey: 'commissions:entry',
+                  child: const CommissionEntryPage(),
                 );
                 if (saved == true && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(

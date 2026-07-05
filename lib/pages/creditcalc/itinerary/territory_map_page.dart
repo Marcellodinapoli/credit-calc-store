@@ -32,7 +32,6 @@ class _TerritoryMapPageState extends State<TerritoryMapPage> {
   FieldVisit? _selected;
   double _zoom = 11;
   _MapPeriodFilter _period = _MapPeriodFilter.today;
-  bool _plannedOnly = true;
   String? _creditorFilter;
 
   static const _shell = ItineraryPageShell();
@@ -77,7 +76,6 @@ class _TerritoryMapPageState extends State<TerritoryMapPage> {
           (v) {
             if (!v.hasCoordinates) return false;
             if (v.status == FieldVisitStatus.cancelled) return false;
-            if (_plannedOnly) return v.isActiveForItinerary;
             return true;
           },
         )
@@ -156,17 +154,6 @@ class _TerritoryMapPageState extends State<TerritoryMapPage> {
         ),
       );
     }
-
-    children.add(
-      FilterChip(
-        label: const Text('Solo in programma'),
-        selected: _plannedOnly,
-        onSelected: (value) => setState(() {
-          _plannedOnly = value;
-          _selected = null;
-        }),
-      ),
-    );
 
     if (creditors.length > 1) {
       children.add(
