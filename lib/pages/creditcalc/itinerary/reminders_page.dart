@@ -18,6 +18,14 @@ enum _ReminderMonthFilter {
   final String label;
 }
 
+enum _ReminderClientFilter {
+  all('Tutti'),
+  client('Cliente');
+
+  const _ReminderClientFilter(this.label);
+  final String label;
+}
+
 class RemindersPage extends StatefulWidget {
   const RemindersPage({super.key});
 
@@ -28,8 +36,18 @@ class RemindersPage extends StatefulWidget {
 class _RemindersPageState extends State<RemindersPage> {
   bool _busy = false;
   _ReminderMonthFilter _monthFilter = _ReminderMonthFilter.currentMonth;
+  _ReminderClientFilter _clientFilter = _ReminderClientFilter.all;
 
   static const _shell = ItineraryPageShell();
+
+  bool _isClientReminder(FieldReminder item) =>
+      InstallmentMonitorService.isRateizzoReminder(item) ||
+      (item.visitId != null && item.visitId!.isNotEmpty);
+
+  List<FieldReminder> _applyClientFilter(List<FieldReminder> items) {
+    if (_clientFilter == _ReminderClientFilter.all) return items;
+    return items.where(_isClientReminder).toList(growable: false);
+  }
 
   bool _isCurrentMonth(DateTime date) {
     final now = DateTime.now();
@@ -134,7 +152,8 @@ class _RemindersPageState extends State<RemindersPage> {
 
   Widget _buildFilteredList(List<FieldReminder> items) {
     final now = DateTime.now();
-    final parts = _partitionByMonth(items);
+    final clientFiltered = _applyClientFilter(items);
+    final parts = _partitionByMonth(clientFiltered);
 
     List<FieldReminder> visible;
     switch (_monthFilter) {
@@ -149,11 +168,17 @@ class _RemindersPageState extends State<RemindersPage> {
     if (visible.isEmpty) {
       final message = switch (_monthFilter) {
         _ReminderMonthFilter.currentMonth =>
-          'Nessun promemoria per il mese in corso.',
+          _clientFilter == _ReminderClientFilter.client
+              ? 'Nessun promemoria cliente per il mese in corso.'
+              : 'Nessun promemoria per il mese in corso.',
         _ReminderMonthFilter.upcomingMonths =>
-          'Nessun promemoria nei prossimi mesi.',
+          _clientFilter == _ReminderClientFilter.client
+              ? 'Nessun promemoria cliente nei prossimi mesi.'
+              : 'Nessun promemoria nei prossimi mesi.',
         _ReminderMonthFilter.all =>
-          'Nessun promemoria. Programmane uno per non dimenticare le scadenze.',
+          _clientFilter == _ReminderClientFilter.client
+              ? 'Nessun promemoria collegato a un cliente.'
+              : 'Nessun promemoria. Programmane uno per non dimenticare le scadenze.',
       };
       return Center(
         child: Text(
@@ -204,9 +229,59 @@ class _RemindersPageState extends State<RemindersPage> {
     return '$d/$m/${value.year} $h:$min';
   }
 
+  String _rateizzoTechnicalNotes(String notes) {
+    final technical = notes
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) {
+          if (line.isEmpty) return false;
+          if (line.startsWith('rateizzo-monitor:')) return true;
+          return RegExp(r'^Rata \d+/\d+ · Scadenza PDR:').hasMatch(line);
+        })
+        .join('\n');
+    return technical;
+  }
+
+  String _rateizzoUserNotes(String? notes) {
+    if (notes == null || notes.trim().isEmpty) return '';
+    return notes
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) {
+          if (line.isEmpty) return false;
+          if (line.startsWith('rateizzo-monitor:')) return false;
+          return !RegExp(r'^Rata \d+/\d+ · Scadenza PDR:').hasMatch(line);
+        })
+        .join('\n');
+  }
+
+  String? _notesForEditor(FieldReminder? reminder) {
+    if (reminder == null) return null;
+    if (!InstallmentMonitorService.isRateizzoReminder(reminder)) {
+      return reminder.notes;
+    }
+    final userNotes = _rateizzoUserNotes(reminder.notes);
+    return userNotes.isEmpty ? null : userNotes;
+  }
+
+  String? _notesForSave(FieldReminder? reminder, String editorText) {
+    final userNotes = editorText.trim();
+    if (reminder == null ||
+        !InstallmentMonitorService.isRateizzoReminder(reminder)) {
+      return userNotes.isEmpty ? null : userNotes;
+    }
+
+    final technical = _rateizzoTechnicalNotes(reminder.notes ?? '');
+    if (userNotes.isEmpty) {
+      return technical.isEmpty ? null : technical;
+    }
+    if (technical.isEmpty) return userNotes;
+    return '$technical\n$userNotes';
+  }
+
   Future<void> _openEditor({FieldReminder? reminder}) async {
     final titleCtrl = TextEditingController(text: reminder?.title ?? '');
-    final notesCtrl = TextEditingController(text: reminder?.notes ?? '');
+    final notesCtrl = TextEditingController(text: _notesForEditor(reminder) ?? '');
     var remindAt = reminder?.remindAt ??
         DateTime.now().add(const Duration(hours: 1));
     String? visitId = reminder?.visitId;
@@ -294,7 +369,7 @@ class _RemindersPageState extends State<RemindersPage> {
         id: reminder?.id,
         title: titleCtrl.text,
         remindAt: remindAt,
-        notes: notesCtrl.text,
+        notes: _notesForSave(reminder, notesCtrl.text),
         visitId: visitId,
       );
       if (!mounted) return;
@@ -369,6 +444,22 @@ class _RemindersPageState extends State<RemindersPage> {
                             onSelected: (selected) {
                               if (!selected) return;
                               setState(() => _monthFilter = filter);
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final filter in _ReminderClientFilter.values)
+                          FilterChip(
+                            label: Text(filter.label),
+                            selected: _clientFilter == filter,
+                            onSelected: (selected) {
+                              if (!selected) return;
+                              setState(() => _clientFilter = filter);
                             },
                           ),
                       ],

@@ -1,4 +1,5 @@
 import 'package:credit_calc_core/credit_calc_core.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/maintenance_service.dart';
@@ -66,9 +67,18 @@ class _NormativeSearchPageState extends State<NormativeSearchPage> {
       _scrollToEnd();
     } catch (e) {
       if (!mounted) return;
+      final detail = e is FirebaseFunctionsException
+          ? (e.message ?? e.code).trim()
+          : e is Exception
+              ? e.toString().replaceFirst('Exception: ', '').trim()
+              : '';
       setState(() {
         _loading = false;
-        _error = 'Impossibile ottenere una risposta. Riprova tra poco.';
+        _error = detail.isNotEmpty &&
+                detail.length < 160 &&
+                !detail.toLowerCase().contains('exception')
+            ? detail
+            : 'Impossibile ottenere una risposta. Riprova tra poco.';
         if (_turns.isNotEmpty && _turns.last.role == 'user') {
           _turns.removeLast();
         }

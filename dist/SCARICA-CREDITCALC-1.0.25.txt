@@ -1,0 +1,10 @@
+CREDITCALC 1.0.25 — SCARICA DA GITHUB
+=====================================
+
+PC:       https://github.com/Marcellodinapoli/credit-calc-store/actions/runs/28774344555
+          Artifact CreditCalc-Windows -> CreditCalc-1.0.25-Setup.exe
+
+Android:  https://github.com/Marcellodinapoli/credit-calc-store/actions/runs/28774344499
+          Artifact CreditCalc-Android -> CreditCalc-1.0.25-android-arm64.apk
+
+Vedi SCARICA-CREDITCALC-1.0.25.txt sul Desktop per i passaggi dettagliati.

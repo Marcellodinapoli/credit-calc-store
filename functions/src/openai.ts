@@ -22,6 +22,10 @@ export const OPENAI_MODEL_GPT_41_MINI = "gpt-4.1-mini";
 /** Default legacy per chiamate generiche non classificate. */
 export const GPT_MODEL = OPENAI_MODEL_GPT_41_MINI;
 
+function isReasoningStyleModel(model: string): boolean {
+  return model.startsWith("gpt-5") || /^o\d/.test(model);
+}
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
@@ -56,6 +60,24 @@ export async function callOpenAiChat(
   }
 
   const model = options?.model ?? GPT_MODEL;
+  const isReasoning = isReasoningStyleModel(model);
+
+  const requestBody: Record<string, unknown> = {
+    model,
+    messages,
+  };
+
+  if (isReasoning) {
+    // Modelli reasoning (gpt-5.x): max_completion_tokens, no temperature.
+    requestBody.max_completion_tokens = options?.maxTokens ?? 1200;
+  } else {
+    requestBody.max_tokens = options?.maxTokens ?? 1200;
+    requestBody.temperature = options?.temperature ?? 0.4;
+  }
+
+  if (options?.responseFormat) {
+    requestBody.response_format = options.responseFormat;
+  }
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -63,13 +85,7 @@ export async function callOpenAiChat(
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: options?.maxTokens ?? 1200,
-      temperature: options?.temperature ?? 0.4,
-      ...(options?.responseFormat ? { response_format: options.responseFormat } : {}),
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {

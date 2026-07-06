@@ -80,13 +80,24 @@ abstract final class NormativeSearchLogService {
     return FirebaseFirestore.instance
         .collection(collection)
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
         .map(
-          (snap) => snap.docs
-              .map(NormativeSearchLogEntry.fromDoc)
-              .toList(growable: false),
+          (snap) {
+            final entries = snap.docs
+                .map(NormativeSearchLogEntry.fromDoc)
+                .toList(growable: false);
+            entries.sort(
+              (a, b) => (b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0))
+                  .compareTo(
+                a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+              ),
+            );
+            if (entries.length > limit) {
+              return entries.sublist(0, limit);
+            }
+            return entries;
+          },
         );
   }
 }

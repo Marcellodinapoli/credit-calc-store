@@ -2,7 +2,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 
 import { trackAiUsage } from "./ai_usage_tracker";
 import { trackNormativeSearchLog } from "./normative_search_log";
-import { callOpenAiChat, ChatMessage, OPENAI_MODEL_GPT_55, openAiApiKey } from "./openai";
+import { callOpenAiChat, ChatMessage, OPENAI_MODEL_GPT_41, openAiApiKey } from "./openai";
 
 const region = "europe-west1";
 
@@ -54,7 +54,7 @@ export const normativeSearch = onCall(
     const result = await callOpenAiChat(messages, {
       maxTokens: 1200,
       temperature: 0.35,
-      model: OPENAI_MODEL_GPT_55,
+      model: OPENAI_MODEL_GPT_41,
     });
 
     trackAiUsage({

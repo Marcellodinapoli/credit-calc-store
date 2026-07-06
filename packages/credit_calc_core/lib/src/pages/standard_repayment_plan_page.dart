@@ -3496,12 +3496,14 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    Navigator.of(context, rootNavigator: true).pop();
+    messenger?.showSnackBar(
       const SnackBar(
         content: Text('Piano salvato in Riscontro backoffice.'),
       ),
     );
-    Navigator.of(context).pop();
   }
 
   List<_PdrBand> _parsePdrBands(dynamic raw) {

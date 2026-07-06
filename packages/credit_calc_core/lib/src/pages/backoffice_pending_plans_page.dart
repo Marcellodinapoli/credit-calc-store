@@ -6,10 +6,261 @@ import '../nav/credit_calc_nav.dart';
 import 'backoffice_pending_plan.dart';
 import 'backoffice_pending_plan_host_config.dart';
 import 'balance_write_off_page.dart';
+import 'commission_collections_shared.dart';
+import 'commission_entries_data_access.dart';
 import 'standard_repayment_plan_page.dart';
 
-class BackofficePendingPlansPage extends StatelessWidget {
+class BackofficePendingPlansPage extends StatefulWidget {
   const BackofficePendingPlansPage({super.key});
+
+  @override
+  State<BackofficePendingPlansPage> createState() =>
+      _BackofficePendingPlansPageState();
+}
+
+class _BackofficePendingPlansPageState extends State<BackofficePendingPlansPage> {
+  DateTime? _selectedDay;
+  late DateTime _calendarFocusDay;
+  final _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _calendarFocusDay = DateTime(now.year, now.month, now.day);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  DateTime _calendarDay(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  bool _isCurrentMonth(DateTime value) {
+    final now = DateTime.now();
+    return value.year == now.year && value.month == now.month;
+  }
+
+  Set<DateTime> _planDays(List<BackofficePendingPlan> plans) =>
+      plans.map((plan) => _calendarDay(plan.submittedAt)).toSet();
+
+  List<BackofficePendingPlan> _filterPlans(
+    List<BackofficePendingPlan> plans,
+    List<CommissionEntryRecord> entries,
+  ) {
+    List<BackofficePendingPlan> result;
+    if (_selectedDay != null) {
+      result = plans
+          .where((plan) => _calendarDay(plan.submittedAt) == _selectedDay)
+          .toList(growable: false);
+    } else {
+      result = plans
+          .where((plan) => _isCurrentMonth(plan.submittedAt))
+          .toList(growable: false);
+    }
+
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return result;
+
+    final matchingEntryIds = <String>{
+      for (final entry in entries)
+        if (_entryNameMatches(entry, query)) entry.id,
+    };
+
+    return result.where((plan) {
+      final planCompany = (plan.companyName ?? '').toLowerCase();
+      if (planCompany.contains(query)) return true;
+      if (plan.creditorName.toLowerCase().contains(query)) return true;
+      if (plan.commissionDocIds.any(matchingEntryIds.contains)) return true;
+
+      if (planCompany.isEmpty || plan.creditorId.isEmpty) return false;
+      for (final entry in entries) {
+        if (!matchingEntryIds.contains(entry.id)) continue;
+        final entryCreditorId = (entry.data['creditorId'] ?? '').toString();
+        final entryCompany =
+            CommissionCollectionsHelper.companyName(entry.data).toLowerCase();
+        if (entryCreditorId == plan.creditorId && entryCompany == planCompany) {
+          return true;
+        }
+      }
+      return false;
+    }).toList(growable: false);
+  }
+
+  bool _entryNameMatches(CommissionEntryRecord entry, String query) {
+    final data = entry.data;
+    final company = CommissionCollectionsHelper.companyName(data).toLowerCase();
+    final creditor = CommissionCollectionsHelper.creditorName(data).toLowerCase();
+    return company.contains(query) || creditor.contains(query);
+  }
+
+  String _filterLabel() {
+    if (_selectedDay != null) {
+      return 'Piani inseriti il ${_formatDate(_selectedDay!)}';
+    }
+    final now = DateTime.now();
+    final month = now.month.toString().padLeft(2, '0');
+    return 'Piani inseriti nel mese in corso ($month/${now.year})';
+  }
+
+  String _emptyMessage(List<BackofficePendingPlan> allPlans) {
+    if (allPlans.isEmpty) {
+      return 'Nessun piano in attesa di riscontro.\n'
+          'Dopo aver sviluppato un piano di rientro o un saldo e stralcio, '
+          'usa «Attendi esito» per salvarlo qui.';
+    }
+    if (_searchQuery.trim().isNotEmpty) {
+      return 'Nessun piano trovato per «${_searchQuery.trim()}» '
+          'nel periodo selezionato.\n'
+          'Verifica il nominativo registrato negli incassi o cambia mese/data.';
+    }
+    if (_selectedDay != null) {
+      return 'Nessun piano inserito il ${_formatDate(_selectedDay!)}.';
+    }
+    return 'Nessun piano inserito nel mese in corso.\n'
+        'Seleziona una data nel calendario per vedere altri giorni.';
+  }
+
+  Widget _buildSearchField() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: TextField(
+          controller: _searchCtrl,
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(
+            labelText: 'Cerca nominativo incasso',
+            hintText: 'Ragione sociale o creditore registrato in provvigioni',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _searchQuery.trim().isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Cancella ricerca',
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                    icon: const Icon(Icons.clear),
+                  ),
+            border: const OutlineInputBorder(),
+            isDense: true,
+          ),
+          onChanged: (value) => setState(() => _searchQuery = value),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(Set<DateTime> planDays) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSearchField(),
+        const SizedBox(height: 12),
+        _buildCalendar(planDays),
+      ],
+    );
+  }
+
+  DateTime _safeCalendarInitialDate(Set<DateTime> planDays) {
+    if (planDays.isEmpty) {
+      return _calendarDay(DateTime.now());
+    }
+
+    final today = _calendarDay(DateTime.now());
+    if (_selectedDay != null) {
+      final selected = _calendarDay(_selectedDay!);
+      if (planDays.contains(selected)) return selected;
+    }
+
+    final focus = _calendarDay(_calendarFocusDay);
+    if (planDays.contains(focus)) return focus;
+    if (planDays.contains(today)) return today;
+
+    final sorted = planDays.toList()..sort();
+    return sorted.last;
+  }
+
+  Widget _buildCalendar(Set<DateTime> planDays) {
+    if (planDays.isEmpty) return const SizedBox.shrink();
+
+    final sortedDays = planDays.toList()..sort();
+    final firstDate = sortedDays.first;
+    final lastDate = sortedDays.last;
+    final today = _calendarDay(DateTime.now());
+    final lastSelectable = lastDate.isAfter(today) ? lastDate : today;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _filterLabel(),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilterChip(
+                  label: const Text('Mese in corso'),
+                  selected: _selectedDay == null,
+                  onSelected: (_) {
+                    setState(() {
+                      _selectedDay = null;
+                      _calendarFocusDay = _safeCalendarInitialDate(planDays);
+                    });
+                  },
+                ),
+                if (_selectedDay != null)
+                  InputChip(
+                    label: Text(_formatDate(_selectedDay!)),
+                    onDeleted: () {
+                      setState(() {
+                        _selectedDay = null;
+                        _calendarFocusDay = _safeCalendarInitialDate(planDays);
+                      });
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            CalendarDatePicker(
+              key: ValueKey(
+                '${_calendarFocusDay.year}-${_calendarFocusDay.month}-'
+                '${_selectedDay?.millisecondsSinceEpoch ?? 'month'}-'
+                '${planDays.length}',
+              ),
+              initialDate: _safeCalendarInitialDate(planDays),
+              firstDate: firstDate,
+              lastDate: lastSelectable,
+              currentDate: today,
+              onDateChanged: (date) {
+                final day = _calendarDay(date);
+                if (!planDays.contains(day)) return;
+                setState(() {
+                  _selectedDay = day;
+                  _calendarFocusDay = day;
+                });
+              },
+              selectableDayPredicate: (date) =>
+                  planDays.contains(_calendarDay(date)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   String _waitingLabel(BackofficePendingPlan plan) {
     final days = plan.daysWaiting;
@@ -280,116 +531,137 @@ class BackofficePendingPlansPage extends StatelessWidget {
       current: CreditCalcNavItem.develop,
       body: StreamBuilder<List<BackofficePendingPlan>>(
         stream: BackofficePendingPlanService.watchAll(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+        builder: (context, plansSnap) {
+          return StreamBuilder<List<CommissionEntryRecord>>(
+            stream: CommissionEntriesDataAccess.instance.watchCommissionEntries(),
+            builder: (context, entriesSnap) {
+              if (plansSnap.connectionState == ConnectionState.waiting ||
+                  entriesSnap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          final plans = snapshot.data ?? const [];
-          if (plans.isEmpty) {
-            return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Nessun piano in attesa di riscontro.\n'
-                  'Dopo aver sviluppato un piano di rientro o un saldo e stralcio, '
-                  'usa «Attendi esito» per salvarlo qui.',
-                  style: TextStyle(color: Colors.grey.shade700, height: 1.45),
-                ),
-              ),
-            );
-          }
+              final allPlans = plansSnap.data ?? const [];
+              final entries = entriesSnap.data ?? const [];
+              final planDays = _planDays(allPlans);
+              final plans = _filterPlans(allPlans, entries);
 
-          return ListView.separated(
-            itemCount: plans.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final plan = plans[index];
-              return Card(
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: () => _showDetails(context, plan),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+              if (plans.isEmpty) {
+                return ListView(
+                  children: [
+                    _buildHeader(planDays),
+                    if (planDays.isNotEmpty) const SizedBox(height: 12),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          _emptyMessage(allPlans),
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              return ListView.separated(
+                itemCount: plans.length + 1,
+                separatorBuilder: (context, index) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return _buildHeader(planDays);
+                  }
+
+                  final plan = plans[index - 1];
+                  return Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () => _showDetails(context, plan),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Text(
-                                plan.type.label,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    plan.type.label,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                if (plan.isAccepted)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      'Accettato',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.green.shade800,
+                                      ),
+                                    ),
+                                  )
+                                else if (plan.hasCommissionExport)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      'Incasso registrato',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.green.shade800,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            if (plan.companyName?.isNotEmpty == true) ...[
+                              Text(
+                                plan.companyName!,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 16,
+                                  fontSize: 15,
                                 ),
                               ),
+                              const SizedBox(height: 4),
+                            ],
+                            Text(
+                              plan.creditorName,
+                              style: const TextStyle(fontWeight: FontWeight.w600),
                             ),
-                            if (plan.isAccepted)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  'Accettato',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.green.shade800,
-                                  ),
-                                ),
-                              )
-                            else if (plan.hasCommissionExport)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  'Incasso registrato',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.green.shade800,
-                                  ),
-                                ),
-                              ),
+                            const SizedBox(height: 8),
+                            ..._planMetaLines(
+                              plan,
+                              includeAcceptedVia: false,
+                              showIncassoInserito: true,
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 6),
-                        if (plan.companyName?.isNotEmpty == true) ...[
-                          Text(
-                            plan.companyName!,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                        ],
-                        Text(
-                          plan.creditorName,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        ..._planMetaLines(
-                          plan,
-                          includeAcceptedVia: false,
-                          showIncassoInserito: true,
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               );
             },
           );
