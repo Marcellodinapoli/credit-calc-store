@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../ai/ai_usage_admin_service.dart';
 import '../ai/normative_search_admin_service.dart';
 import '../ai/normative_search_config_service.dart';
+import '../core/euro_format.dart';
 import '../widgets/normative_search_history_section.dart';
 
 /// Editor prompt Ricerca normativa (BackOffice app e web).
@@ -159,6 +161,8 @@ class _NormativeSearchAdminBodyState extends State<NormativeSearchAdminBody> {
                 style: TextStyle(color: Colors.grey.shade700, height: 1.45),
               ),
               const SizedBox(height: 20),
+              const _AiUsageMonthCard(),
+              const SizedBox(height: 20),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -221,4 +225,127 @@ class _NormativeSearchAdminBodyState extends State<NormativeSearchAdminBody> {
       },
     );
   }
+}
+
+class _AiUsageMonthCard extends StatelessWidget {
+  const _AiUsageMonthCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: StreamBuilder<AiUsageMonthStats>(
+          stream: AiUsageAdminService.watchCurrentMonthTotals(),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Text(
+                'Impossibile caricare l\'utilizzo AI del mese.',
+                style: TextStyle(color: Colors.red.shade700),
+              );
+            }
+
+            final stats = snapshot.data ?? AiUsageMonthStats.empty;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Utilizzo AI del mese',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Totali mensili registrati dal server per le chiamate AI '
+                  'dell\'app, in linea con il conteggio di usage.',
+                  style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    _UsageStatChip(
+                      label: 'Richieste',
+                      value: '${stats.calls}',
+                    ),
+                    _UsageStatChip(
+                      label: 'Token input',
+                      value: _formatInt(stats.inputTokens),
+                    ),
+                    _UsageStatChip(
+                      label: 'Token output',
+                      value: _formatInt(stats.outputTokens),
+                    ),
+                    _UsageStatChip(
+                      label: 'Token totali',
+                      value: _formatInt(stats.totalTokens),
+                    ),
+                    _UsageStatChip(
+                      label: 'Costo stimato',
+                      value: EuroFormat.format(stats.estimatedEur),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _UsageStatChip extends StatelessWidget {
+  const _UsageStatChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 150),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatInt(int value) {
+  final text = value.toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < text.length; i++) {
+    final fromEnd = text.length - i;
+    if (i > 0 && fromEnd % 3 == 0) {
+      buffer.write('.');
+    }
+    buffer.write(text[i]);
+  }
+  return buffer.toString();
 }

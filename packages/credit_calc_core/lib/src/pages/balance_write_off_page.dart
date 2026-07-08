@@ -721,7 +721,8 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     final text =
         formatBackofficeSummaryRowsPlain(_captureBackofficeSummaryRows());
     if (text.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: text));
+    final clipboardText = text.replaceAll('\n', '\r\n');
+    await Clipboard.setData(ClipboardData(text: clipboardText));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Dettagli copiati negli appunti.')),
