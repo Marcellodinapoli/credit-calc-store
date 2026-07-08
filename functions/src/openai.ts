@@ -67,11 +67,9 @@ export async function callOpenAiChat(
     messages,
   };
 
-  if (isReasoning) {
-    // Modelli reasoning (gpt-5.x): max_completion_tokens, no temperature.
-    requestBody.max_completion_tokens = options?.maxTokens ?? 1200;
-  } else {
-    requestBody.max_tokens = options?.maxTokens ?? 1200;
+  // API recenti: max_completion_tokens (max_tokens fallisce su gpt-5.x e modelli nuovi).
+  requestBody.max_completion_tokens = options?.maxTokens ?? 1200;
+  if (!isReasoning) {
     requestBody.temperature = options?.temperature ?? 0.4;
   }
 

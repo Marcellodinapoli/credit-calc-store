@@ -20,6 +20,8 @@ class BackofficePendingPlansPage extends StatefulWidget {
 
 class _BackofficePendingPlansPageState extends State<BackofficePendingPlansPage> {
   DateTime? _selectedDay;
+  bool _useCurrentMonth = false;
+  bool _calendarVisible = false;
   late DateTime _calendarFocusDay;
   final _searchCtrl = TextEditingController();
   String _searchQuery = '';
@@ -57,10 +59,12 @@ class _BackofficePendingPlansPageState extends State<BackofficePendingPlansPage>
       result = plans
           .where((plan) => _calendarDay(plan.submittedAt) == _selectedDay)
           .toList(growable: false);
-    } else {
+    } else if (_useCurrentMonth) {
       result = plans
           .where((plan) => _isCurrentMonth(plan.submittedAt))
           .toList(growable: false);
+    } else {
+      result = List<BackofficePendingPlan>.from(plans);
     }
 
     final query = _searchQuery.trim().toLowerCase();
@@ -102,9 +106,12 @@ class _BackofficePendingPlansPageState extends State<BackofficePendingPlansPage>
     if (_selectedDay != null) {
       return 'Piani inseriti il ${_formatDate(_selectedDay!)}';
     }
-    final now = DateTime.now();
-    final month = now.month.toString().padLeft(2, '0');
-    return 'Piani inseriti nel mese in corso ($month/${now.year})';
+    if (_useCurrentMonth) {
+      final now = DateTime.now();
+      final month = now.month.toString().padLeft(2, '0');
+      return 'Piani inseriti nel mese in corso ($month/${now.year})';
+    }
+    return 'Tutti i piani in attesa di riscontro';
   }
 
   String _emptyMessage(List<BackofficePendingPlan> allPlans) {
@@ -121,8 +128,12 @@ class _BackofficePendingPlansPageState extends State<BackofficePendingPlansPage>
     if (_selectedDay != null) {
       return 'Nessun piano inserito il ${_formatDate(_selectedDay!)}.';
     }
-    return 'Nessun piano inserito nel mese in corso.\n'
-        'Seleziona una data nel calendario per vedere altri giorni.';
+    if (_useCurrentMonth) {
+      return 'Nessun piano inserito nel mese in corso.\n'
+          'Apri il calendario per scegliere un altro giorno.';
+    }
+    return 'Nessun piano corrisponde ai filtri selezionati.\n'
+        'Usa «Mese in corso» o «Scegli data» per restringere l\'elenco.';
   }
 
   Widget _buildSearchField() {
@@ -211,14 +222,41 @@ class _BackofficePendingPlansPageState extends State<BackofficePendingPlansPage>
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: [
                 FilterChip(
                   label: const Text('Mese in corso'),
-                  selected: _selectedDay == null,
-                  onSelected: (_) {
+                  selected: _useCurrentMonth && _selectedDay == null,
+                  onSelected: (selected) {
                     setState(() {
+                      _useCurrentMonth = selected;
                       _selectedDay = null;
-                      _calendarFocusDay = _safeCalendarInitialDate(planDays);
+                      _calendarVisible = false;
+                      if (selected) {
+                        final now = DateTime.now();
+                        _calendarFocusDay =
+                            DateTime(now.year, now.month, now.day);
+                      }
+                    });
+                  },
+                ),
+                ActionChip(
+                  avatar: Icon(
+                    _calendarVisible
+                        ? Icons.calendar_month
+                        : Icons.calendar_month_outlined,
+                    size: 18,
+                  ),
+                  label: Text(
+                    _calendarVisible ? 'Chiudi calendario' : 'Scegli data',
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _calendarVisible = !_calendarVisible;
+                      if (_calendarVisible) {
+                        _useCurrentMonth = false;
+                        _calendarFocusDay = _safeCalendarInitialDate(planDays);
+                      }
                     });
                   },
                 ),
@@ -228,34 +266,38 @@ class _BackofficePendingPlansPageState extends State<BackofficePendingPlansPage>
                     onDeleted: () {
                       setState(() {
                         _selectedDay = null;
+                        _calendarVisible = false;
                         _calendarFocusDay = _safeCalendarInitialDate(planDays);
                       });
                     },
                   ),
               ],
             ),
-            const SizedBox(height: 4),
-            CalendarDatePicker(
-              key: ValueKey(
-                '${_calendarFocusDay.year}-${_calendarFocusDay.month}-'
-                '${_selectedDay?.millisecondsSinceEpoch ?? 'month'}-'
-                '${planDays.length}',
+            if (_calendarVisible) ...[
+              const SizedBox(height: 4),
+              CalendarDatePicker(
+                key: ValueKey(
+                  '${_calendarFocusDay.year}-${_calendarFocusDay.month}-'
+                  '${_selectedDay?.millisecondsSinceEpoch ?? 'month'}-'
+                  '${planDays.length}',
+                ),
+                initialDate: _safeCalendarInitialDate(planDays),
+                firstDate: firstDate,
+                lastDate: lastSelectable,
+                currentDate: today,
+                onDateChanged: (date) {
+                  final day = _calendarDay(date);
+                  if (!planDays.contains(day)) return;
+                  setState(() {
+                    _selectedDay = day;
+                    _useCurrentMonth = false;
+                    _calendarFocusDay = day;
+                  });
+                },
+                selectableDayPredicate: (date) =>
+                    planDays.contains(_calendarDay(date)),
               ),
-              initialDate: _safeCalendarInitialDate(planDays),
-              firstDate: firstDate,
-              lastDate: lastSelectable,
-              currentDate: today,
-              onDateChanged: (date) {
-                final day = _calendarDay(date);
-                if (!planDays.contains(day)) return;
-                setState(() {
-                  _selectedDay = day;
-                  _calendarFocusDay = day;
-                });
-              },
-              selectableDayPredicate: (date) =>
-                  planDays.contains(_calendarDay(date)),
-            ),
+            ],
           ],
         ),
       ),

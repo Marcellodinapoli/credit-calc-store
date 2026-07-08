@@ -183,6 +183,14 @@ class _PhoneCallAnalysisPageState extends State<PhoneCallAnalysisPage> {
     }
   }
 
+  Future<void> _openCalculator() async {
+    await Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute(
+        builder: (_) => const ClassicCalculatorPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SecondaryPageScaffold(
@@ -297,19 +305,37 @@ class _PhoneCallAnalysisPageState extends State<PhoneCallAnalysisPage> {
                 Text(_error!, style: TextStyle(color: Colors.red.shade700)),
               ],
               const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _loading ? null : _submit,
-                icon: _loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.psychology_outlined),
-                label: Text(_loading ? 'Analisi in corso…' : 'Analizza con AI'),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: _openCalculator,
+                    tooltip: 'Calcolatrice',
+                    icon: const Icon(Icons.calculate_outlined),
+                    style: IconButton.styleFrom(
+                      padding: const EdgeInsets.all(14),
+                      visualDensity: VisualDensity.standard,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _loading ? null : _submit,
+                      icon: _loading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.psychology_outlined),
+                      label: Text(
+                        _loading ? 'Analisi in corso…' : 'Analizza con AI',
+                      ),
+                    ),
+                  ),
+                ],
               ),
               if (_analysisResult != null) ...[
                 const SizedBox(height: 24),

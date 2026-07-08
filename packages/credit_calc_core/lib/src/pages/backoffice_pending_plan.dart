@@ -78,6 +78,26 @@ class BackofficeSummaryRow {
   }
 }
 
+/// Testo piano per appunti (label: valore, note incluse).
+String formatBackofficeSummaryRowsPlain(List<BackofficeSummaryRow> rows) {
+  final buffer = StringBuffer();
+  for (final row in rows) {
+    if (row.note != null && row.note!.isNotEmpty && row.label.isEmpty) {
+      buffer.writeln(row.note);
+      continue;
+    }
+    if (row.label.isEmpty) continue;
+    final value = row.valueSuffix == null || row.valueSuffix!.isEmpty
+        ? row.value
+        : '${row.value} ${row.valueSuffix}';
+    buffer.writeln('${row.label}: $value');
+    if (row.note != null && row.note!.isNotEmpty) {
+      buffer.writeln(row.note);
+    }
+  }
+  return buffer.toString().trim();
+}
+
 class BackofficePendingPlan {
   final String id;
   final BackofficePendingPlanType type;

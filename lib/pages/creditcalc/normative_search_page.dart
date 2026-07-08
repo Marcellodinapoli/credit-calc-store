@@ -28,6 +28,7 @@ class _NormativeSearchPageState extends State<NormativeSearchPage> {
   final _turns = <_ChatTurn>[];
   bool _loading = false;
   String? _error;
+  int _searchGeneration = 0;
 
   @override
   void dispose() {
@@ -40,6 +41,8 @@ class _NormativeSearchPageState extends State<NormativeSearchPage> {
     final question = _questionCtrl.text.trim();
     if (question.isEmpty || _loading) return;
 
+    final generation = ++_searchGeneration;
+
     setState(() {
       _loading = true;
       _error = null;
@@ -50,6 +53,8 @@ class _NormativeSearchPageState extends State<NormativeSearchPage> {
 
     try {
       final prompt = await NormativeSearchConfigService.loadPrompt();
+      if (!mounted || generation != _searchGeneration) return;
+
       final history = _turns
           .where((t) => t != _turns.last)
           .map((t) => {'role': t.role, 'content': t.content})
@@ -59,14 +64,14 @@ class _NormativeSearchPageState extends State<NormativeSearchPage> {
         systemPrompt: prompt,
         history: history,
       );
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _turns.add(_ChatTurn(role: 'assistant', content: answer));
         _loading = false;
       });
       _scrollToEnd();
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       final detail = e is FirebaseFunctionsException
           ? (e.message ?? e.code).trim()
           : e is Exception
@@ -85,6 +90,22 @@ class _NormativeSearchPageState extends State<NormativeSearchPage> {
         _questionCtrl.text = question;
       });
     }
+  }
+
+  void _stopSearch() {
+    if (!_loading) return;
+    _searchGeneration++;
+    setState(() {
+      _loading = false;
+      _error = null;
+      if (_turns.isNotEmpty && _turns.last.role == 'user') {
+        final question = _turns.last.content;
+        _turns.removeLast();
+        if (_questionCtrl.text.trim().isEmpty) {
+          _questionCtrl.text = question;
+        }
+      }
+    });
   }
 
   void _scrollToEnd() {
@@ -236,6 +257,16 @@ class _NormativeSearchPageState extends State<NormativeSearchPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  if (_loading)
+                    FilledButton(
+                      onPressed: _stopSearch,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.grey.shade800,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.all(16),
+                      ),
+                      child: const Icon(Icons.stop, size: 22),
+                    ),
                   FilledButton(
                     onPressed: _loading ? null : _submit,
                     child: const Icon(Icons.send),

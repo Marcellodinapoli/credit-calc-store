@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/date_month_utils.dart';
 import '../core/euro_format.dart';
@@ -14,6 +15,7 @@ import '../subscription/public_usage_guard.dart';
 import '../subscription/public_plan_limits.dart';
 
 import 'backoffice_pending_plan.dart';
+import 'classic_calculator_page.dart';
 import 'commission_creditor_data_access.dart';
 import 'commission_export_dialog.dart';
 import 'commission_payment_resolver.dart';
@@ -714,6 +716,26 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
     return rows;
   }
 
+  Future<void> _copyPlanDetails() async {
+    if (!_calcolato) return;
+    final text =
+        formatBackofficeSummaryRowsPlain(_captureBackofficeSummaryRows());
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Dettagli copiati negli appunti.')),
+    );
+  }
+
+  Future<void> _openCalculator() async {
+    await Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute(
+        builder: (_) => const ClassicCalculatorPage(),
+      ),
+    );
+  }
+
   DateTime? get _dataFineFromInstallments =>
       _installments.isEmpty ? null : _installments.last.date;
 
@@ -1210,7 +1232,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
             if (_calcolato) ...[
               const Divider(height: 24),
               const Text(
-                'Piano sviluppato',
+                'Dettagli',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
               ),
               const SizedBox(height: 8),
@@ -1292,19 +1314,36 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   Widget _actionBar() {
     return Row(
       children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _annullaPiano,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red.shade700,
-              side: BorderSide(color: Colors.red.shade300),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            icon: const Icon(Icons.close),
-            label: const Text('Annulla'),
+        IconButton(
+          onPressed: _annullaPiano,
+          tooltip: 'Annulla',
+          icon: const Icon(Icons.close),
+          style: IconButton.styleFrom(
+            foregroundColor: Colors.red.shade700,
+            padding: const EdgeInsets.all(14),
+            visualDensity: VisualDensity.standard,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 4),
+        IconButton(
+          onPressed: _calcolato ? _copyPlanDetails : null,
+          tooltip: 'Copia dettagli',
+          icon: const Icon(Icons.copy),
+          style: IconButton.styleFrom(
+            padding: const EdgeInsets.all(14),
+            visualDensity: VisualDensity.standard,
+          ),
+        ),
+        IconButton(
+          onPressed: _openCalculator,
+          tooltip: 'Calcolatrice',
+          icon: const Icon(Icons.calculate_outlined),
+          style: IconButton.styleFrom(
+            padding: const EdgeInsets.all(14),
+            visualDensity: VisualDensity.standard,
+          ),
+        ),
+        const SizedBox(width: 4),
         Expanded(
           flex: 2,
           child: FilledButton.icon(
@@ -1319,7 +1358,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
               _calcolato ? Icons.check_circle_outline : Icons.play_arrow,
             ),
             label: Text(
-              _calcolato ? 'Saldo sviluppato' : 'Sviluppa saldo',
+              _calcolato ? 'Dettagli' : 'Sviluppa saldo',
             ),
           ),
         ),
