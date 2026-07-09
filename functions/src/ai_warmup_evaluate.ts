@@ -154,6 +154,39 @@ async function evaluateTranscript(params: {
 
   const userPrompt = [
 
+    params.phase === "Approccio"
+      ? "IMPORTANTE: in fase Approccio l'operatore NON deve presentarsi "
+        + "(no nome, cognome, società). Valuta solo se verifica l'identità "
+        + "del debitore.\n"
+      : params.phase === "Presentazione standard"
+        ? "IMPORTANTE: in fase Presentazione standard l'operatore deve SOLO "
+          + "presentarsi (nome, cognome, società mandante). NON deve parlare "
+          + "di insoluti, debiti, scadenze, comunicazioni amministrative o "
+          + "motivo del contatto. NON penalizzare l'assenza del motivo del "
+          + "contatto: in questa fase non serve. Segnala come errore qualsiasi "
+          + "riferimento al debito. Nell'esempio (versione_migliorata) proponi "
+          + "solo una presentazione breve, senza motivo del contatto.\n"
+        : params.phase === "Presentazione privacy"
+          ? "IMPORTANTE: in fase Presentazione privacy l'operatore NON deve "
+            + "dire per conto di chi chiama (no società mandante). Può indicare "
+            + "al massimo nome e cognome. Deve chiedere un recapito telefonico "
+            + "oppure farsi richiamare dal debitore, senza divulgare informazioni "
+            + "sensibili a terzi. Nell'esempio (versione_migliorata) non includere "
+            + "riferimenti alla società, al debito o al motivo della chiamata.\n"
+          : params.phase === "Negoziazione"
+            ? "IMPORTANTE: in fase Negoziazione l'esempio (versione_migliorata) "
+              + "deve riportare 224 euro complessivi (200 euro di debito + 24 euro "
+              + "di spese) e richiedere il pagamento entro oggi o al massimo domani "
+              + "con tono fermo. NON usare domande tipo 'Può procedere con bonifico?': "
+              + "deve essere una richiesta diretta di pagamento, non un'interrogativa.\n"
+            : params.phase === "Chiusura"
+              ? "IMPORTANTE: in fase Chiusura il commento deve prima ricordare "
+                + "all'operatore l'obiettivo (ribadire impegno di 224 euro, rata "
+                + "piu spese, pagamento entro domani, conferma e saluto). "
+                + "Nell'esempio (versione_migliorata) usa 'domani' senza data "
+                + "numerica (no 15/06, no 16/05). Riporta 224 euro complessivi.\n"
+              : "",
+
     `Contesto: ${params.phaseExplanation}`,
 
     `Contestatione del cliente: ${params.customerLine}`,
@@ -327,6 +360,8 @@ export const warmupEvaluate = onCall(
 
 
     return {
+
+      trascrizione: transcription.text,
 
       commento: evaluation.commento,
 

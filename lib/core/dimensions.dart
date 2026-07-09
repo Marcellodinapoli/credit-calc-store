@@ -9,10 +9,15 @@ class Dimensions {
   static const double pagePadding = 16;
 
   static bool isPhone(BuildContext context) =>
-      MediaQuery.sizeOf(context).width < phoneBreakpoint;
+      MediaQuery.sizeOf(context).shortestSide < phoneBreakpoint;
 
-  static bool useCompactShell(BuildContext context) =>
-      MediaQuery.sizeOf(context).width < shellCompactBreakpoint;
+  static bool useCompactShell(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    // Su telefono la larghezza in orizzontale può superare la soglia:
+    // usiamo il lato corto per non passare al layout desktop.
+    if (size.shortestSide < shellCompactBreakpoint) return true;
+    return size.width < shellCompactBreakpoint;
+  }
 
   static EdgeInsets pagePaddingInsetsFor(BuildContext context) {
     if (isPhone(context)) {

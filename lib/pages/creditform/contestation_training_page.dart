@@ -112,6 +112,13 @@ class _ContestationTrainingPageState
     }
   }
 
+  void _previous() {
+    if (_step > 0) {
+      setState(() => _step--);
+      _saveProgress();
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // HELPERS
   // ---------------------------------------------------------------------------
@@ -420,26 +427,46 @@ class _ContestationTrainingPageState
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
-      child: SizedBox(
-        width: double.infinity,
-        child: FilledButton(
-          onPressed: () {
-            if (_step < 5) {
-              _next();
-            } else {
-              _tryFinish();
-            }
-          },
-          style: FilledButton.styleFrom(
-            backgroundColor: _contestationColor,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(0, 52),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-            elevation: 2,
+      child: Row(
+        children: [
+          if (_step > 0) ...[
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _previous,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 52),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+                child: const Text('Indietro'),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: FilledButton(
+              onPressed: () {
+                if (_step < 5) {
+                  _next();
+                } else {
+                  _tryFinish();
+                }
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: _contestationColor,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 52),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                elevation: 2,
+              ),
+              child: Text(label),
+            ),
           ),
-          child: Text(label),
-        ),
+        ],
       ),
     );
   }

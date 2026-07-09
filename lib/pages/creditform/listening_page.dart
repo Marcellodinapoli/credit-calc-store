@@ -205,13 +205,15 @@ class _TelefonataTabState extends State<TelefonataTab> {
   // ---------------------------------------------------------------------------
   Future<void> _openPhase(String key) async {
     if (!mounted) return;
-    if (!await PublicUsageCounterRecorder.recordWithUi(
+    if (!await PublicUsageGuard.ensureAllowed(
       context,
       PublicUsageMetric.warmup,
     )) {
       return;
     }
     if (!mounted) return;
+
+    unawaited(PublicUsageCounterRecorder.record(PublicUsageMetric.warmup));
 
     final completed = await Navigator.push<bool>(
       context,

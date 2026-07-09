@@ -48,16 +48,19 @@ CallTrainingConfig callTrainingConfigFor(String phaseKey) {
         customerLine: 'Con chi ho il piacere di parlare?',
         targetPersonName: 'Rossi Andrea',
         callingOnBehalfOf: 'la società mandante',
+        responseGuidance:
+            'Presentati con nome e cognome e indica la società per cui chiami. '
+            'Non parlare ancora di insoluti o del debito.',
         decodifica:
             'Hai individuato l’interlocutore corretto: ora devi presentarti '
             'in modo chiaro e professionale, senza ancora entrare nel merito '
             'del debito.',
         spiegazione:
-            'Obiettivo: dichiarare chi sei, da quale società chiami e il motivo '
-            'generale del contatto. L’iniziativa della formulazione è tua.',
+            'Obiettivo: presentarti con nome, cognome e società mandante. '
+            'Non anticipare insoluti, pagamenti o comunicazioni sul debito.',
         evaluationCriteria:
-            'Presentazione professionale: nome, società e motivo del contatto '
-            'senza dettagli aggressivi sul debito.',
+            'Presentazione corretta: nome, cognome e società mandante, tono '
+            'professionale. Vietato parlare di insoluti, debiti o scadenze.',
       );
     case 'Presentazione_privacy':
       return CallTrainingConfig(
@@ -65,23 +68,24 @@ CallTrainingConfig callTrainingConfigFor(String phaseKey) {
         sectionTitle: 'Presentazione privacy',
         color: Colors.blue.shade700,
         targetPersonName: 'Rossi Andrea',
-        callingOnBehalfOf: 'la società mandante',
         responseGuidance:
-            'Presentati con il tuo nome e cognome, indica che chiami per conto '
-            'di la società mandante e non fornire dettagli sensibili finché '
-            'non hai verificato di parlare con il diretto interessato.',
+            'Debitore: Rossi Andrea. Puoi dire al massimo il tuo nome e cognome. '
+            'Non indicare per conto di chi chiami. Chiedi un recapito telefonico '
+            'o di essere richiamato da Rossi Andrea.',
         customerLine:
             'Sono la moglie, può parlare anche con me. Siamo marito e moglie.',
         decodifica:
-            'Interviene una terza persona non titolare del debito. Devi applicare '
-            'le regole sulla privacy e sul titolarità del rapporto.',
+            'Interviene una terza persona, non il debitore Rossi Andrea. Devi '
+            'applicare le regole sulla privacy e sul titolarità del rapporto.',
         spiegazione:
-            'Obiettivo: verificare se puoi proseguire con un soggetto diverso '
-            'dal debitore (consenso, titolarità, limiti di legge). Non fornire '
-            'dati sensibili senza le dovute verifiche.',
+            'Obiettivo: proteggere la privacy verso terzi. Il debitore è '
+            'Rossi Andrea. Non divulgare informazioni sensibili. Al massimo '
+            'nome e cognome, poi chiedi recapito telefonico o richiamata da '
+            'Rossi Andrea.',
         evaluationCriteria:
-            'Gestione corretta privacy: non divulgare informazioni, chiedere '
-            'autorizzazioni o ricontattare il debitore se necessario.',
+            'Gestione privacy corretta: non dire per conto di chi chiami, '
+            'non divulgare dati sensibili, al massimo nome e cognome, chiedere '
+            'recapito telefonico o richiamata dal debitore.',
       );
     case 'Negoziazione':
       return CallTrainingConfig(
@@ -90,20 +94,21 @@ CallTrainingConfig callTrainingConfigFor(String phaseKey) {
         color: Colors.deepPurple.shade600,
         targetPersonName: 'Rossi Andrea',
         responseGuidance:
-            'Chiedi un pagamento di 200 euro piu 24 euro di spese, con '
-            'disponibilita entro oggi o al massimo entro domani.',
+            'Debitore: Rossi Andrea. Incassa 224 euro complessivi '
+            '(200 euro di debito piu 24 euro di spese).',
         customerLine: 'Salve, mi dica.',
         decodifica:
-            'Il debitore ti ascolta: è il momento di condurre la trattativa '
-            'mantenendo il controllo della conversazione.',
+            'Il debitore Rossi Andrea ti ascolta: è il momento di condurre '
+            'la trattativa mantenendo il controllo della conversazione.',
         spiegazione:
-            'Obiettivo: richiedere con chiarezza il pagamento di 224 euro '
+            'Obiettivo: richiedere a Rossi Andrea il pagamento di 224 euro '
             '(200 euro di debito piu 24 euro di spese), fissando una scadenza '
             'tra la giornata odierna e al massimo l indomani.',
         evaluationCriteria:
-            'Negoziazione efficace: richiesta chiara del pagamento di 224 euro, '
-            'indicazione esplicita della scadenza entro oggi o al massimo '
-            'domani, tono professionale e fermo.',
+            'Negoziazione efficace: richiedere il pagamento di 224 euro complessivi '
+            '(200 euro di debito piu 24 euro di spese), scadenza entro oggi o al '
+            'massimo domani, con richiesta diretta e ferma. Vietate domande sul '
+            'bonifico o sulla disponibilita: non deve essere un interrogativo.',
       );
     case 'Chiusura':
       return CallTrainingConfig(
@@ -112,19 +117,24 @@ CallTrainingConfig callTrainingConfigFor(String phaseKey) {
         color: Colors.green.shade600,
         targetPersonName: 'Rossi Andrea',
         responseGuidance:
-            'Ribadisci con chiarezza l impegno preso, richiamando l importo '
-            'complessivo di 224 euro e la data concordata del 15/06.',
+            'Debitore: Rossi Andrea. Incassa 224 euro complessivi '
+            '(200 euro di debito piu 24 euro di spese). Il debitore ha '
+            'fissato il pagamento a domani.',
         customerLine:
-            'Va bene, le prometto di pagare la rata più le spese entro il 15/06.',
+            'Va bene, le prometto di pagare la rata più le spese entro domani.',
         decodifica:
-            'Il cliente conferma un impegno di pagamento con data: devi '
-            'consolidare l’accordo prima di chiudere.',
+            'Il debitore Rossi Andrea ha fissato il pagamento a domani per '
+            '224 euro complessivi (200 euro di debito piu 24 euro di spese): '
+            'devi consolidare l’accordo prima di chiudere.',
         spiegazione:
-            'Obiettivo: ribadire tutti i dettagli (importo rata, spese, scadenza '
-            '15/06), ottenere conferma e salutare in modo professionale.',
+            'Obiettivo: ribadire a Rossi Andrea l impegno di 224 euro '
+            'complessivi (200 euro di debito piu 24 euro di spese) con '
+            'pagamento a domani, ottenere conferma e chiudere '
+            'professionalmente.',
         evaluationCriteria:
-            'Chiusura corretta: riepilogo di rata, spese, data 15/06, '
-            'conferma del cliente e formula di saluto.',
+            'Chiusura corretta: riepilogo di 224 euro (rata piu spese), '
+            'impegno per domani senza data specifica, conferma del cliente '
+            'e formula di saluto.',
       );
     case 'Approccio':
     default:
@@ -138,11 +148,15 @@ CallTrainingConfig callTrainingConfigFor(String phaseKey) {
             'Il cliente risponde alla chiamata: è il primo contatto. Non parlare '
             'ancora del debito.',
         spiegazione:
-            'Obiettivo: verificare identità e disponibilità all’ascolto con '
-            'tono neutro e professionale. Decidi tu come formulare la frase.',
+            'Obiettivo: capire se l\'interlocutore è il debitore corretto. '
+            'Saluto breve e verifica identità, senza presentarti e senza '
+            'parlare del debito.',
+        responseGuidance:
+            'Verifica se stai parlando con Rossi Andrea. In questa fase non '
+            'presentarti ancora: niente nome, cognome o società.',
         evaluationCriteria:
-            'Approccio corretto: saluto, verifica identità (es. signor Rossi) '
-            'senza anticipare il recupero crediti.',
+            'Verifica identità del debitore (es. signor Rossi Andrea) con tono '
+            'professionale. Non presentarsi ancora e non anticipare il recupero crediti.',
       );
   }
 }
@@ -191,6 +205,12 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   void _nextStep() {
     if (_step < 3) {
       setState(() => _step++);
+    }
+  }
+
+  void _previousStep() {
+    if (_step > 0) {
+      setState(() => _step--);
     }
   }
 
@@ -352,8 +372,6 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   }
 
   Widget _aiEvaluationCard() {
-    final score = _extractScore(_aiResult);
-    final isOk = score >= _minScoreToPass;
     final commento = (_aiResult!['commento'] ?? '').toString().trim();
     final versione = (_aiResult!['versione_migliorata'] ?? '').toString().trim();
 
@@ -369,16 +387,8 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Valutazione AI',
+            'Suggerimento AI',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Punteggio: $score',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: isOk ? Colors.green.shade700 : Colors.red.shade700,
-            ),
           ),
           if (commento.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -488,19 +498,26 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         const SizedBox(height: 16),
         if (_config.targetPersonName != null) ...[
           Text(
-            'Persona da contattare: ${_config.targetPersonName}',
+            _config.phaseKey.startsWith('Presentazione')
+                ? 'Debitore: ${_config.targetPersonName}'
+                : 'Persona da contattare: ${_config.targetPersonName}',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
               color: _config.color,
             ),
           ),
-          if (_config.callingOnBehalfOf != null) ...[
+          if (_config.responseGuidance != null) ...[
             const SizedBox(height: 8),
             Text(
-              _config.responseGuidance ??
-                  'Presentati con il tuo nome e cognome, indicando che chiami '
-                      'per conto di ${_config.callingOnBehalfOf}.',
+              _config.responseGuidance!,
+              style: const TextStyle(fontSize: 14, height: 1.45),
+            ),
+          ] else if (_config.callingOnBehalfOf != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Presentati con il tuo nome e cognome, indicando che chiami '
+              'per conto di ${_config.callingOnBehalfOf}.',
               style: const TextStyle(fontSize: 14, height: 1.45),
             ),
           ],
@@ -602,7 +619,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
                 border: Border.all(color: Colors.blue.shade200),
               ),
               child: const Text(
-                'Registrazione ricevuta. La valutazione automatica e il '
+                'Registrazione ricevuta. Il Suggerimento AI e il '
                 'suggerimento saranno disponibili a breve: puoi comunque '
                 'concludere la simulazione.',
                 style: TextStyle(fontSize: 13, height: 1.45),
@@ -624,14 +641,6 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
                   children: [
                     Text(
                       'Trascrizione: ${_aiResult!['trascrizione'] ?? '-'}',
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Punteggio: $score',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: isOk ? Colors.green : Colors.red,
-                      ),
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -721,7 +730,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       if (_isProcessing) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Attendi il completamento della valutazione AI.'),
+            content: Text('Attendi il completamento del Suggerimento AI.'),
           ),
         );
         return;
@@ -730,7 +739,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'È necessaria la valutazione AI prima di concludere.',
+              'È necessario il Suggerimento AI prima di concludere.',
             ),
           ),
         );
@@ -742,7 +751,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Punteggio insufficiente. Tentativo $_attemptCount/$_maxAttempts.',
+            'Risposta da migliorare. Tentativo $_attemptCount/$_maxAttempts.',
           ),
         ),
       );
@@ -768,20 +777,40 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
-      child: SizedBox(
-        width: double.infinity,
-        child: FilledButton(
-          onPressed: enabled ? _onActionPressed : null,
-          style: FilledButton.styleFrom(
-            backgroundColor: _config.color,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(0, 52),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-            elevation: 2,
+      child: Row(
+        children: [
+          if (_step > 0) ...[
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _previousStep,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 52),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+                child: const Text('Indietro'),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: FilledButton(
+              onPressed: enabled ? _onActionPressed : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: _config.color,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 52),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                elevation: 2,
+              ),
+              child: Text(label),
+            ),
           ),
-          child: Text(label),
-        ),
+        ],
       ),
     );
   }
