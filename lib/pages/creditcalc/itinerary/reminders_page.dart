@@ -482,28 +482,35 @@ class _RemindersPageState extends State<RemindersPage> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: items.isEmpty
-                              ? null
-                              : () => _pickReminderTitle(
-                                    _availableReminderTitles(items),
-                                  ),
-                          icon: const Icon(Icons.person_search),
-                          label: Text(
-                            _selectedReminderTitle ?? 'Seleziona nominativo',
-                          ),
-                        ),
-                        if (_selectedReminderTitle != null)
-                          TextButton(
-                            onPressed: () =>
-                                setState(() => _selectedReminderTitle = null),
-                            child: const Text('Azzera'),
-                          ),
-                      ],
+                    StreamBuilder<List<FieldReminder>>(
+                      stream: FieldReminderService.watchUpcoming(),
+                      builder: (context, snapshot) {
+                        final items = snapshot.data ?? [];
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: items.isEmpty
+                                  ? null
+                                  : () => _pickReminderTitle(
+                                        _availableReminderTitles(items),
+                                      ),
+                              icon: const Icon(Icons.person_search),
+                              label: Text(
+                                _selectedReminderTitle ?? 'Seleziona nominativo',
+                              ),
+                            ),
+                            if (_selectedReminderTitle != null)
+                              TextButton(
+                                onPressed: () => setState(
+                                  () => _selectedReminderTitle = null,
+                                ),
+                                child: const Text('Azzera'),
+                              ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 8),
                     Row(
