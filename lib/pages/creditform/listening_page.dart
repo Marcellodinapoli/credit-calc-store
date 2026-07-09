@@ -13,6 +13,7 @@ import 'call_training_page.dart';
 import 'contestation_training_page.dart';
 import 'user_contestation_form_page.dart';
 import '../../services/listening_progress_service.dart';
+import '../../services/read_state_service.dart';
 
 
 class ListeningPage extends StatefulWidget {
@@ -38,6 +39,17 @@ class _ListeningPageState extends State<ListeningPage>
   void initState() {
     super.initState();
     _initTab();
+    _initReadState();
+  }
+
+  Future<void> _initReadState() async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final stored = await ReadStateService.getWarmupLastSeenMs();
+    if (stored == 0) {
+      await ReadStateService.ensureWarmupInitialized(now);
+    } else {
+      await ReadStateService.setWarmupLastSeenMs(now);
+    }
   }
 
   void _initTab() {

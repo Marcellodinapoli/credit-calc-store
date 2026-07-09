@@ -20,6 +20,9 @@ class CallTrainingConfig {
   final String spiegazione;
   /// Criterio per la valutazione AI (non mostrato come script all'utente).
   final String evaluationCriteria;
+  final String? targetPersonName;
+  final String? callingOnBehalfOf;
+  final String? responseGuidance;
 
   const CallTrainingConfig({
     required this.phaseKey,
@@ -29,6 +32,9 @@ class CallTrainingConfig {
     required this.decodifica,
     required this.spiegazione,
     required this.evaluationCriteria,
+    this.targetPersonName,
+    this.callingOnBehalfOf,
+    this.responseGuidance,
   });
 }
 
@@ -40,6 +46,8 @@ CallTrainingConfig callTrainingConfigFor(String phaseKey) {
         sectionTitle: 'Presentazione standard',
         color: Colors.blue.shade600,
         customerLine: 'Con chi ho il piacere di parlare?',
+        targetPersonName: 'Rossi Andrea',
+        callingOnBehalfOf: 'la società mandante',
         decodifica:
             'Hai individuato l’interlocutore corretto: ora devi presentarti '
             'in modo chiaro e professionale, senza ancora entrare nel merito '
@@ -56,6 +64,12 @@ CallTrainingConfig callTrainingConfigFor(String phaseKey) {
         phaseKey: phaseKey,
         sectionTitle: 'Presentazione privacy',
         color: Colors.blue.shade700,
+        targetPersonName: 'Rossi Andrea',
+        callingOnBehalfOf: 'la società mandante',
+        responseGuidance:
+            'Presentati con il tuo nome e cognome, indica che chiami per conto '
+            'di la società mandante e non fornire dettagli sensibili finché '
+            'non hai verificato di parlare con il diretto interessato.',
         customerLine:
             'Sono la moglie, può parlare anche con me. Siamo marito e moglie.',
         decodifica:
@@ -74,22 +88,32 @@ CallTrainingConfig callTrainingConfigFor(String phaseKey) {
         phaseKey: phaseKey,
         sectionTitle: 'Negoziazione',
         color: Colors.deepPurple.shade600,
+        targetPersonName: 'Rossi Andrea',
+        responseGuidance:
+            'Chiedi un pagamento di 200 euro piu 24 euro di spese, con '
+            'disponibilita entro oggi o al massimo entro domani.',
         customerLine: 'Salve, mi dica.',
         decodifica:
             'Il debitore ti ascolta: è il momento di condurre la trattativa '
             'mantenendo il controllo della conversazione.',
         spiegazione:
-            'Obiettivo: esplorare soluzioni, verificare capacità di pagamento '
-            'e orientare verso un accordo concreto. Proponi con la tua formulazione.',
+            'Obiettivo: richiedere con chiarezza il pagamento di 224 euro '
+            '(200 euro di debito piu 24 euro di spese), fissando una scadenza '
+            'tra la giornata odierna e al massimo l indomani.',
         evaluationCriteria:
-            'Negoziazione guidata: domande mirate, proposta di soluzione, tono '
-            'professionale e assertivo.',
+            'Negoziazione efficace: richiesta chiara del pagamento di 224 euro, '
+            'indicazione esplicita della scadenza entro oggi o al massimo '
+            'domani, tono professionale e fermo.',
       );
     case 'Chiusura':
       return CallTrainingConfig(
         phaseKey: phaseKey,
         sectionTitle: 'Chiusura',
         color: Colors.green.shade600,
+        targetPersonName: 'Rossi Andrea',
+        responseGuidance:
+            'Ribadisci con chiarezza l impegno preso, richiamando l importo '
+            'complessivo di 224 euro e la data concordata del 15/06.',
         customerLine:
             'Va bene, le prometto di pagare la rata più le spese entro il 15/06.',
         decodifica:
@@ -109,6 +133,7 @@ CallTrainingConfig callTrainingConfigFor(String phaseKey) {
         sectionTitle: 'Approccio',
         color: Colors.orange.shade600,
         customerLine: 'Pronto…',
+        targetPersonName: 'Rossi Andrea',
         decodifica:
             'Il cliente risponde alla chiamata: è il primo contatto. Non parlare '
             'ancora del debito.',
@@ -186,8 +211,13 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
     return score >= _minScoreToPass;
   }
 
+  bool get _requiresAiBeforeFinish => _config.targetPersonName != null;
+
   bool get _canCompletePhase {
     if (!_hasRecorded) return false;
+    if (_requiresAiBeforeFinish) {
+      return _aiResult != null && !_isProcessing;
+    }
     return _phasePassed ||
         _attemptCount >= _maxAttempts ||
         _evaluationPending;
@@ -286,6 +316,86 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
     }
   }
 
+  Widget _userResponseBox({double fontSize = 16}) {
+    final transcription = (_aiResult?['trascrizione'] ?? '').toString().trim();
+    final isPlaceholder = transcription.isEmpty && !_isProcessing;
+    final text = _isProcessing
+        ? 'Trascrizione in corso…'
+        : isPlaceholder
+            ? 'La tua risposta vocale apparirà qui dopo la registrazione.'
+            : '«$transcription»';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isPlaceholder
+            ? Colors.grey.shade100
+            : _config.color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isPlaceholder
+              ? Colors.grey.shade300
+              : _config.color.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontStyle: isPlaceholder ? FontStyle.italic : FontStyle.normal,
+          color: isPlaceholder ? Colors.black45 : Colors.black87,
+          height: 1.45,
+        ),
+      ),
+    );
+  }
+
+  Widget _aiEvaluationCard() {
+    final score = _extractScore(_aiResult);
+    final isOk = score >= _minScoreToPass;
+    final commento = (_aiResult!['commento'] ?? '').toString().trim();
+    final versione = (_aiResult!['versione_migliorata'] ?? '').toString().trim();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Valutazione AI',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Punteggio: $score',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: isOk ? Colors.green.shade700 : Colors.red.shade700,
+            ),
+          ),
+          if (commento.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(commento, style: const TextStyle(height: 1.45)),
+          ],
+          if (versione.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Esempio di risposta: $versione',
+              style: const TextStyle(height: 1.45),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _customerLineBox({double fontSize = 16}) {
     return Container(
       width: double.infinity,
@@ -376,6 +486,26 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
           style: TextStyle(fontSize: 14, color: Colors.black54, height: 1.4),
         ),
         const SizedBox(height: 16),
+        if (_config.targetPersonName != null) ...[
+          Text(
+            'Persona da contattare: ${_config.targetPersonName}',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: _config.color,
+            ),
+          ),
+          if (_config.callingOnBehalfOf != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _config.responseGuidance ??
+                  'Presentati con il tuo nome e cognome, indicando che chiami '
+                      'per conto di ${_config.callingOnBehalfOf}.',
+              style: const TextStyle(fontSize: 14, height: 1.45),
+            ),
+          ],
+          const SizedBox(height: 16),
+        ],
         Row(
           children: [
             Icon(Icons.record_voice_over, color: _config.color, size: 20),
@@ -388,6 +518,21 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         ),
         const SizedBox(height: 8),
         _customerLineBox(fontSize: 17),
+        if (_config.targetPersonName != null) ...[
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Icon(Icons.mic, color: _config.color, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'La tua risposta',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _userResponseBox(fontSize: 17),
+        ],
         const SizedBox(height: 24),
         Center(
           child: Column(
@@ -445,7 +590,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
               ],
             ),
           ),
-        if (_evaluationPending && !_isProcessing)
+        if (_evaluationPending && !_isProcessing && !_requiresAiBeforeFinish)
           Padding(
             padding: const EdgeInsets.only(top: 16),
             child: Container(
@@ -467,7 +612,9 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         if (_aiResult != null)
           Padding(
             padding: const EdgeInsets.only(top: 16),
-            child: Builder(
+            child: _requiresAiBeforeFinish
+                ? _aiEvaluationCard()
+                : Builder(
               builder: (context) {
                 final score = _extractScore(_aiResult);
                 final isOk = score >= _minScoreToPass;
@@ -570,6 +717,27 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       return;
     }
 
+    if (_requiresAiBeforeFinish) {
+      if (_isProcessing) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Attendi il completamento della valutazione AI.'),
+          ),
+        );
+        return;
+      }
+      if (_aiResult == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'È necessaria la valutazione AI prima di concludere.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     if (!_phasePassed && _attemptCount < _maxAttempts) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -596,13 +764,14 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
 
   Widget _buildActionBar() {
     final label = _step < 3 ? 'Avanti' : 'Fine';
+    final enabled = _step < 3 || _canCompletePhase;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
       child: SizedBox(
         width: double.infinity,
         child: FilledButton(
-          onPressed: _onActionPressed,
+          onPressed: enabled ? _onActionPressed : null,
           style: FilledButton.styleFrom(
             backgroundColor: _config.color,
             foregroundColor: Colors.white,

@@ -13,6 +13,8 @@ import '../shell/credit_core_account_menu_sheet.dart';
 
 import '../ui/layout/page_shell.dart';
 
+import '../widgets/account_menu_badge_icon_button.dart';
+
 import 'maintenance_blocked_view.dart';
 
 
@@ -167,15 +169,7 @@ class _MaintenanceSectionGateState extends State<MaintenanceSectionGate> {
 
           const AnnouncementsBellButton(iconColor: Colors.black87),
 
-          IconButton(
-
-            tooltip: 'Menu',
-
-            onPressed: _showAccountMenu,
-
-            icon: const Icon(Icons.more_vert),
-
-          ),
+          AccountMenuBadgeIconButton(onPressed: _showAccountMenu),
 
         ],
 

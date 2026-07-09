@@ -145,6 +145,24 @@ class ReadStateService {
     await _persist(state);
   }
 
+  static Future<int> getCommunityMenuLastSeenMs() async {
+    final state = await _load();
+    return (state['communityMenuLastSeenMs'] as num?)?.toInt() ?? 0;
+  }
+
+  static Future<void> setCommunityMenuLastSeenMs(int ms) async {
+    final state = await _load();
+    state['communityMenuLastSeenMs'] = ms;
+    await _persist(state);
+  }
+
+  static Future<void> ensureCommunityMenuInitialized(int defaultLastSeenMs) async {
+    final state = await _load();
+    if (state.containsKey('communityMenuLastSeenMs')) return;
+    state['communityMenuLastSeenMs'] = defaultLastSeenMs;
+    await _persist(state);
+  }
+
   // ---------------------------------------------------------------------------
   // CREDITFORM — ROLEPLAY
   // ---------------------------------------------------------------------------
@@ -165,6 +183,50 @@ class ReadStateService {
     final state = await _load();
     if (state.containsKey('roleplayLastSeenMs')) return;
     state['roleplayLastSeenMs'] = defaultLastSeenMs;
+    await _persist(state);
+  }
+
+  // ---------------------------------------------------------------------------
+  // CREDITFORM — CORSI
+  // ---------------------------------------------------------------------------
+
+  static Future<int> getCoursesLastSeenMs() async {
+    final state = await _load();
+    return (state['coursesLastSeenMs'] as num?)?.toInt() ?? 0;
+  }
+
+  static Future<void> setCoursesLastSeenMs(int ms) async {
+    final state = await _load();
+    state['coursesLastSeenMs'] = ms;
+    await _persist(state);
+  }
+
+  static Future<void> ensureCoursesInitialized(int defaultLastSeenMs) async {
+    final state = await _load();
+    if (state.containsKey('coursesLastSeenMs')) return;
+    state['coursesLastSeenMs'] = defaultLastSeenMs;
+    await _persist(state);
+  }
+
+  // ---------------------------------------------------------------------------
+  // CREDITFORM — WARM-UP
+  // ---------------------------------------------------------------------------
+
+  static Future<int> getWarmupLastSeenMs() async {
+    final state = await _load();
+    return (state['warmupLastSeenMs'] as num?)?.toInt() ?? 0;
+  }
+
+  static Future<void> setWarmupLastSeenMs(int ms) async {
+    final state = await _load();
+    state['warmupLastSeenMs'] = ms;
+    await _persist(state);
+  }
+
+  static Future<void> ensureWarmupInitialized(int defaultLastSeenMs) async {
+    final state = await _load();
+    if (state.containsKey('warmupLastSeenMs')) return;
+    state['warmupLastSeenMs'] = defaultLastSeenMs;
     await _persist(state);
   }
 

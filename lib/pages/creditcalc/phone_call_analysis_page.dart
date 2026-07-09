@@ -186,7 +186,7 @@ class _PhoneCallAnalysisPageState extends State<PhoneCallAnalysisPage> {
   Future<void> _openCalculator() async {
     await Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute(
-        builder: (_) => const ClassicCalculatorPage(),
+        builder: (_) => const ClassicCalculatorPage(disableHandoffButtons: true),
       ),
     );
   }

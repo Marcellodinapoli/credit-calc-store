@@ -11,7 +11,14 @@ import 'standard_repayment_plan_page.dart';
 
 /// Calcolatrice standard (stile Windows) — memoria, percentuali, √, x², 1/x.
 class ClassicCalculatorPage extends StatefulWidget {
-  const ClassicCalculatorPage({super.key});
+  /// Nasconde i collegamenti a piano di rientro, saldo e stralcio e incasso
+  /// quando la calcolatrice è aperta da altre sezioni.
+  final bool disableHandoffButtons;
+
+  const ClassicCalculatorPage({
+    super.key,
+    this.disableHandoffButtons = false,
+  });
 
   @override
   State<ClassicCalculatorPage> createState() => _ClassicCalculatorPageState();
@@ -412,7 +419,7 @@ class _ClassicCalculatorPageState extends State<ClassicCalculatorPage> {
   }
 
   Widget _handoffButtonsRow(double height) {
-    final enabled = _canHandoff;
+    final enabled = !widget.disableHandoffButtons && _canHandoff;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(

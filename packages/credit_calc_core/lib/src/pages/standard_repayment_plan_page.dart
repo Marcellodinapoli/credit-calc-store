@@ -1823,6 +1823,23 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   int get _modulatedTabAfterPhases => 6 + _modulatedVisiblePhaseCount * 2;
 
+  bool _isModulatedPhaseComplete(
+    ({TextEditingController months, TextEditingController amount}) pair,
+  ) {
+    final months = int.tryParse(pair.months.text.trim());
+    final amount = EuroFormat.parse(pair.amount.text);
+    return months != null &&
+        months >= 1 &&
+        amount != null &&
+        amount > 0;
+  }
+
+  bool get _canAddModulatedPhase {
+    if (_modulatedVisiblePhaseCount >= _maxModulatedPhases) return false;
+    final last = _allModulatedPhaseControllers[_modulatedVisiblePhaseCount - 1];
+    return _isModulatedPhaseComplete(last);
+  }
+
   void _addModulatedPhase() {
     if (_modulatedVisiblePhaseCount >= _maxModulatedPhases) return;
     setState(() {
@@ -2018,6 +2035,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   void _onModulatedFieldChanged() {
     _resetCalcoloIfNeeded();
     _refreshModulatedValidation();
+    setState(() {});
   }
 
   void _refreshModulatedValidation() {
@@ -5021,7 +5039,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
   Future<void> _openCalculator() async {
     await Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute(
-        builder: (_) => const ClassicCalculatorPage(),
+        builder: (_) => const ClassicCalculatorPage(disableHandoffButtons: true),
       ),
     );
   }
@@ -5793,12 +5811,14 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
             child: Align(
               alignment: Alignment.centerLeft,
               child: IconButton(
-                onPressed: _addModulatedPhase,
+                onPressed: _canAddModulatedPhase ? _addModulatedPhase : null,
                 icon: const Icon(Icons.add),
                 tooltip: 'Aggiungi altra fase a rata ridotta',
                 style: IconButton.styleFrom(
                   backgroundColor: _primaryBlue.withValues(alpha: 0.08),
                   foregroundColor: _primaryBlue,
+                  disabledBackgroundColor: Colors.grey.shade400,
+                  disabledForegroundColor: Colors.white70,
                   padding: const EdgeInsets.all(12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),

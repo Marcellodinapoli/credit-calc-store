@@ -12,9 +12,11 @@ import '../pages/bk/bk_call_analysis_page.dart';
 import '../pages/bk/bk_ecosystem_sections_page.dart';
 import '../pages/bk/bk_plan_limits_page.dart';
 import '../pages/creditcalc/device_sync_page.dart';
+import '../services/account_menu_badge_notifier.dart';
 import '../ui/layout/page_shell.dart';
 import '../pages/creditform/personal_form_menu.dart';
 import '../pages/creditjob/personal_job_menu.dart';
+import '../widgets/account_menu_badge_icon_button.dart';
 import 'credit_core_site_actions.dart';
 
 enum _MenuSection { creditForm, creditJob }
@@ -148,8 +150,9 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
   Widget _buildExpandableSectionTitle(
     BrandedPageProject project,
     _MenuSection section,
-    Map<String, dynamic>? maintenanceData,
-  ) {
+    Map<String, dynamic>? maintenanceData, {
+    bool showBadge = false,
+  }) {
     final isOpen = _openSection == section;
     final sectionName = switch (section) {
       _MenuSection.creditForm => MaintenanceService.creditForm,
@@ -160,9 +163,19 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       title: BrandedProjectName(project: project, fontSize: 16),
-      trailing: blocked
-          ? const Icon(Icons.warning_amber_rounded, color: Colors.orange)
-          : Icon(isOpen ? Icons.remove : Icons.add),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showBadge) ...[
+            accountMenuBadgeDot(visible: true),
+            const SizedBox(width: 8),
+          ],
+          if (blocked)
+            const Icon(Icons.warning_amber_rounded, color: Colors.orange)
+          else
+            Icon(isOpen ? Icons.remove : Icons.add),
+        ],
+      ),
       onTap: blocked
           ? _showMaintenanceSnackBar
           : () {
@@ -179,8 +192,9 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
     Color accent,
     Color accentLight,
     Map<String, dynamic>? maintenanceData,
-    String sectionName,
-  ) {
+    String sectionName, {
+    bool showBadge = false,
+  }) {
     final blocked = MaintenanceService.isSectionBlocked(maintenanceData, sectionName);
 
     return ListTile(
@@ -189,6 +203,7 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
         '- $title',
         style: TextStyle(color: blocked ? Colors.black38 : Colors.black87),
       ),
+      trailing: accountMenuBadgeDot(visible: showBadge),
       tileColor: accentLight.withValues(alpha: 0.35),
       onTap: blocked ? _showMaintenanceSnackBar : onTap,
     );
@@ -239,12 +254,30 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
     required String title,
     required VoidCallback onTap,
     Color? iconColor,
+    bool showBadge = false,
   }) {
     return ListTile(
       leading: Icon(icon, color: iconColor ?? Colors.black54),
       title: Text(title),
+      trailing: accountMenuBadgeDot(visible: showBadge),
       onTap: onTap,
     );
+  }
+
+  bool _formItemBadge(PersonalFormMenuItem item, AccountMenuBadges badges) {
+    return switch (item) {
+      PersonalFormMenuItem.courses => badges.courses,
+      PersonalFormMenuItem.listening => badges.warmup,
+      PersonalFormMenuItem.roleplay => badges.roleplay,
+      _ => false,
+    };
+  }
+
+  bool _jobItemBadge(PersonalJobMenuItem item, AccountMenuBadges badges) {
+    return switch (item) {
+      PersonalJobMenuItem.jobOffers => badges.jobOffers,
+      _ => false,
+    };
   }
 
   @override
@@ -285,284 +318,299 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
           MaintenanceService.area,
         );
 
-        final children = <Widget>[
-          _menuHeader(),
-          const Divider(),
-          _item(
-            icon: Icons.notifications_outlined,
-            title: 'Notifiche',
-            onTap: () => _closeAnd(widget.onAnnouncements),
-          ),
-        ];
-
-        if (_blockedContext) {
-          children.addAll([
-            _areaHeader(),
-            _item(
-              icon: Icons.support_agent_outlined,
-              title: PersonalAreaMenuItem.directSupport.title,
-              iconColor: _areaColor,
-              onTap: () => _closeAndArea(PersonalAreaMenuItem.directSupport),
-            ),
-          ]);
-        } else {
-          final showForm = !isCompany;
-          final showJob = isPublic || isCompany;
-
-          if (showForm) {
-            children.add(
-              _buildExpandableSectionTitle(
-                BrandedPageProject.form,
-                _MenuSection.creditForm,
-                maintenanceData,
-              ),
-            );
-            if (_openSection == _MenuSection.creditForm && !formBlocked) {
-              if (isSupervisor) {
-                children.add(_buildSubMenuItem(
-                  PersonalFormMenuItem.companyCollaborators.title,
-                  () => _closeAndForm(PersonalFormMenuItem.companyCollaborators),
-                  _formColor,
-                  _formLight,
-                  maintenanceData,
-                  MaintenanceService.creditForm,
-                ));
-              }
-              for (final item in [
-                PersonalFormMenuItem.courses,
-                PersonalFormMenuItem.listening,
-                PersonalFormMenuItem.roleplay,
-                PersonalFormMenuItem.progress,
-                PersonalFormMenuItem.review,
-              ]) {
-                children.add(_buildSubMenuItem(
-                  item.title,
-                  () => _closeAndForm(item),
-                  _formColor,
-                  _formLight,
-                  maintenanceData,
-                  MaintenanceService.creditForm,
-                ));
-              }
-            }
-          }
-
-          if (showJob) {
-            children.add(
-              _buildExpandableSectionTitle(
-                BrandedPageProject.job,
-                _MenuSection.creditJob,
-                maintenanceData,
-              ),
-            );
-            if (_openSection == _MenuSection.creditJob && !jobBlocked) {
-              if (isCompany) {
-                children.addAll([
-                  _buildSubMenuItem(
-                    PersonalJobMenuItem.gestioneLavori.title,
-                    () => _closeAndJob(PersonalJobMenuItem.gestioneLavori),
-                    _jobColor,
-                    _jobLight,
-                    maintenanceData,
-                    MaintenanceService.creditJob,
-                  ),
-                  _buildSubMenuItem(
-                    PersonalJobMenuItem.companyUsers.title,
-                    () => _closeAndJob(PersonalJobMenuItem.companyUsers),
-                    _jobColor,
-                    _jobLight,
-                    maintenanceData,
-                    MaintenanceService.creditJob,
-                  ),
-                ]);
-              } else if (isPublic) {
-                children.addAll([
-                  _buildSubMenuItem(
-                    PersonalJobMenuItem.jobOffers.title,
-                    () => _closeAndJob(PersonalJobMenuItem.jobOffers),
-                    _jobColor,
-                    _jobLight,
-                    maintenanceData,
-                    MaintenanceService.creditJob,
-                  ),
-                  _buildSubMenuItem(
-                    PersonalJobMenuItem.savedJobs.title,
-                    () => _closeAndJob(PersonalJobMenuItem.savedJobs),
-                    _jobColor,
-                    _jobLight,
-                    maintenanceData,
-                    MaintenanceService.creditJob,
-                  ),
-                  _buildSubMenuItem(
-                    PersonalJobMenuItem.myApplications.title,
-                    () => _closeAndJob(PersonalJobMenuItem.myApplications),
-                    _jobColor,
-                    _jobLight,
-                    maintenanceData,
-                    MaintenanceService.creditJob,
-                  ),
-                ]);
-              }
-            }
-          }
-
-          children.addAll([
-            const Divider(height: 24),
-            _areaHeader(),
-            if (!areaBlocked) ...[
+        return ValueListenableBuilder<AccountMenuBadges>(
+          valueListenable: AccountMenuBadgeNotifier.instance.badges,
+          builder: (context, badges, _) {
+            final children = <Widget>[
+              _menuHeader(),
+              const Divider(),
               _item(
-                icon: Icons.person_outline,
-                title: PersonalAreaMenuItem.myData.title,
-                iconColor: _areaColor,
-                onTap: () => _closeAndArea(PersonalAreaMenuItem.myData),
+                icon: Icons.notifications_outlined,
+                title: 'Notifiche',
+                onTap: () => _closeAnd(widget.onAnnouncements),
               ),
-              if (!isWork)
+            ];
+
+            if (_blockedContext) {
+              children.addAll([
+                _areaHeader(),
                 _item(
-                  icon: Icons.card_membership_outlined,
-                  title: PersonalAreaMenuItem.subscription.title,
+                  icon: Icons.support_agent_outlined,
+                  title: PersonalAreaMenuItem.directSupport.title,
                   iconColor: _areaColor,
-                  onTap: () =>
-                      _closeAndArea(PersonalAreaMenuItem.subscription),
+                  showBadge: badges.directSupport,
+                  onTap: () => _closeAndArea(PersonalAreaMenuItem.directSupport),
                 ),
-              _item(
-                icon: Icons.sync_alt,
-                title: 'Sincronizza',
-                iconColor: _areaColor,
-                onTap: () => _closeAnd(() {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const DeviceSyncPage(),
+              ]);
+            } else {
+              final showForm = !isCompany;
+              final showJob = isPublic || isCompany;
+
+              if (showForm) {
+                children.add(
+                  _buildExpandableSectionTitle(
+                    BrandedPageProject.form,
+                    _MenuSection.creditForm,
+                    maintenanceData,
+                    showBadge: badges.hasCreditForm,
+                  ),
+                );
+                if (_openSection == _MenuSection.creditForm && !formBlocked) {
+                  if (isSupervisor) {
+                    children.add(_buildSubMenuItem(
+                      PersonalFormMenuItem.companyCollaborators.title,
+                      () => _closeAndForm(PersonalFormMenuItem.companyCollaborators),
+                      _formColor,
+                      _formLight,
+                      maintenanceData,
+                      MaintenanceService.creditForm,
+                    ));
+                  }
+                  for (final item in [
+                    PersonalFormMenuItem.courses,
+                    PersonalFormMenuItem.listening,
+                    PersonalFormMenuItem.roleplay,
+                    PersonalFormMenuItem.progress,
+                    PersonalFormMenuItem.review,
+                  ]) {
+                    children.add(_buildSubMenuItem(
+                      item.title,
+                      () => _closeAndForm(item),
+                      _formColor,
+                      _formLight,
+                      maintenanceData,
+                      MaintenanceService.creditForm,
+                      showBadge: _formItemBadge(item, badges),
+                    ));
+                  }
+                }
+              }
+
+              if (showJob) {
+                children.add(
+                  _buildExpandableSectionTitle(
+                    BrandedPageProject.job,
+                    _MenuSection.creditJob,
+                    maintenanceData,
+                    showBadge: badges.hasCreditJob,
+                  ),
+                );
+                if (_openSection == _MenuSection.creditJob && !jobBlocked) {
+                  if (isCompany) {
+                    children.addAll([
+                      _buildSubMenuItem(
+                        PersonalJobMenuItem.gestioneLavori.title,
+                        () => _closeAndJob(PersonalJobMenuItem.gestioneLavori),
+                        _jobColor,
+                        _jobLight,
+                        maintenanceData,
+                        MaintenanceService.creditJob,
+                      ),
+                      _buildSubMenuItem(
+                        PersonalJobMenuItem.companyUsers.title,
+                        () => _closeAndJob(PersonalJobMenuItem.companyUsers),
+                        _jobColor,
+                        _jobLight,
+                        maintenanceData,
+                        MaintenanceService.creditJob,
+                      ),
+                    ]);
+                  } else if (isPublic) {
+                    children.addAll([
+                      _buildSubMenuItem(
+                        PersonalJobMenuItem.jobOffers.title,
+                        () => _closeAndJob(PersonalJobMenuItem.jobOffers),
+                        _jobColor,
+                        _jobLight,
+                        maintenanceData,
+                        MaintenanceService.creditJob,
+                        showBadge: _jobItemBadge(
+                          PersonalJobMenuItem.jobOffers,
+                          badges,
+                        ),
+                      ),
+                      _buildSubMenuItem(
+                        PersonalJobMenuItem.savedJobs.title,
+                        () => _closeAndJob(PersonalJobMenuItem.savedJobs),
+                        _jobColor,
+                        _jobLight,
+                        maintenanceData,
+                        MaintenanceService.creditJob,
+                      ),
+                      _buildSubMenuItem(
+                        PersonalJobMenuItem.myApplications.title,
+                        () => _closeAndJob(PersonalJobMenuItem.myApplications),
+                        _jobColor,
+                        _jobLight,
+                        maintenanceData,
+                        MaintenanceService.creditJob,
+                      ),
+                    ]);
+                  }
+                }
+              }
+
+              children.addAll([
+                const Divider(height: 24),
+                _areaHeader(),
+                if (!areaBlocked) ...[
+                  _item(
+                    icon: Icons.person_outline,
+                    title: PersonalAreaMenuItem.myData.title,
+                    iconColor: _areaColor,
+                    onTap: () => _closeAndArea(PersonalAreaMenuItem.myData),
+                  ),
+                  if (!isWork)
+                    _item(
+                      icon: Icons.card_membership_outlined,
+                      title: PersonalAreaMenuItem.subscription.title,
+                      iconColor: _areaColor,
+                      onTap: () =>
+                          _closeAndArea(PersonalAreaMenuItem.subscription),
                     ),
-                  );
-                }),
-              ),
-              _item(
-                icon: Icons.groups_outlined,
-                title: PersonalAreaMenuItem.community.title,
-                iconColor: _areaColor,
-                onTap: () => _closeAndArea(PersonalAreaMenuItem.community),
-              ),
-              _item(
-                icon: Icons.menu_book_outlined,
-                title: PersonalAreaMenuItem.guide.title,
-                iconColor: _areaColor,
-                onTap: () => _closeAndArea(PersonalAreaMenuItem.guide),
-              ),
-              _item(
-                icon: Icons.tune_outlined,
-                title: PersonalAreaMenuItem.notificationPreferences.title,
-                iconColor: _areaColor,
-                onTap: () =>
-                    _closeAndArea(PersonalAreaMenuItem.notificationPreferences),
-              ),
-              _item(
-                icon: Icons.privacy_tip_outlined,
-                title: PersonalAreaMenuItem.privacyConsents.title,
-                iconColor: _areaColor,
-                onTap: () => _closeAndArea(PersonalAreaMenuItem.privacyConsents),
-              ),
-            ],
-            if (_isBkAdmin) ...[
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: Text(
-                  'Backoffice',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  _item(
+                    icon: Icons.sync_alt,
+                    title: 'Sincronizza',
+                    iconColor: _areaColor,
+                    onTap: () => _closeAnd(() {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const DeviceSyncPage(),
+                        ),
+                      );
+                    }),
+                  ),
+                  _item(
+                    icon: Icons.groups_outlined,
+                    title: PersonalAreaMenuItem.community.title,
+                    iconColor: _areaColor,
+                    showBadge: badges.community,
+                    onTap: () => _closeAndArea(PersonalAreaMenuItem.community),
+                  ),
+                  _item(
+                    icon: Icons.menu_book_outlined,
+                    title: PersonalAreaMenuItem.guide.title,
+                    iconColor: _areaColor,
+                    onTap: () => _closeAndArea(PersonalAreaMenuItem.guide),
+                  ),
+                  _item(
+                    icon: Icons.tune_outlined,
+                    title: PersonalAreaMenuItem.notificationPreferences.title,
+                    iconColor: _areaColor,
+                    onTap: () =>
+                        _closeAndArea(PersonalAreaMenuItem.notificationPreferences),
+                  ),
+                  _item(
+                    icon: Icons.privacy_tip_outlined,
+                    title: PersonalAreaMenuItem.privacyConsents.title,
+                    iconColor: _areaColor,
+                    onTap: () => _closeAndArea(PersonalAreaMenuItem.privacyConsents),
+                  ),
+                ],
+                if (_isBkAdmin) ...[
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Text(
+                      'Backoffice',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ),
+                  _item(
+                    icon: Icons.confirmation_number_outlined,
+                    title: 'Coupon registrazione',
+                    iconColor: _areaColor,
+                    onTap: () => _closeAnd(() {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const BkCouponsPage(),
+                        ),
+                      );
+                    }),
+                  ),
+                  _item(
+                    icon: Icons.speed_outlined,
+                    title: 'Piani FREE / PLUS / ENTERPRISE',
+                    iconColor: _areaColor,
+                    onTap: () => _closeAnd(() {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const BkPlanLimitsPage(),
+                        ),
+                      );
+                    }),
+                  ),
+                  _item(
+                    icon: Icons.view_module_outlined,
+                    title: 'Sezioni ecosistema',
+                    iconColor: _areaColor,
+                    onTap: () => _closeAnd(() {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const BkEcosystemSectionsPage(),
+                        ),
+                      );
+                    }),
+                  ),
+                  _item(
+                    icon: Icons.record_voice_over_outlined,
+                    title: 'Contestazioni warm-up',
+                    iconColor: _areaColor,
+                    onTap: () => _closeAnd(() {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const BkWarmupContestationsPage(),
+                        ),
+                      );
+                    }),
+                  ),
+                  _item(
+                    icon: Icons.call_outlined,
+                    title: 'Prompt analisi telefonata',
+                    iconColor: _areaColor,
+                    onTap: () => _closeAnd(() {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const BkCallAnalysisPage(),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+                _item(
+                  icon: Icons.support_agent_outlined,
+                  title: PersonalAreaMenuItem.directSupport.title,
+                  iconColor: _areaColor,
+                  showBadge: badges.directSupport,
+                  onTap: () => _closeAndArea(PersonalAreaMenuItem.directSupport),
                 ),
-              ),
-              _item(
-                icon: Icons.confirmation_number_outlined,
-                title: 'Coupon registrazione',
-                iconColor: _areaColor,
-                onTap: () => _closeAnd(() {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const BkCouponsPage(),
-                    ),
-                  );
-                }),
-              ),
-              _item(
-                icon: Icons.speed_outlined,
-                title: 'Piani FREE / PLUS / ENTERPRISE',
-                iconColor: _areaColor,
-                onTap: () => _closeAnd(() {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const BkPlanLimitsPage(),
-                    ),
-                  );
-                }),
-              ),
-              _item(
-                icon: Icons.view_module_outlined,
-                title: 'Sezioni ecosistema',
-                iconColor: _areaColor,
-                onTap: () => _closeAnd(() {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const BkEcosystemSectionsPage(),
-                    ),
-                  );
-                }),
-              ),
-              _item(
-                icon: Icons.record_voice_over_outlined,
-                title: 'Contestazioni warm-up',
-                iconColor: _areaColor,
-                onTap: () => _closeAnd(() {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const BkWarmupContestationsPage(),
-                    ),
-                  );
-                }),
-              ),
-              _item(
-                icon: Icons.call_outlined,
-                title: 'Prompt analisi telefonata',
-                iconColor: _areaColor,
-                onTap: () => _closeAnd(() {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const BkCallAnalysisPage(),
-                    ),
-                  );
-                }),
-              ),
-            ],
-            _item(
-              icon: Icons.support_agent_outlined,
-              title: PersonalAreaMenuItem.directSupport.title,
-              iconColor: _areaColor,
-              onTap: () => _closeAndArea(PersonalAreaMenuItem.directSupport),
-            ),
-          ]);
-        }
+              ]);
+            }
 
-        children.addAll([
-          const Divider(height: 16),
-          _CreditCoreSiteListTileInline(
-            userType: _userType,
-            onBeforeOpen: () => Navigator.pop(context),
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Esci'),
-            onTap: () {
-              Navigator.pop(context);
-              widget.onLogout();
-            },
-          ),
-          SizedBox(height: MediaQuery.viewPaddingOf(context).bottom + 8),
-        ]);
+            children.addAll([
+              const Divider(height: 16),
+              _CreditCoreSiteListTileInline(
+                userType: _userType,
+                onBeforeOpen: () => Navigator.pop(context),
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Esci'),
+                onTap: () {
+                  Navigator.pop(context);
+                  widget.onLogout();
+                },
+              ),
+              SizedBox(height: MediaQuery.viewPaddingOf(context).bottom + 8),
+            ]);
 
-        return SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: children,
-          ),
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            );
+          },
         );
       },
     );

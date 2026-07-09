@@ -732,7 +732,7 @@ class _BalanceWriteOffPageState extends State<BalanceWriteOffPage> {
   Future<void> _openCalculator() async {
     await Navigator.of(context, rootNavigator: true).push<void>(
       MaterialPageRoute(
-        builder: (_) => const ClassicCalculatorPage(),
+        builder: (_) => const ClassicCalculatorPage(disableHandoffButtons: true),
       ),
     );
   }

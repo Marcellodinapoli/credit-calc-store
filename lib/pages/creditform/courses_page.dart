@@ -12,6 +12,7 @@ import '../../core/theme/app_card_theme.dart';
 import '../../core/dimensions.dart';
 import 'course_labels.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../services/read_state_service.dart';
 
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,17 @@ class _CoursesPageState extends State<CoursesPage>
   void initState() {
     super.initState();
     _tab = TabController(length: 2, vsync: this);
+    _initReadState();
+  }
+
+  Future<void> _initReadState() async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final stored = await ReadStateService.getCoursesLastSeenMs();
+    if (stored == 0) {
+      await ReadStateService.ensureCoursesInitialized(now);
+    } else {
+      await ReadStateService.setCoursesLastSeenMs(now);
+    }
   }
 
   @override

@@ -40,6 +40,7 @@ class _CommunityListPageState extends State<CommunityListPage> {
   void initState() {
     super.initState();
     _loadTopicLastSeen();
+    _initCommunityMenuReadState();
     _authSub = FirebaseAuth.instance.authStateChanges().listen((authUser) {
       if (authUser != null) {
         _loadUserName();
@@ -144,6 +145,16 @@ class _CommunityListPageState extends State<CommunityListPage> {
     _topicLastSeen = await ReadStateService.getCommunityTopicsLastSeen();
     if (!mounted) return;
     setState(() => _readStateReady = true);
+  }
+
+  Future<void> _initCommunityMenuReadState() async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final stored = await ReadStateService.getCommunityMenuLastSeenMs();
+    if (stored == 0) {
+      await ReadStateService.ensureCommunityMenuInitialized(now);
+    } else {
+      await ReadStateService.setCommunityMenuLastSeenMs(now);
+    }
   }
 
   Future<void> _loadUserName() async {

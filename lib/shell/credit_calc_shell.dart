@@ -15,8 +15,10 @@ import '../pages/creditcalc/credit_calc_settings_page.dart';
 import '../pages/creditcalc/creditors_page.dart';
 import '../pages/creditcalc/develop_page.dart';
 import '../pages/creditcalc/itinerary/itinerary_hub_page.dart';
+import '../services/account_menu_badge_controller.dart';
 import '../services/itinerary_nav_badge_notifier.dart';
 import '../ui/layout/page_shell.dart';
+import '../widgets/account_menu_badge_icon_button.dart';
 import '../widgets/desktop_app_update_button.dart';
 import 'credit_core_account_menu_sheet.dart';
 import 'credit_core_site_actions.dart';
@@ -54,16 +56,19 @@ const creditCalcBottomNavItems = <CreditCalcNavItem>[
 
 class _CreditCalcShellState extends State<CreditCalcShell> {
   CreditCalcNavItem _section = CreditCalcNavItem.creditors;
+  final _accountMenuBadgeController = AccountMenuBadgeController();
 
   @override
   void initState() {
     super.initState();
     CreditCalcRuntime.writeBlockedMessage.addListener(_onWriteBlocked);
+    _accountMenuBadgeController.start();
   }
 
   @override
   void dispose() {
     CreditCalcRuntime.writeBlockedMessage.removeListener(_onWriteBlocked);
+    _accountMenuBadgeController.stop();
     super.dispose();
   }
 
@@ -243,11 +248,7 @@ class _MobileShell extends StatelessWidget {
           const AnnouncementsBellButton(iconColor: Colors.black87),
           const DesktopAppUpdateButton(compact: true),
           _SettingsIconButton(onPressed: onSettings),
-          IconButton(
-            tooltip: 'Menu',
-            onPressed: onMenu,
-            icon: const Icon(Icons.more_vert),
-          ),
+          AccountMenuBadgeIconButton(onPressed: onMenu),
         ],
       ),
       body: Column(
