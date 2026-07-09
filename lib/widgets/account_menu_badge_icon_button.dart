@@ -18,10 +18,14 @@ class AccountMenuBadgeIconButton extends StatelessWidget {
       builder: (context, badges, _) {
         return Badge(
           isLabelVisible: badges.hasAny,
+          backgroundColor: Colors.red.shade700,
+          smallSize: 12,
+          offset: const Offset(-2, 2),
+          padding: EdgeInsets.zero,
           child: IconButton(
             tooltip: 'Menu',
             onPressed: onPressed,
-            icon: const Icon(Icons.more_vert),
+            icon: const Icon(Icons.more_vert, size: 26),
           ),
         );
       },

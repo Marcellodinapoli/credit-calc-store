@@ -18,14 +18,6 @@ enum _ReminderMonthFilter {
   final String label;
 }
 
-enum _ReminderClientFilter {
-  all('Tutti'),
-  client('Cliente');
-
-  const _ReminderClientFilter(this.label);
-  final String label;
-}
-
 class RemindersPage extends StatefulWidget {
   const RemindersPage({super.key});
 
@@ -36,18 +28,9 @@ class RemindersPage extends StatefulWidget {
 class _RemindersPageState extends State<RemindersPage> {
   bool _busy = false;
   _ReminderMonthFilter _monthFilter = _ReminderMonthFilter.currentMonth;
-  _ReminderClientFilter _clientFilter = _ReminderClientFilter.all;
+  String? _selectedReminderTitle;
 
   static const _shell = ItineraryPageShell();
-
-  bool _isClientReminder(FieldReminder item) =>
-      InstallmentMonitorService.isRateizzoReminder(item) ||
-      (item.visitId != null && item.visitId!.isNotEmpty);
-
-  List<FieldReminder> _applyClientFilter(List<FieldReminder> items) {
-    if (_clientFilter == _ReminderClientFilter.all) return items;
-    return items.where(_isClientReminder).toList(growable: false);
-  }
 
   bool _isCurrentMonth(DateTime date) {
     final now = DateTime.now();
@@ -72,6 +55,56 @@ class _RemindersPageState extends State<RemindersPage> {
       }
     }
     return (current: current, upcoming: upcoming);
+  }
+
+  List<String> _availableReminderTitles(List<FieldReminder> items) {
+    final unique = <String>{};
+    for (final item in items) {
+      final title = item.title.trim();
+      if (title.isNotEmpty) unique.add(title);
+    }
+    final titles = unique.toList()..sort();
+    return titles;
+  }
+
+  List<FieldReminder> _applyTitleFilter(List<FieldReminder> items) {
+    final selected = _selectedReminderTitle;
+    if (selected == null || selected.isEmpty) return items;
+    return items
+        .where((item) => item.title.trim() == selected)
+        .toList(growable: false);
+  }
+
+  Future<void> _pickReminderTitle(List<String> titles) async {
+    final picked = await showModalBottomSheet<String?>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text(
+                'Seleziona nominativo',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.clear),
+              title: const Text('Tutti i nominativi'),
+              onTap: () => Navigator.pop(context, ''),
+            ),
+            for (final title in titles)
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: Text(title),
+                onTap: () => Navigator.pop(context, title),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || picked == null) return;
+    setState(() => _selectedReminderTitle = picked.isEmpty ? null : picked);
   }
 
   Widget _sectionHeader(String title) {
@@ -152,8 +185,8 @@ class _RemindersPageState extends State<RemindersPage> {
 
   Widget _buildFilteredList(List<FieldReminder> items) {
     final now = DateTime.now();
-    final clientFiltered = _applyClientFilter(items);
-    final parts = _partitionByMonth(clientFiltered);
+    final titleFiltered = _applyTitleFilter(items);
+    final parts = _partitionByMonth(titleFiltered);
 
     List<FieldReminder> visible;
     switch (_monthFilter) {
@@ -168,16 +201,16 @@ class _RemindersPageState extends State<RemindersPage> {
     if (visible.isEmpty) {
       final message = switch (_monthFilter) {
         _ReminderMonthFilter.currentMonth =>
-          _clientFilter == _ReminderClientFilter.client
-              ? 'Nessun promemoria cliente per il mese in corso.'
+          _selectedReminderTitle != null
+              ? 'Nessun promemoria per il nominativo selezionato nel mese in corso.'
               : 'Nessun promemoria per il mese in corso.',
         _ReminderMonthFilter.upcomingMonths =>
-          _clientFilter == _ReminderClientFilter.client
-              ? 'Nessun promemoria cliente nei prossimi mesi.'
+          _selectedReminderTitle != null
+              ? 'Nessun promemoria per il nominativo selezionato nei prossimi mesi.'
               : 'Nessun promemoria nei prossimi mesi.',
         _ReminderMonthFilter.all =>
-          _clientFilter == _ReminderClientFilter.client
-              ? 'Nessun promemoria collegato a un cliente.'
+          _selectedReminderTitle != null
+              ? 'Nessun promemoria per il nominativo selezionato.'
               : 'Nessun promemoria. Programmane uno per non dimenticare le scadenze.',
       };
       return Center(
@@ -453,14 +486,22 @@ class _RemindersPageState extends State<RemindersPage> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        for (final filter in _ReminderClientFilter.values)
-                          FilterChip(
-                            label: Text(filter.label),
-                            selected: _clientFilter == filter,
-                            onSelected: (selected) {
-                              if (!selected) return;
-                              setState(() => _clientFilter = filter);
-                            },
+                        OutlinedButton.icon(
+                          onPressed: items.isEmpty
+                              ? null
+                              : () => _pickReminderTitle(
+                                    _availableReminderTitles(items),
+                                  ),
+                          icon: const Icon(Icons.person_search),
+                          label: Text(
+                            _selectedReminderTitle ?? 'Seleziona nominativo',
+                          ),
+                        ),
+                        if (_selectedReminderTitle != null)
+                          TextButton(
+                            onPressed: () =>
+                                setState(() => _selectedReminderTitle = null),
+                            child: const Text('Azzera'),
                           ),
                       ],
                     ),
