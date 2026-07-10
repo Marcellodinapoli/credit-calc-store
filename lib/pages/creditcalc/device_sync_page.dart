@@ -180,7 +180,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
     if (!mounted) return;
     setState(() {
       _online = online;
-      _activeTransfer = transfer;
+      _activeTransfer = _effectiveTransfer(transfer);
       _localState = localState;
       _peer = peer;
       _isSender = isSender;
@@ -268,12 +268,13 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
       isSender = await DeviceTransferService.isActiveSender(uid);
     }
     if (!mounted) return;
-
     final wasSender = _isSender;
     setState(() {
-      _activeTransfer = transfer;
+      _activeTransfer = _effectiveTransfer(transfer);
       _isSender = isSender;
-      if (transfer?.isReceivable == true && !isSender) {
+      if (transfer?.isReceivable == true &&
+          !isSender &&
+          !_isPackageAlreadyReceived(transfer!)) {
         _statusMessage =
             'Pacchetto pronto da ricevere. Tocca «Ricevi dati» '
             'entro ${DeviceTransferFormat.dateTime(
@@ -434,7 +435,24 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
   bool get _canRelease =>
       _isSender && _activeTransfer?.isPrepared == true && _online;
 
-  bool get _canReceive => _activeTransfer?.isReceivable == true && !_isSender;
+  bool _isPackageAlreadyReceived(DeviceTransferMeta transfer) {
+    final last = _lastReceive;
+    if (last == null) return false;
+    return last.sentAt.millisecondsSinceEpoch ==
+        transfer.sentAt.millisecondsSinceEpoch;
+  }
+
+  DeviceTransferMeta? _effectiveTransfer(DeviceTransferMeta? transfer) {
+    if (transfer == null) return null;
+    if (_isPackageAlreadyReceived(transfer)) return null;
+    return transfer;
+  }
+
+  bool get _canReceive {
+    final transfer = _activeTransfer;
+    if (transfer == null || _isSender || !transfer.isReceivable) return false;
+    return !_isPackageAlreadyReceived(transfer);
+  }
 
   bool get _waitingReceiver =>
       _isSender && _activeTransfer?.isPrepared == true && !_receiverReady;

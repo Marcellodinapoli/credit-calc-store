@@ -28,7 +28,6 @@ class RemindersPage extends StatefulWidget {
 class _RemindersPageState extends State<RemindersPage> {
   bool _busy = false;
   _ReminderMonthFilter _monthFilter = _ReminderMonthFilter.currentMonth;
-  String? _selectedReminderTitle;
 
   static const _shell = ItineraryPageShell();
 
@@ -67,14 +66,6 @@ class _RemindersPageState extends State<RemindersPage> {
     return titles;
   }
 
-  List<FieldReminder> _applyTitleFilter(List<FieldReminder> items) {
-    final selected = _selectedReminderTitle;
-    if (selected == null || selected.isEmpty) return items;
-    return items
-        .where((item) => item.title.trim() == selected)
-        .toList(growable: false);
-  }
-
   Future<void> _pickReminderTitle(List<String> titles) async {
     final picked = await showModalBottomSheet<String?>(
       context: context,
@@ -84,14 +75,9 @@ class _RemindersPageState extends State<RemindersPage> {
           children: [
             ListTile(
               title: const Text(
-                'Seleziona nominativo',
+                'Programma promemoria per',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.clear),
-              title: const Text('Tutti i nominativi'),
-              onTap: () => Navigator.pop(context, ''),
             ),
             for (final title in titles)
               ListTile(
@@ -103,8 +89,8 @@ class _RemindersPageState extends State<RemindersPage> {
         ),
       ),
     );
-    if (!mounted || picked == null) return;
-    setState(() => _selectedReminderTitle = picked.isEmpty ? null : picked);
+    if (!mounted || picked == null || picked.isEmpty) return;
+    await _openEditor(initialTitle: picked);
   }
 
   Widget _sectionHeader(String title) {
@@ -185,8 +171,7 @@ class _RemindersPageState extends State<RemindersPage> {
 
   Widget _buildFilteredList(List<FieldReminder> items) {
     final now = DateTime.now();
-    final titleFiltered = _applyTitleFilter(items);
-    final parts = _partitionByMonth(titleFiltered);
+    final parts = _partitionByMonth(items);
 
     List<FieldReminder> visible;
     switch (_monthFilter) {
@@ -201,17 +186,11 @@ class _RemindersPageState extends State<RemindersPage> {
     if (visible.isEmpty) {
       final message = switch (_monthFilter) {
         _ReminderMonthFilter.currentMonth =>
-          _selectedReminderTitle != null
-              ? 'Nessun promemoria per il nominativo selezionato nel mese in corso.'
-              : 'Nessun promemoria per il mese in corso.',
+          'Nessun promemoria per il mese in corso.',
         _ReminderMonthFilter.upcomingMonths =>
-          _selectedReminderTitle != null
-              ? 'Nessun promemoria per il nominativo selezionato nei prossimi mesi.'
-              : 'Nessun promemoria nei prossimi mesi.',
+          'Nessun promemoria nei prossimi mesi.',
         _ReminderMonthFilter.all =>
-          _selectedReminderTitle != null
-              ? 'Nessun promemoria per il nominativo selezionato.'
-              : 'Nessun promemoria. Programmane uno per non dimenticare le scadenze.',
+          'Nessun promemoria. Programmane uno per non dimenticare le scadenze.',
       };
       return Center(
         child: Text(
@@ -312,8 +291,13 @@ class _RemindersPageState extends State<RemindersPage> {
     return '$technical\n$userNotes';
   }
 
-  Future<void> _openEditor({FieldReminder? reminder}) async {
-    final titleCtrl = TextEditingController(text: reminder?.title ?? '');
+  Future<void> _openEditor({
+    FieldReminder? reminder,
+    String? initialTitle,
+  }) async {
+    final titleCtrl = TextEditingController(
+      text: reminder?.title ?? initialTitle ?? '',
+    );
     final notesCtrl = TextEditingController(text: _notesForEditor(reminder) ?? '');
     var remindAt = reminder?.remindAt ??
         DateTime.now().add(const Duration(hours: 1));
@@ -486,29 +470,14 @@ class _RemindersPageState extends State<RemindersPage> {
                       stream: FieldReminderService.watchUpcoming(),
                       builder: (context, snapshot) {
                         final items = snapshot.data ?? [];
-                        return Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            OutlinedButton.icon(
-                              onPressed: items.isEmpty
-                                  ? null
-                                  : () => _pickReminderTitle(
-                                        _availableReminderTitles(items),
-                                      ),
-                              icon: const Icon(Icons.person_search),
-                              label: Text(
-                                _selectedReminderTitle ?? 'Seleziona nominativo',
-                              ),
-                            ),
-                            if (_selectedReminderTitle != null)
-                              TextButton(
-                                onPressed: () => setState(
-                                  () => _selectedReminderTitle = null,
-                                ),
-                                child: const Text('Azzera'),
-                              ),
-                          ],
+                        return OutlinedButton.icon(
+                          onPressed: items.isEmpty
+                              ? null
+                              : () => _pickReminderTitle(
+                                    _availableReminderTitles(items),
+                                  ),
+                          icon: const Icon(Icons.person_search),
+                          label: const Text('Seleziona nominativo'),
                         );
                       },
                     ),
