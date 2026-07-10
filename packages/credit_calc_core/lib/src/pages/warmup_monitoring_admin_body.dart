@@ -38,6 +38,7 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
 
   final Map<String, Map<String, dynamic>> _phasePayloads = {};
   final Map<String, Map<String, dynamic>> _itemPayloads = {};
+  final ScrollController _telefonataScroll = ScrollController();
   StreamSubscription<Map<String, WarmupTelefonataPhase>>? _phasesSub;
   StreamSubscription<Map<String, WarmupContestazioneTrainingItem>>? _itemsSub;
 
@@ -52,6 +53,7 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
   void dispose() {
     _phasesSub?.cancel();
     _itemsSub?.cancel();
+    _telefonataScroll.dispose();
     _tabs.dispose();
     super.dispose();
   }
@@ -222,9 +224,21 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
       },
     );
     setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_telefonataScroll.hasClients) return;
+      _telefonataScroll.animateTo(
+        _telefonataScroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Nuova fase aggiunta. Ricordati di salvare.')),
+    );
   }
 
-  void _addItem() {
+  void _addItem({required String context}) {
     final id = 'item_${DateTime.now().millisecondsSinceEpoch}';
     _formDirty = true;
     _itemPayloads[id] =
@@ -233,13 +247,23 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
       {
         'id': id,
         'title': 'Nuova contestazione',
-        'context': 'sollecito',
-        'order': _itemPayloads.length,
+        'context': context,
+        'order': _itemPayloads.values
+            .where((item) => (item['context'] ?? 'sollecito') == context)
+            .length,
         'enabled': true,
         'systemPrompt': WarmupContestazioniTrainingDefaults.defaultSystemPrompt,
       },
     );
     setState(() {});
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Nuova contestazione ($context) aggiunta. Ricordati di salvare.',
+        ),
+      ),
+    );
   }
 
   void _removePhase(String phaseKey) {
@@ -300,6 +324,7 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
                 onChanged: _updatePhase,
                 onAdd: _addPhase,
                 onRemove: _removePhase,
+                scrollController: _telefonataScroll,
               ),
               _ContestazioniTab(
                 itemIds: _sortedItemIds,
@@ -348,6 +373,7 @@ class _TelefonataTab extends StatelessWidget {
     required this.onChanged,
     required this.onAdd,
     required this.onRemove,
+    required this.scrollController,
   });
 
   final List<String> phaseKeys;
@@ -355,15 +381,18 @@ class _TelefonataTab extends StatelessWidget {
   final void Function(String, Map<String, dynamic>) onChanged;
   final VoidCallback onAdd;
   final void Function(String) onRemove;
+  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
+      controller: scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: [
         Align(
           alignment: Alignment.centerRight,
-          child: OutlinedButton.icon(
+          child: FilledButton.tonalIcon(
             onPressed: onAdd,
             icon: const Icon(Icons.add),
             label: const Text('Nuova fase'),
@@ -382,7 +411,7 @@ class _TelefonataTab extends StatelessWidget {
   }
 }
 
-class _ContestazioniTab extends StatelessWidget {
+class _ContestazioniTab extends StatefulWidget {
   const _ContestazioniTab({
     required this.itemIds,
     required this.payloadFor,
@@ -394,29 +423,66 @@ class _ContestazioniTab extends StatelessWidget {
   final List<String> itemIds;
   final Map<String, dynamic> Function(String) payloadFor;
   final void Function(String, Map<String, dynamic>) onChanged;
-  final VoidCallback onAdd;
+  final void Function({required String context}) onAdd;
   final void Function(String) onRemove;
 
   @override
+  State<_ContestazioniTab> createState() => _ContestazioniTabState();
+}
+
+class _ContestazioniTabState extends State<_ContestazioniTab> {
+  String _context = 'sollecito';
+
+  List<String> get _filteredIds {
+    return widget.itemIds.where((id) {
+      final context =
+          (widget.payloadFor(id)['context'] ?? 'sollecito').toString();
+      return context == _context;
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final filteredIds = _filteredIds;
+
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: [
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'sollecito', label: Text('Sollecito')),
+            ButtonSegment(value: 'recupero', label: Text('Recupero')),
+          ],
+          selected: {_context},
+          onSelectionChanged: (selection) {
+            setState(() => _context = selection.first);
+          },
+        ),
+        const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerRight,
-          child: OutlinedButton.icon(
-            onPressed: onAdd,
+          child: FilledButton.tonalIcon(
+            onPressed: () => widget.onAdd(context: _context),
             icon: const Icon(Icons.add),
             label: const Text('Nuova contestazione'),
           ),
         ),
         const SizedBox(height: 8),
-        for (final id in itemIds)
+        if (filteredIds.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              'Nessuna contestazione per $_context.',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+          ),
+        for (final id in filteredIds)
           _ContestationEditorCard(
             itemId: id,
-            payload: payloadFor(id),
-            onChanged: (patch) => onChanged(id, patch),
-            onRemove: () => onRemove(id),
+            payload: widget.payloadFor(id),
+            onChanged: (patch) => widget.onChanged(id, patch),
+            onRemove: () => widget.onRemove(id),
           ),
       ],
     );
