@@ -216,6 +216,12 @@ abstract final class DeviceTransferSyncAdvisor {
     }
 
     if (exchange != null) {
+      if (peer.localRecordCount == 0 && local.localRecordCount > 0) {
+        return DeviceTransferSyncHint.peerEmptyNeedsFull;
+      }
+      if (local.localRecordCount == 0 && peer.localRecordCount > 0) {
+        return DeviceTransferSyncHint.peerShouldSend;
+      }
       if (exchange.aligned) return DeviceTransferSyncHint.aligned;
       if (exchange.needsLocalSend && exchange.needsPeerSend) {
         return DeviceTransferSyncHint.bothHaveChanges;

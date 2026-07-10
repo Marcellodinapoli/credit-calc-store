@@ -265,7 +265,7 @@ class LocalDatabaseService {
     Map<String, int>? peerVersions,
   }) async {
     final changed = await recordsChangedSince(userId, sinceMs);
-    if (peerVersions == null || peerVersions.isEmpty) return changed;
+    if (peerVersions == null) return changed;
     final missingOnPeer = await recordsMissingOnPeer(userId, peerVersions);
     return mergeRecordLists(changed, missingOnPeer);
   }

@@ -203,8 +203,15 @@ abstract final class DeviceTransferService {
     final sinceMs = peer != null
         ? resolveSinceMs(local: local, peer: peer)
         : (local.neverSynced ? 0 : local.lastSyncAtMs);
-    final peerVersions =
-        peer != null && peer.hasReliableVersionIndex ? peer.recordVersions : null;
+    Map<String, int>? peerVersions;
+    if (peer != null) {
+      if (peer.hasReliableVersionIndex) {
+        peerVersions = peer.recordVersions;
+      } else if (peer.localRecordCount < local.localRecordCount) {
+        // Peer senza indice affidabile ma con meno record: confronta come archivio vuoto.
+        peerVersions = const {};
+      }
+    }
     return db.recordsPendingSync(
       userId,
       sinceMs: sinceMs,
