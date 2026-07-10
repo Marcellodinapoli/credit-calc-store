@@ -2,6 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'warmup_telefonata_defaults.dart';
 
+String _resolveWarmupPrompt(String raw, String fallback) {
+  final text = raw.trim();
+  return text.isEmpty ? fallback : text;
+}
+
 class WarmupTelefonataPhase {
   const WarmupTelefonataPhase({
     required this.phaseKey,
@@ -64,7 +69,7 @@ class WarmupTelefonataPhase {
       decodifica: readString('decodifica'),
       spiegazione: readString('spiegazione'),
       evaluationCriteria: readString('evaluationCriteria'),
-      systemPrompt: _resolvePrompt(
+      systemPrompt: _resolveWarmupPrompt(
         readString('systemPrompt'),
         WarmupTelefonataDefaults.defaultSystemPrompt,
       ),
@@ -99,11 +104,6 @@ class WarmupTelefonataPhase {
 /// Config warm-up telefonata (`settings/warmup_telefonata`).
 abstract final class WarmupTelefonataConfigService {
   static const docId = 'warmup_telefonata';
-
-  static String _resolvePrompt(String raw, String fallback) {
-    final text = raw.trim();
-    return text.isEmpty ? fallback : text;
-  }
 
   static Map<String, WarmupTelefonataPhase> resolvePhases(
     Map<String, dynamic>? rawPhases,

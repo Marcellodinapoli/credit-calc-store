@@ -2,6 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'warmup_contestazioni_training_defaults.dart';
 
+String _resolveWarmupPrompt(String raw, String fallback) {
+  final text = raw.trim();
+  return text.isEmpty ? fallback : text;
+}
+
 class WarmupContestazioneTrainingItem {
   const WarmupContestazioneTrainingItem({
     required this.id,
@@ -58,7 +63,7 @@ class WarmupContestazioneTrainingItem {
       risk: readString('risk'),
       objective: readString('objective'),
       response: readString('response'),
-      systemPrompt: _resolvePrompt(
+      systemPrompt: _resolveWarmupPrompt(
         readString('systemPrompt'),
         WarmupContestazioniTrainingDefaults.defaultSystemPrompt,
       ),
@@ -87,11 +92,6 @@ class WarmupContestazioneTrainingItem {
 /// Config contestazioni warm-up (`settings/warmup_contestazioni_training`).
 abstract final class WarmupContestazioniTrainingConfigService {
   static const docId = 'warmup_contestazioni_training';
-
-  static String _resolvePrompt(String raw, String fallback) {
-    final text = raw.trim();
-    return text.isEmpty ? fallback : text;
-  }
 
   static Map<String, WarmupContestazioneTrainingItem> resolveItems(
     Map<String, dynamic>? rawItems,
