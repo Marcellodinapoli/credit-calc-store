@@ -106,26 +106,36 @@ async function evaluateTranscript(params: {
   phaseExplanation: string;
   customerLine: string;
   kind?: "warmup" | "contestation";
+  systemPrompt?: string;
+  phaseInstruction?: string;
 }): Promise<{
   commento: string;
   versione_migliorata: string;
   usage: { promptTokens: number; completionTokens: number };
 }> {
-  const systemPrompt =
-    params.kind === "contestation"
-      ? "Sei un formatore esperto in recupero crediti e gestione contestazioni "
-        + "telefoniche in Italia. Valuta la risposta vocale dell'operatore rispetto "
-        + "al contesto e alla linea corretta. Rispondi SOLO in JSON con due campi: "
-        + "commento (feedback breve e costruttivo in italiano) e versione_migliorata "
-        + "(esempio di risposta vocale migliorata, 2-4 frasi)."
-      : "Sei un formatore esperto in recupero crediti e warm-up telefonico "
-        + "in Italia. Valuta la risposta vocale dell'operatore rispetto "
-        + "al contesto e alla linea corretta. Rispondi SOLO in JSON con due campi: "
-        + "commento (feedback breve e costruttivo in italiano) e versione_migliorata "
-        + "(esempio di risposta vocale migliorata, 2-4 frasi).";
+  const defaultWarmupSystemPrompt =
+    "Sei un formatore esperto in recupero crediti e warm-up telefonico "
+    + "in Italia. Valuta la risposta vocale dell'operatore rispetto "
+    + "al contesto e alla linea corretta. Rispondi SOLO in JSON con due campi: "
+    + "commento (feedback breve e costruttivo in italiano) e versione_migliorata "
+    + "(esempio di risposta vocale migliorata, 2-4 frasi).";
 
-  const phaseInstruction =
-    params.kind === "warmup" ? warmupPhaseInstruction(params.phase) : "";
+  const defaultContestationSystemPrompt =
+    "Sei un formatore esperto in recupero crediti e gestione contestazioni "
+    + "telefoniche in Italia. Valuta la risposta vocale dell'operatore rispetto "
+    + "al contesto e alla linea corretta. Rispondi SOLO in JSON con due campi: "
+    + "commento (feedback breve e costruttivo in italiano) e versione_migliorata "
+    + "(esempio di risposta vocale migliorata, 2-4 frasi).";
+
+  const clientSystemPrompt = (params.systemPrompt ?? "").trim();
+  const systemPrompt = clientSystemPrompt
+    || (params.kind === "contestation"
+      ? defaultContestationSystemPrompt
+      : defaultWarmupSystemPrompt);
+
+  const clientPhaseInstruction = (params.phaseInstruction ?? "").trim();
+  const phaseInstruction = clientPhaseInstruction
+    || (params.kind === "warmup" ? warmupPhaseInstruction(params.phase) : "");
 
   const userPrompt = [
     phaseInstruction,
@@ -188,6 +198,8 @@ export const warmupEvaluate = onCall(
     const customerLine = (request.data?.customerLine ?? "").toString().trim();
     const kindRaw = (request.data?.kind ?? "warmup").toString().trim().toLowerCase();
     const kind = kindRaw === "contestation" ? "contestation" : "warmup";
+    const systemPrompt = (request.data?.systemPrompt ?? "").toString().trim();
+    const phaseInstruction = (request.data?.phaseInstruction ?? "").toString().trim();
 
     if (!audioBase64) {
       throw new HttpsError("invalid-argument", "Audio mancante.");
@@ -211,6 +223,8 @@ export const warmupEvaluate = onCall(
       phaseExplanation,
       customerLine,
       kind,
+      systemPrompt,
+      phaseInstruction,
     });
 
     trackAiUsage({

@@ -11,6 +11,8 @@ abstract final class WarmupEvaluationService {
     required String customerLine,
     String mimeType = 'audio/m4a',
     String kind = 'warmup',
+    required String systemPrompt,
+    String phaseInstruction = '',
   }) async {
     final data = await CallableFunctionClient.call('warmupEvaluate', {
       'audioBase64': base64Encode(audioBytes),
@@ -20,6 +22,8 @@ abstract final class WarmupEvaluationService {
       'phaseExplanation': phaseExplanation,
       'customerLine': customerLine,
       'kind': kind,
+      'systemPrompt': systemPrompt,
+      'phaseInstruction': phaseInstruction,
     });
 
     if (data is! Map) {

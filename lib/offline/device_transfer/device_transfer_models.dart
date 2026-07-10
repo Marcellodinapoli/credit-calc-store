@@ -265,21 +265,23 @@ abstract final class DeviceTransferSyncAdvisor {
         'I dispositivi risultano allineati: nessun record mancante.',
       DeviceTransferSyncHint.youShouldSend =>
         'Questo dispositivo ha record che mancano sull\'altro. '
-            'Invia i tuoi aggiornamenti.',
+            'Tocca «Invia aggiornamenti», poi sull\'altro dispositivo '
+            '«Ricevi dati».',
       DeviceTransferSyncHint.peerShouldSend =>
-        'L\'altro dispositivo ha record che ti mancano. Attendi il suo invio, '
-            'poi tocca «Ricevi dati».',
+        'L\'altro dispositivo ha record che ti mancano. Attendi che invii, '
+            'poi tocca «Ricevi dati» qui.',
       DeviceTransferSyncHint.bothHaveChanges =>
         'Entrambi hanno record che mancano all\'altro. Invia da questo '
-            'dispositivo, ricevi, poi ripeti dall\'altro: uno alla volta.',
+            'dispositivo e ricevi sull\'altro, poi ripeti al contrario se serve.',
       DeviceTransferSyncHint.peerEmptyNeedsFull =>
-        'L\'altro dispositivo non ha ancora i tuoi dati: invia solo ciò che '
+        'L\'altro dispositivo non ha ancora i tuoi dati: invia tutto ciò che '
             'gli manca.',
       DeviceTransferSyncHint.waitingForPeer =>
-        'Apri Sincronizza sull\'altro dispositivo con lo stesso account.',
+        'Apri Sincronizza sull\'altro dispositivo con lo stesso account '
+            'per vedere il conteggio e procedere.',
       DeviceTransferSyncHint.localChangesAwaitingPeer =>
-        'Questo dispositivo ha modifiche da inviare. Tocca «Invia aggiornamenti»: '
-            'sull\'altro dispositivo comparirà «Ricevi dati».',
+        'Hai modifiche da inviare. Apri Sincronizza anche sull\'altro '
+            'dispositivo: comparirà il conteggio preciso e potrai inviare.',
     };
   }
 }

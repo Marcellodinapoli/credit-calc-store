@@ -94,17 +94,28 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
   int get _localChangeEstimate {
     final local = _localState;
     if (local == null) return 0;
-    if (local.pendingChangeCount > 0) return local.pendingChangeCount;
-    if (local.lastSyncAtMs > 0 && local.maxUpdatedAtMs > local.lastSyncAtMs) {
-      return 1;
-    }
-    return 0;
+    return local.pendingChangeCount;
   }
 
+  bool get _hasPackageInTransit =>
+      _isSender && _activeTransfer?.isPending == true;
+
+  int get _inTransitRecordCount =>
+      _hasPackageInTransit ? _activeTransfer!.recordCount : 0;
+
   String get _displaySendCount {
+    if (_hasPackageInTransit) {
+      final remaining = _effectiveSendCount - _inTransitRecordCount;
+      if (remaining > 0) return '$remaining (+$_inTransitRecordCount in transito)';
+      return '$_inTransitRecordCount in transito';
+    }
     if (_peer != null) return '$_effectiveSendCount';
-    final estimate = _localChangeEstimate;
-    return estimate > 0 ? '$estimate' : '—';
+    return '—';
+  }
+
+  String get _sendRowLabel {
+    if (_hasPackageInTransit) return 'In attesa di ricezione sull\'altro';
+    return 'Da inviare all\'altro';
   }
 
   @override
@@ -270,8 +281,9 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
             )}.';
       } else if (transfer?.isPending == true && isSender) {
         _statusMessage =
-            'Pacchetto inviato. Attendi che l\'altro dispositivo '
-            'tocchi «Ricevi dati».';
+            'Pacchetto di ${transfer!.recordCount} record inviato. '
+            'Sull\'altro dispositivo tocca «Ricevi dati».\n\n'
+            'Il contatore qui può restare alto finché l\'altro non riceve.';
       }
     });
 
@@ -325,9 +337,12 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
       if (!mounted) return;
       setState(() {
         _statusMessage =
-            'Aggiornamenti inviati. Sull\'altro dispositivo tocca «Ricevi dati» '
-            'entro ${DeviceTransferFormat.dateTime(result.expiresAt)}.\n\n'
-            'Poi ripeti dall\'altro dispositivo se ha ancora record da inviare.';
+            'Inviati ${result.recordCount} record. Sull\'altro dispositivo '
+            'tocca «Ricevi dati» entro '
+            '${DeviceTransferFormat.dateTime(result.expiresAt)}.\n\n'
+            'Il contatore qui resterà alto finché l\'altro non riceve: '
+            'è normale. Dopo la ricezione si aggiorna da solo.\n\n'
+            'Se l\'altro ha ancora record da inviare, ripeti da quel dispositivo.';
       });
       await _refresh();
     } catch (e) {
@@ -412,6 +427,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
     if (_busy || !_online || _activeTransfer != null || _isSender) {
       return false;
     }
+    if (_peer == null) return false;
     return _sendCountForAction > 0;
   }
 
@@ -446,17 +462,19 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Scambio manuale tra dispositivi: ogni app invia solo i record '
-                  'che mancano sull\'altro (uno alla volta). I dati si integrano '
+                  'Scambio manuale tra dispositivi: ogni app invia in un colpo '
+                  'solo i record che mancano sull\'altro. I dati si integrano '
                   'senza cancellare quelli già presenti.\n\n'
-                  'Per vedere se ci sono dati da inviare o ricevere, apri la '
-                  'pagina Sincronizza su entrambi i dispositivi con lo stesso account.',
+                  'Procedura: apri Sincronizza su entrambi i dispositivi con lo '
+                  'stesso account, poi invia da uno e ricevi sull\'altro. Se '
+                  'servono scambi in entrambe le direzioni, ripeti un turno '
+                  'alla volta.',
                   style: TextStyle(
                     color: Colors.grey.shade700,
                     height: 1.45,
                   ),
                 ),
-                if (_localState != null && _activeTransfer == null) ...[
+                if (_localState != null) ...[
                   const SizedBox(height: 16),
                   _InfoCard(
                     title: 'Questo dispositivo',
@@ -466,14 +484,16 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
                         value: '${_localState!.localRecordCount}',
                       ),
                       _InfoRow(
-                        label: 'Da inviare all\'altro',
+                        label: _sendRowLabel,
                         value: _displaySendCount,
                       ),
                       _InfoRow(
                         label: 'In arrivo dall\'altro',
                         value: _peer == null
                             ? '—'
-                            : '$_recordsPeerWouldSend',
+                            : (_canReceive && _activeTransfer != null
+                                ? '${_activeTransfer!.recordCount}'
+                                : '$_recordsPeerWouldSend'),
                       ),
                       if (_localState!.lastSyncAtMs > 0)
                         _InfoRow(
@@ -487,7 +507,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
                     ],
                   ),
                 ],
-                if (_peer != null && _activeTransfer == null) ...[
+                if (_peer != null) ...[
                   const SizedBox(height: 12),
                   _InfoCard(
                     title: 'Altro dispositivo',
@@ -503,7 +523,8 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
                     ],
                   ),
                 ],
-                if (_activeTransfer == null &&
+                if (!_hasPackageInTransit &&
+                    _activeTransfer == null &&
                     _syncHint !=
                         DeviceTransferSyncHint.waitingForPeer) ...[
                   const SizedBox(height: 12),
@@ -610,27 +631,28 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
                     ),
                   ),
                 if (_peer == null &&
-                    _sendCountForAction > 0 &&
                     _online &&
-                    _activeTransfer == null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'L\'altro dispositivo non è ancora visibile qui, ma puoi '
-                    'inviare lo stesso: sul PC comparirà «Ricevi dati».',
-                    style: TextStyle(
-                      color: Colors.grey.shade700,
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
+                    _activeTransfer == null &&
+                    (_localChangeEstimate > 0 ||
+                        (_localState?.localRecordCount ?? 0) > 0)) ...[
+                  const SizedBox(height: 12),
+                  _Banner(
+                    color: Colors.orange.shade800,
+                    text:
+                        'Apri Sincronizza anche sull\'altro dispositivo con lo '
+                        'stesso account: così vedi il conteggio preciso prima '
+                        'di inviare.',
                   ),
                 ],
-                if (_isSender && _activeTransfer?.isPending == true) ...[
+                if (_hasPackageInTransit) ...[
                   const SizedBox(height: 16),
                   _Banner(
                     color: const Color(0xFF0A66C2),
                     text:
-                        'Pacchetto inviato. Attendi che l\'altro dispositivo '
-                        'tocchi «Ricevi dati».',
+                        'Pacchetto di $_inTransitRecordCount record inviato. '
+                        'Sull\'altro dispositivo tocca «Ricevi dati».\n\n'
+                        'Il contatore qui può restare alto finché l\'altro non '
+                        'riceve: non serve reinviare.',
                   ),
                 ],
                 if (_isSender && _activeTransfer?.isPrepared == true) ...[

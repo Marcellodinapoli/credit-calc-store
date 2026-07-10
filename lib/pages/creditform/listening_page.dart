@@ -433,48 +433,11 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
   // ---------------------------------------------------------------------------
 // STATE
 // ---------------------------------------------------------------------------
-  List<ContestationItem> get _items => widget.isRecupero ? [] : const [
-    ContestationItem(
-      id: 'ritardo',
-      title: 'Un giorno di ritardo',
-      subtitle: 'Contestazione sulle morosità applicate subito',
-      category: ContestationCategory.amministrativa,
-    ),
-    ContestationItem(
-      id: 'agenzia',
-      title: 'Agenzia debiti',
-      subtitle: 'Coinvolgimento di terzi o richiesta rata singola',
-      category: ContestationCategory.legale,
-    ),
-    ContestationItem(
-      id: 'coobbligato',
-      title: 'Coobbligato',
-      subtitle: 'Richiesta di contattare l’intestatario',
-      category: ContestationCategory.amministrativa,
-    ),
-    ContestationItem(
-      id: 'prodotto',
-      title: 'Prodotto difettoso',
-      subtitle: 'Rifiuto pagamento per problema sul bene',
-      category: ContestationCategory.generica,
-    ),
-    ContestationItem(
-      id: 'pagamento',
-      title: 'Pagamento generico',
-      subtitle: 'Promessa non concreta di pagamento',
-      category: ContestationCategory.generica,
-    ),
-    ContestationItem(
-      id: 'economica',
-      title: 'Difficoltà economica',
-      subtitle: 'Situazione lavorativa o reddito insufficiente',
-      category: ContestationCategory.economica,
-    ),
-  ];
-
+  List<WarmupContestazioneTrainingItem> _builtinItems = [];
   final Map<String, bool> _completed = {};
   List<WarmupContestation> _userContestations = [];
   StreamSubscription<List<WarmupContestation>>? _userSub;
+  StreamSubscription<List<WarmupContestazioneTrainingItem>>? _builtinSub;
   String? _uid;
 
   WarmupContestationContext get _context => widget.isRecupero
@@ -489,13 +452,30 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
     super.initState();
     _uid = FirebaseAuth.instance.currentUser?.uid;
     _listenUserContestations();
+    _listenBuiltinItems();
     _initState();
   }
 
   @override
   void dispose() {
     _userSub?.cancel();
+    _builtinSub?.cancel();
     super.dispose();
+  }
+
+  void _listenBuiltinItems() {
+    _builtinSub?.cancel();
+    _builtinSub = WarmupContestazioniTrainingConfigService.watchEnabledItems(
+      context: widget.isRecupero ? 'recupero' : 'sollecito',
+    ).listen((items) {
+      if (!mounted) return;
+      setState(() {
+        _builtinItems = items;
+        for (final item in items) {
+          _completed.putIfAbsent(item.id, () => false);
+        }
+      });
+    });
   }
 
   void _listenUserContestations() {
@@ -506,7 +486,7 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
   }
 
   Future<void> _initState() async {
-    for (final c in _items) {
+    for (final c in _builtinItems) {
       _completed[c.id] = false;
     }
 
@@ -527,8 +507,8 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
   // HELPERS
   // ---------------------------------------------------------------------------
   bool get _allBuiltinCompleted {
-    if (_items.isEmpty) return true;
-    return _items.every((c) => _completed[c.id] == true);
+    if (_builtinItems.isEmpty) return true;
+    return _builtinItems.every((c) => _completed[c.id] == true);
   }
 
   List<WarmupContestation> get _mine {
@@ -550,47 +530,43 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
 
   bool _isEnabled(int index) {
     if (index == 0) return true;
-    return _completed[_items[index - 1].id] == true;
+    return _completed[_builtinItems[index - 1].id] == true;
   }
 
-  ContestationTrainingItem _mapTrainingItem(ContestationItem item) {
-    switch (item.id) {
-      case 'no_work':
-        return const ContestationTrainingItem(
-          title: 'Non sto lavorando',
-          declared: '«Non sto lavorando, quindi non posso pagare.»',
-          meaning:
-          'Il cliente sposta la trattativa sulla propria condizione personale.',
-          risk:
-          'Rinvio indefinito della chiamata senza verifica concreta.',
-          objective:
-          'Mantenere il controllo e riportare il dialogo su ciò che è possibile.',
-          response:
-          '«Capisco la situazione, vediamo insieme cosa è sostenibile oggi.»',
-        );
-      case 'lawyer':
-        return const ContestationTrainingItem(
-          title: 'Ho incaricato un avvocato',
-          declared: '«Ho già dato mandato al mio avvocato.»',
-          meaning:
-          'Tentativo di chiusura difensiva della conversazione.',
-          risk:
-          'Blocco totale del dialogo se accettato passivamente.',
-          objective:
-          'Verificare se il legale è realmente operativo sulla posizione.',
-          response:
-          '«Perfetto, verifichiamo insieme a che punto è la pratica.»',
-        );
+  ContestationCategory _categoryFromString(String value) {
+    switch (value) {
+      case 'amministrativa':
+        return ContestationCategory.amministrativa;
+      case 'legale':
+        return ContestationCategory.legale;
+      case 'economica':
+        return ContestationCategory.economica;
       default:
-        return ContestationTrainingItem(
-          title: item.title,
-          declared: item.title,
-          meaning: 'Analisi della contestazione.',
-          risk: 'Rischio comunicativo.',
-          objective: 'Gestione corretta della risposta.',
-          response: 'Risposta professionale e controllata.',
-        );
+        return ContestationCategory.generica;
     }
+  }
+
+  ContestationItem _toCardItem(WarmupContestazioneTrainingItem item) {
+    return ContestationItem(
+      id: item.id,
+      title: item.title,
+      subtitle: item.subtitle,
+      category: _categoryFromString(item.category),
+    );
+  }
+
+  ContestationTrainingItem _trainingItemFromBuiltin(
+    WarmupContestazioneTrainingItem item,
+  ) {
+    return ContestationTrainingItem(
+      title: item.title,
+      declared: item.declared,
+      meaning: item.meaning,
+      risk: item.risk,
+      objective: item.objective,
+      response: item.response,
+      systemPrompt: item.systemPrompt,
+    );
   }
 
   ContestationTrainingItem _trainingItemFromUser(WarmupContestation c) {
@@ -601,13 +577,14 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
       risk: c.risk,
       objective: c.objective,
       response: c.response,
+      systemPrompt: WarmupContestazioniTrainingDefaults.defaultSystemPrompt,
     );
   }
 
   // ---------------------------------------------------------------------------
   // ACTIONS
   // ---------------------------------------------------------------------------
-  Future<void> _open(ContestationItem item, int index) async {
+  Future<void> _open(WarmupContestazioneTrainingItem item, int index) async {
     if (!_isEnabled(index)) return;
     if (!mounted) return;
     if (!await PublicUsageCounterRecorder.recordWithUi(
@@ -622,7 +599,7 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
       context,
       MaterialPageRoute(
         builder: (_) => ContestationTrainingPage(
-          item: _mapTrainingItem(item),
+          item: _trainingItemFromBuiltin(item),
         ),
       ),
     );
@@ -743,12 +720,13 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
   Widget build(BuildContext context) {
     final children = <Widget>[];
 
-    for (var i = 0; i < _items.length; i++) {
-      final item = _items[i];
+    for (var i = 0; i < _builtinItems.length; i++) {
+      final item = _builtinItems[i];
+      final cardItem = _toCardItem(item);
       if (i > 0) children.add(const SizedBox(height: 16));
       children.add(
         _ContestationCard(
-          item: item,
+          item: cardItem,
           completed: _completed[item.id] ?? false,
           enabled: _isEnabled(i),
           onTap: () => _open(item, i),

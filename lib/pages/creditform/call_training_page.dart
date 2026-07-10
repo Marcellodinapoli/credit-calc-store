@@ -3,6 +3,7 @@
 // CONFIG / IMPORT
 // -----------------------------------------------------------------------------
 import 'package:flutter/material.dart';
+import 'package:credit_calc_core/credit_calc_core.dart';
 
 import '../../core/platform/native_audio_helper.dart';
 import '../../services/warmup_evaluation_service.dart';
@@ -36,6 +37,21 @@ class CallTrainingConfig {
     this.callingOnBehalfOf,
     this.responseGuidance,
   });
+}
+
+CallTrainingConfig callTrainingConfigFromPhase(WarmupTelefonataPhase phase) {
+  return CallTrainingConfig(
+    phaseKey: phase.phaseKey,
+    sectionTitle: phase.sectionTitle,
+    color: Color(phase.colorValue),
+    customerLine: phase.customerLine,
+    decodifica: phase.decodifica,
+    spiegazione: phase.spiegazione,
+    evaluationCriteria: phase.evaluationCriteria,
+    targetPersonName: phase.targetPersonName,
+    callingOnBehalfOf: phase.callingOnBehalfOf,
+    responseGuidance: phase.responseGuidance,
+  );
 }
 
 CallTrainingConfig callTrainingConfigFor(String phaseKey) {
@@ -180,7 +196,10 @@ class CallTrainingPage extends StatefulWidget {
 // STATE
 // -----------------------------------------------------------------------------
 class _CallTrainingPageState extends State<CallTrainingPage> {
-  late final CallTrainingConfig _config;
+  CallTrainingConfig? _config;
+  String _systemPrompt = WarmupTelefonataDefaults.defaultSystemPrompt;
+  String _phaseInstruction = '';
+  bool _loadingConfig = true;
 
   int _step = 0;
 
@@ -198,8 +217,19 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   @override
   void initState() {
     super.initState();
-    _config = callTrainingConfigFor(widget.phaseKey);
     _attemptCount = 0;
+    _loadConfig();
+  }
+
+  Future<void> _loadConfig() async {
+    final phase = await WarmupTelefonataConfigService.loadPhase(widget.phaseKey);
+    if (!mounted) return;
+    setState(() {
+      _config = callTrainingConfigFromPhase(phase);
+      _systemPrompt = phase.systemPrompt;
+      _phaseInstruction = phase.phaseInstruction;
+      _loadingConfig = false;
+    });
   }
 
   void _nextStep() {
@@ -231,7 +261,17 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
     return score >= _minScoreToPass;
   }
 
-  bool get _requiresAiBeforeFinish => _config.targetPersonName != null;
+  CallTrainingConfig get _cfg {
+    final config = _config;
+    if (config != null) return config;
+    return callTrainingConfigFromPhase(
+      WarmupTelefonataPhase.fromMap(
+        WarmupTelefonataDefaults.defaultPhase(widget.phaseKey),
+      ),
+    );
+  }
+
+  bool get _requiresAiBeforeFinish => _cfg.targetPersonName != null;
 
   bool get _canCompletePhase {
     if (!_hasRecorded) return false;
@@ -306,14 +346,17 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   }
 
   Future<Map<String, dynamic>> _sendToAI(List<int> bytes) async {
+    final config = _cfg;
     return WarmupEvaluationService.evaluate(
       audioBytes: bytes,
-      phase: _config.sectionTitle,
-      expectedText: _config.evaluationCriteria,
+      phase: config.sectionTitle,
+      expectedText: config.evaluationCriteria,
       phaseExplanation:
-          'Risposta del cliente: ${_config.customerLine}\n${_config.spiegazione}',
-      customerLine: _config.customerLine,
+          'Risposta del cliente: ${config.customerLine}\n${config.spiegazione}',
+      customerLine: config.customerLine,
       kind: 'warmup',
+      systemPrompt: _systemPrompt,
+      phaseInstruction: _phaseInstruction,
     );
   }
 
@@ -324,7 +367,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   String get _stepTitle {
     switch (_step) {
       case 0:
-        return '1️⃣ ${_config.sectionTitle} – Risposta del cliente';
+        return '1️⃣ ${_cfg.sectionTitle} – Risposta del cliente';
       case 1:
         return '2️⃣ Cosa sta accadendo davvero';
       case 2:
@@ -351,12 +394,12 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       decoration: BoxDecoration(
         color: isPlaceholder
             ? Colors.grey.shade100
-            : _config.color.withValues(alpha: 0.08),
+            : _cfg.color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isPlaceholder
               ? Colors.grey.shade300
-              : _config.color.withValues(alpha: 0.35),
+              : _cfg.color.withValues(alpha: 0.35),
         ),
       ),
       child: Text(
@@ -411,12 +454,12 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _config.color.withValues(alpha: 0.1),
+        color: _cfg.color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _config.color.withValues(alpha: 0.35)),
+        border: Border.all(color: _cfg.color.withValues(alpha: 0.35)),
       ),
       child: Text(
-        '«${_config.customerLine}»',
+        '«${_cfg.customerLine}»',
         style: TextStyle(
           fontSize: fontSize,
           fontStyle: FontStyle.italic,
@@ -437,7 +480,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
               margin: const EdgeInsets.symmetric(horizontal: 4),
               height: 6,
               decoration: BoxDecoration(
-                color: active ? _config.color : Colors.grey.shade300,
+                color: active ? _cfg.color : Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(6),
               ),
             ),
@@ -469,14 +512,14 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
 
     if (_step == 1) {
       return Text(
-        _config.decodifica,
+        _cfg.decodifica,
         style: const TextStyle(fontSize: 16, height: 1.45),
       );
     }
 
     if (_step == 2) {
       return Text(
-        _config.spiegazione,
+        _cfg.spiegazione,
         style: const TextStyle(fontSize: 16, height: 1.45),
       );
     }
@@ -496,28 +539,28 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
           style: TextStyle(fontSize: 14, color: Colors.black54, height: 1.4),
         ),
         const SizedBox(height: 16),
-        if (_config.targetPersonName != null) ...[
+        if (_cfg.targetPersonName != null) ...[
           Text(
-            _config.phaseKey.startsWith('Presentazione')
-                ? 'Debitore: ${_config.targetPersonName}'
-                : 'Persona da contattare: ${_config.targetPersonName}',
+            _cfg.phaseKey.startsWith('Presentazione')
+                ? 'Debitore: ${_cfg.targetPersonName}'
+                : 'Persona da contattare: ${_cfg.targetPersonName}',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: _config.color,
+              color: _cfg.color,
             ),
           ),
-          if (_config.responseGuidance != null) ...[
+          if (_cfg.responseGuidance != null) ...[
             const SizedBox(height: 8),
             Text(
-              _config.responseGuidance!,
+              _cfg.responseGuidance!,
               style: const TextStyle(fontSize: 14, height: 1.45),
             ),
-          ] else if (_config.callingOnBehalfOf != null) ...[
+          ] else if (_cfg.callingOnBehalfOf != null) ...[
             const SizedBox(height: 8),
             Text(
               'Presentati con il tuo nome e cognome, indicando che chiami '
-              'per conto di ${_config.callingOnBehalfOf}.',
+              'per conto di ${_cfg.callingOnBehalfOf}.',
               style: const TextStyle(fontSize: 14, height: 1.45),
             ),
           ],
@@ -525,7 +568,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         ],
         Row(
           children: [
-            Icon(Icons.record_voice_over, color: _config.color, size: 20),
+            Icon(Icons.record_voice_over, color: _cfg.color, size: 20),
             const SizedBox(width: 8),
             const Text(
               'Cliente / interlocutore',
@@ -535,11 +578,11 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         ),
         const SizedBox(height: 8),
         _customerLineBox(fontSize: 17),
-        if (_config.targetPersonName != null) ...[
+        if (_cfg.targetPersonName != null) ...[
           const SizedBox(height: 16),
           Row(
             children: [
-              Icon(Icons.mic, color: _config.color, size: 20),
+              Icon(Icons.mic, color: _cfg.color, size: 20),
               const SizedBox(width: 8),
               const Text(
                 'La tua risposta',
@@ -558,7 +601,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
                 iconSize: 64,
                 icon: Icon(
                   _isRecording ? Icons.stop_circle : Icons.mic,
-                  color: _isRecording ? Colors.red : _config.color,
+                  color: _isRecording ? Colors.red : _cfg.color,
                 ),
                 onPressed: _toggleRecording,
               ),
@@ -800,7 +843,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
             child: FilledButton(
               onPressed: enabled ? _onActionPressed : null,
               style: FilledButton.styleFrom(
-                backgroundColor: _config.color,
+                backgroundColor: _cfg.color,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(0, 52),
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -817,8 +860,15 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loadingConfig) {
+      return const PersonalFormShell(
+        pageTitle: 'Telefonata',
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return PersonalFormShell(
-      pageTitle: 'Telefonata – ${_config.sectionTitle}',
+      pageTitle: 'Telefonata – ${_cfg.sectionTitle}',
       bottomBar: _buildActionBar(),
       body: Column(
         children: [
@@ -843,7 +893,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
-                            color: _config.color,
+                            color: _cfg.color,
                           ),
                         ),
                         const SizedBox(height: 16),

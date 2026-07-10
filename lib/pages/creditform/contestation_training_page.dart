@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:credit_calc_core/credit_calc_core.dart';
 
 import '../../core/platform/native_audio_helper.dart';
 import '../../services/warmup_evaluation_service.dart';
@@ -18,6 +19,7 @@ class ContestationTrainingItem {
   final String risk;
   final String objective;
   final String response;
+  final String systemPrompt;
 
   const ContestationTrainingItem({
     required this.title,
@@ -26,6 +28,7 @@ class ContestationTrainingItem {
     required this.risk,
     required this.objective,
     required this.response,
+    required this.systemPrompt,
   });
 }
 
@@ -219,6 +222,7 @@ class _ContestationTrainingPageState
           'Obiettivo: ${widget.item.objective}',
       customerLine: widget.item.declared,
       kind: 'contestation',
+      systemPrompt: widget.item.systemPrompt,
     );
   }
 

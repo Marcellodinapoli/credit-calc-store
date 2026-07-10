@@ -7,6 +7,7 @@ import '../core/maintenance_service.dart';
 import '../core/admin/bk_admin_service.dart';
 import '../pages/area/personal_area_menu.dart';
 import '../pages/bk/bk_coupons_page.dart';
+import '../pages/bk/bk_warmup_monitoring_page.dart';
 import '../pages/bk/bk_warmup_contestations_page.dart';
 import '../pages/bk/bk_call_analysis_page.dart';
 import '../pages/bk/bk_ecosystem_sections_page.dart';
@@ -552,8 +553,20 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                     }),
                   ),
                   _item(
+                    icon: Icons.school_outlined,
+                    title: 'Warm-up telefonata e contestazioni',
+                    iconColor: _areaColor,
+                    onTap: () => _closeAnd(() {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const BkWarmupMonitoringPage(),
+                        ),
+                      );
+                    }),
+                  ),
+                  _item(
                     icon: Icons.record_voice_over_outlined,
-                    title: 'Contestazioni warm-up',
+                    title: 'Moderazione contestazioni utenti',
                     iconColor: _areaColor,
                     onTap: () => _closeAnd(() {
                       Navigator.of(context).push(
