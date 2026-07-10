@@ -21,23 +21,31 @@ class PublicPlanLimitsAdminBody extends StatefulWidget {
 }
 
 class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   bool _checkingAdmin = true;
   bool _isAdmin = false;
   bool _saving = false;
   String? _formError;
   String? _loadWarning;
-  late final TabController _tabs;
-  StreamSubscription<Map<String, dynamic>?>? _plansSubscription;
-  bool _formDirty = false;
+  late TabController _tabs;
+  StreamSubscription<
+      ({Map<String, dynamic>? users, Map<String, dynamic>? companies})>? _plansSubscription;
+  bool _userFormDirty = false;
+  bool _companyFormDirty = false;
+  PublicPlanLimitsAudience _audience = PublicPlanLimitsAudience.users;
 
-  final Map<String, Map<String, dynamic>> _planPayloads = {};
+  final Map<String, Map<String, dynamic>> _userPlanPayloads = {};
+  final Map<String, Map<String, dynamic>> _companyPlanPayloads = {};
+
+  List<String> get _currentPlanIds => _audience == PublicPlanLimitsAudience.users
+      ? PublicPlanLimitsAdminService.planIds
+      : PublicPlanLimitsAdminService.companyPlanIds;
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(
-      length: PublicPlanLimitsAdminService.planIds.length,
+      length: _currentPlanIds.length,
       vsync: this,
     );
     _loadAdmin();
@@ -50,6 +58,19 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
     super.dispose();
   }
 
+  void _switchAudience(PublicPlanLimitsAudience audience) {
+    if (_audience == audience) return;
+    final previousIndex = _tabs.index;
+    _tabs.dispose();
+    _audience = audience;
+    _tabs = TabController(
+      length: _currentPlanIds.length,
+      vsync: this,
+      initialIndex: previousIndex.clamp(0, _currentPlanIds.length - 1),
+    );
+    setState(() {});
+  }
+
   Future<void> _loadAdmin() async {
     final ok = await widget.verifyAdmin(forceRefresh: true);
     if (!mounted) return;
@@ -58,13 +79,13 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
       await _refreshFromFirestore();
       _plansSubscription?.cancel();
       _plansSubscription =
-          PublicPlanLimitsConfigService.watchPlansConfig().listen(
-        (plans) {
-          // Non sovrascrivere modifiche locali mentre l'admin sta editando.
-          if (!mounted || _formDirty) return;
+          PublicPlanLimitsConfigService.watchAdminPlansBundle().listen(
+        (bundle) {
+          if (!mounted || _userFormDirty || _companyFormDirty) return;
           setState(() {
             _loadWarning = null;
-            _applyPlansConfig(plans);
+            _applyPlansConfig(bundle.users);
+            _applyCompanyPlansConfig(bundle.companies);
           });
         },
         onError: (_) {
@@ -86,12 +107,14 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
 
   Future<void> _refreshFromFirestore() async {
     try {
-      final plans = await PublicPlanLimitsConfigService.fetchPlansConfig();
+      final bundle = await PublicPlanLimitsConfigService.fetchAdminPlansBundle();
       if (!mounted) return;
       setState(() {
         _loadWarning = null;
-        _formDirty = false;
-        _applyPlansConfig(plans);
+        _userFormDirty = false;
+        _companyFormDirty = false;
+        _applyPlansConfig(bundle.users);
+        _applyCompanyPlansConfig(bundle.companies);
       });
     } catch (_) {
       if (!mounted) return;
@@ -107,15 +130,32 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
     PublicPlanLimitsAdminService.applyPlansConfig(
       plans: plans,
       onPlan: (planId, payload) {
-        _planPayloads[planId] = {...payload, 'planId': planId};
+        _userPlanPayloads[planId] = {...payload, 'planId': planId};
+      },
+    );
+  }
+
+  void _applyCompanyPlansConfig(Map<String, dynamic>? plans) {
+    PublicPlanLimitsAdminService.applyCompanyPlansConfig(
+      plans: plans,
+      onPlan: (planId, payload) {
+        _companyPlanPayloads[planId] = {...payload, 'planId': planId};
       },
     );
   }
 
   Map<String, dynamic> _payloadFor(String planId) {
-    return _planPayloads.putIfAbsent(
+    final payloads = _audience == PublicPlanLimitsAudience.users
+        ? _userPlanPayloads
+        : _companyPlanPayloads;
+    return payloads.putIfAbsent(
       planId,
-      () => PublicPlanLimitsAdminService.buildPlanFormPayload(planId, null)
+      () => (_audience == PublicPlanLimitsAudience.users
+              ? PublicPlanLimitsAdminService.buildPlanFormPayload(planId, null)
+              : PublicPlanLimitsAdminService.buildCompanyPlanFormPayload(
+                  planId,
+                  null,
+                ))
         ..['planId'] = planId,
     );
   }
@@ -125,13 +165,23 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
     Map<String, dynamic> patch, {
     bool forceRebuild = false,
   }) {
-    _formDirty = true;
-    _planPayloads[planId] = {
+    if (_audience == PublicPlanLimitsAudience.users) {
+      _userFormDirty = true;
+    } else {
+      _companyFormDirty = true;
+    }
+    final payloads = _audience == PublicPlanLimitsAudience.users
+        ? _userPlanPayloads
+        : _companyPlanPayloads;
+    payloads[planId] = {
       ..._payloadFor(planId),
       ...patch,
       'planId': planId,
     };
-    if (forceRebuild || _patchNeedsRebuild(patch) || _patchAffectsPreview(patch)) {
+    if (_audience == PublicPlanLimitsAudience.companies ||
+        forceRebuild ||
+        _patchNeedsRebuild(patch) ||
+        _patchAffectsPreview(patch)) {
       setState(() {});
     }
   }
@@ -152,11 +202,33 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
   }
 
   void _generateDescriptionForPlan(String planId) {
-    final generated = PublicPlanLimitsAdminService.generateTextsForPlan(
-      planId,
-      _payloadFor(planId),
-    );
+    final generated = _audience == PublicPlanLimitsAudience.users
+        ? PublicPlanLimitsAdminService.generateTextsForPlan(
+            planId,
+            _payloadFor(planId),
+          )
+        : PublicPlanLimitsAdminService.generateTextsForCompanyPlan(
+            planId,
+            _payloadFor(planId),
+          );
     _updatePayload(planId, generated, forceRebuild: true);
+  }
+
+  Map<String, dynamic> _userPayloadForSave(String planId) {
+    return _userPlanPayloads.putIfAbsent(
+      planId,
+      () => PublicPlanLimitsAdminService.buildPlanFormPayload(planId, null)
+        ..['planId'] = planId,
+    );
+  }
+
+  Map<String, dynamic> _companyPayloadForSave(String planId) {
+    return _companyPlanPayloads.putIfAbsent(
+      planId,
+      () =>
+          PublicPlanLimitsAdminService.buildCompanyPlanFormPayload(planId, null)
+            ..['planId'] = planId,
+    );
   }
 
   Future<void> _save() async {
@@ -170,17 +242,26 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
         for (final planId in PublicPlanLimitsAdminService.planIds)
           planId: PublicPlanLimitsAdminService.buildFirestorePlanPayload(
             planId,
-            _payloadFor(planId),
+            _userPayloadForSave(planId),
+          ),
+      };
+      final companyPlans = <String, Map<String, dynamic>>{
+        for (final planId in PublicPlanLimitsAdminService.companyPlanIds)
+          planId: PublicPlanLimitsAdminService.buildCompanyFirestorePlanPayload(
+            planId,
+            _companyPayloadForSave(planId),
           ),
       };
       await PublicPlanLimitsAdminService.savePlans(
         plans,
+        companyPlans: companyPlans,
         verifyAdmin: widget.verifyAdmin,
       );
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _formDirty = false;
+        _userFormDirty = false;
+        _companyFormDirty = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Piani salvati.')),
@@ -195,13 +276,17 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
   }
 
   Future<void> _restoreDefaults() async {
+    final isUsers = _audience == PublicPlanLimitsAudience.users;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Ripristina default'),
-        content: const Text(
-          'Ripristinare i valori predefiniti per tutti i piani? '
-          'Le modifiche salvate su Firestore verranno sovrascritte.',
+        content: Text(
+          isUsers
+              ? 'Ripristinare i valori predefiniti per tutti i piani utente? '
+                  'Le modifiche salvate su Firestore verranno sovrascritte.'
+              : 'Ripristinare i valori predefiniti per tutti i piani azienda? '
+                  'Le modifiche salvate su Firestore verranno sovrascritte.',
         ),
         actions: [
           TextButton(
@@ -216,15 +301,21 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
       ),
     );
     if (confirmed != true) return;
-    _applyPlansConfig(null);
-    setState(() {
-      _formDirty = true;
-    });
+    if (isUsers) {
+      _applyPlansConfig(null);
+      setState(() => _userFormDirty = true);
+    } else {
+      _applyCompanyPlansConfig(null);
+      setState(() => _companyFormDirty = true);
+    }
   }
 
   String _planLabel(String planId) => switch (planId) {
         'plus' => 'Plus',
         'enterprise' => 'Enterprise',
+        'starter' => 'Starter',
+        'business' => 'Business',
+        'professional' => 'Professional',
         _ => 'Gratis',
       };
 
@@ -250,6 +341,7 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
   }
 
   Widget _buildEditor(BuildContext context) {
+    final isUsers = _audience == PublicPlanLimitsAudience.users;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -258,10 +350,32 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              SegmentedButton<PublicPlanLimitsAudience>(
+                segments: const [
+                  ButtonSegment(
+                    value: PublicPlanLimitsAudience.users,
+                    label: Text('Utenti'),
+                    icon: Icon(Icons.person_outline),
+                  ),
+                  ButtonSegment(
+                    value: PublicPlanLimitsAudience.companies,
+                    label: Text('Aziende'),
+                    icon: Icon(Icons.business_outlined),
+                  ),
+                ],
+                selected: {_audience},
+                onSelectionChanged: (selection) =>
+                    _switchAudience(selection.first),
+              ),
+              const SizedBox(height: 12),
               Text(
-                'Configura ogni piano separatamente: testi mostrati in '
-                '«Il mio piano», prezzi e limiti operativi applicati '
-                'in CreditCalc, CreditForm e CreditJob.',
+                isUsers
+                    ? 'Configura ogni piano utente: testi mostrati in '
+                        '«Il mio piano», prezzi e limiti operativi applicati '
+                        'in CreditCalc, CreditForm e CreditJob.'
+                    : 'Configura ogni piano aziendale: testi mostrati in '
+                        '«Il mio piano», prezzi, elenco benefici e limite '
+                        'collaboratori work attivi.',
                 style: TextStyle(
                   color: Colors.grey.shade700,
                   height: 1.45,
@@ -286,24 +400,34 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
         ),
         TabBar(
           controller: _tabs,
+          isScrollable: !isUsers,
           tabs: [
-            for (final id in PublicPlanLimitsAdminService.planIds)
-              Tab(text: _planLabel(id)),
+            for (final id in _currentPlanIds) Tab(text: _planLabel(id)),
           ],
         ),
         Expanded(
           child: TabBarView(
             controller: _tabs,
             children: [
-                  for (final planId in PublicPlanLimitsAdminService.planIds)
-                    _PublicPlanLimitsPlanForm(
-                      key: ValueKey('plan-form-$planId'),
-                      planId: planId,
-                  payload: _payloadFor(planId),
-                  onChanged: (patch) => _updatePayload(planId, patch),
-                  onGenerateDescription: () =>
-                      _generateDescriptionForPlan(planId),
-                ),
+              for (final planId in _currentPlanIds)
+                if (isUsers)
+                  _PublicPlanLimitsPlanForm(
+                    key: ValueKey('user-plan-form-$planId'),
+                    planId: planId,
+                    payload: _payloadFor(planId),
+                    onChanged: (patch) => _updatePayload(planId, patch),
+                    onGenerateDescription: () =>
+                        _generateDescriptionForPlan(planId),
+                  )
+                else
+                  _CompanyPlanLimitsPlanForm(
+                    key: ValueKey('company-plan-form-$planId'),
+                    planId: planId,
+                    payload: _payloadFor(planId),
+                    onChanged: (patch) => _updatePayload(planId, patch),
+                    onGenerateDescription: () =>
+                        _generateDescriptionForPlan(planId),
+                  ),
             ],
           ),
         ),
@@ -683,6 +807,203 @@ class _PublicPlanLimitsPlanFormState extends State<_PublicPlanLimitsPlanForm> {
             value: advancedAnalytics,
             onChanged: (value) => _patchWithRefreshedList(
               {'advancedCommissionAnalytics': value},
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CompanyPlanLimitsPlanForm extends StatefulWidget {
+  const _CompanyPlanLimitsPlanForm({
+    super.key,
+    required this.planId,
+    required this.payload,
+    required this.onChanged,
+    required this.onGenerateDescription,
+  });
+
+  final String planId;
+  final Map<String, dynamic> payload;
+  final ValueChanged<Map<String, dynamic>> onChanged;
+  final VoidCallback onGenerateDescription;
+
+  @override
+  State<_CompanyPlanLimitsPlanForm> createState() =>
+      _CompanyPlanLimitsPlanFormState();
+}
+
+class _CompanyPlanLimitsPlanFormState extends State<_CompanyPlanLimitsPlanForm> {
+  late final TextEditingController _tierLabel;
+  late final TextEditingController _name;
+  late final TextEditingController _price;
+  late final TextEditingController _description;
+  late final TextEditingController _limitLines;
+  late final TextEditingController _collaboratorLimit;
+
+  @override
+  void initState() {
+    super.initState();
+    _tierLabel = TextEditingController();
+    _name = TextEditingController();
+    _price = TextEditingController();
+    _description = TextEditingController();
+    _limitLines = TextEditingController();
+    _collaboratorLimit = TextEditingController();
+    _syncFromPayload();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CompanyPlanLimitsPlanForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.planId != widget.planId ||
+        oldWidget.payload != widget.payload) {
+      _syncFromPayload();
+    }
+  }
+
+  void _setControllerText(TextEditingController controller, String value) {
+    if (controller.text == value) return;
+    final offset = controller.selection.isValid
+        ? controller.selection.baseOffset
+        : value.length;
+    controller.value = controller.value.copyWith(
+      text: value,
+      selection: TextSelection.collapsed(
+        offset: offset.clamp(0, value.length),
+      ),
+      composing: TextRange.empty,
+    );
+  }
+
+  void _syncFromPayload() {
+    final payload = widget.payload;
+    _setControllerText(_tierLabel, payload['tierLabel'] as String? ?? '');
+    _setControllerText(_name, payload['name'] as String? ?? '');
+    _setControllerText(_price, payload['price'] as String? ?? '');
+    _setControllerText(_description, payload['description'] as String? ?? '');
+    _setControllerText(_limitLines, payload['limitLinesText'] as String? ?? '');
+    _setControllerText(
+      _collaboratorLimit,
+      payload['collaboratorLimit'] as String? ?? '',
+    );
+  }
+
+  void _emit() {
+    widget.onChanged({
+      'tierLabel': _tierLabel.text,
+      'name': _name.text,
+      'price': _price.text,
+      'description': _description.text,
+      'limitLinesText': _limitLines.text,
+      'collaboratorLimit': _collaboratorLimit.text,
+    });
+  }
+
+  @override
+  void dispose() {
+    _tierLabel.dispose();
+    _name.dispose();
+    _price.dispose();
+    _description.dispose();
+    _limitLines.dispose();
+    _collaboratorLimit.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final availableNow = widget.payload['availableNow'] == true;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _tierLabel,
+                  onChanged: (_) => _emit(),
+                  decoration: const InputDecoration(
+                    labelText: 'Etichetta card (es. STARTER)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _name,
+                  onChanged: (_) => _emit(),
+                  decoration: const InputDecoration(
+                    labelText: 'Nome piano',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _price,
+                  onChanged: (_) => _emit(),
+                  decoration: const InputDecoration(
+                    labelText: 'Prezzo mostrato',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _description,
+                  onChanged: (_) => _emit(),
+                  minLines: 3,
+                  maxLines: 8,
+                  decoration: const InputDecoration(
+                    labelText: 'Intro descrizione (primo paragrafo in card)',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _limitLines,
+                  onChanged: (_) => _emit(),
+                  minLines: 3,
+                  maxLines: 10,
+                  decoration: const InputDecoration(
+                    labelText: 'Elenco benefici (una riga per punto)',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _collaboratorLimit,
+                  onChanged: (_) => _emit(),
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Collaboratori work attivi',
+                    helperText:
+                        'Limite applicato all\'azienda e ai codici work collegati.',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.onGenerateDescription,
+                    icon: const Icon(Icons.auto_fix_high_outlined, size: 18),
+                    label: const Text('Genera intro ed elenco dal limite'),
+                  ),
+                ),
+                if (widget.planId != 'free')
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Disponibile per acquisto'),
+                    value: availableNow,
+                    onChanged: (value) =>
+                        widget.onChanged({'availableNow': value}),
+                  ),
+              ],
             ),
           ),
         ),

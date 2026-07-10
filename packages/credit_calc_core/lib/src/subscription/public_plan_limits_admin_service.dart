@@ -9,9 +9,12 @@ typedef PublicPlanLimitsAdminVerifier = Future<bool> Function({
   bool forceRefresh,
 });
 
+enum PublicPlanLimitsAudience { users, companies }
+
 /// Salvataggio e serializzazione form piani (BackOffice app + web).
 abstract final class PublicPlanLimitsAdminService {
   static const planIds = PublicPlanLimitsConfigService.publicPlanIds;
+  static const companyPlanIds = PublicPlanLimitsConfigService.companyPlanIds;
 
   static void applyPlansConfig({
     required Map<String, dynamic>? plans,
@@ -20,6 +23,109 @@ abstract final class PublicPlanLimitsAdminService {
     for (final planId in planIds) {
       onPlan(planId, buildPlanFormPayload(planId, plans?[planId]));
     }
+  }
+
+  static void applyCompanyPlansConfig({
+    required Map<String, dynamic>? plans,
+    required void Function(String planId, Map<String, dynamic> payload) onPlan,
+  }) {
+    for (final planId in companyPlanIds) {
+      onPlan(planId, buildCompanyPlanFormPayload(planId, plans?[planId]));
+    }
+  }
+
+  static String _normalizeCompanyPlanId(String planId) =>
+      normalizeCompanyPlanId(planId);
+
+  static Map<String, dynamic> buildCompanyPlanFormPayload(
+    String planId,
+    dynamic raw,
+  ) {
+    final normalized = _normalizeCompanyPlanId(planId);
+    final display = companySubscriptionPlanForId(normalized);
+    final defaultLimit = companyCollaboratorLimitForPlan(normalized);
+    final rawMap = raw is Map<String, dynamic>
+        ? raw
+        : raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : null;
+
+    final rawLines = rawMap?['limitLines'];
+    final storedLines = rawLines is List
+        ? rawLines
+            .map((e) => e.toString().trim())
+            .where((line) => line.isNotEmpty)
+            .toList()
+        : <String>[];
+
+    final storedLimit = rawMap?['collaboratorLimit'];
+    final collaboratorLimit = storedLimit is int
+        ? storedLimit
+        : storedLimit is num
+            ? storedLimit.toInt()
+            : defaultLimit;
+
+    return {
+      'tierLabel': (rawMap?['tierLabel'] ??
+              display?.name ??
+              subscriptionPlanLabel(normalized))
+          .toString(),
+      'name': (rawMap?['name'] ?? display?.name ?? subscriptionPlanLabel(normalized))
+          .toString(),
+      'price': (rawMap?['price'] ?? display?.price ?? 'Gratuito').toString(),
+      'description':
+          (rawMap?['description'] ?? display?.description ?? '').toString(),
+      'limitLinesText': storedLines.isNotEmpty
+          ? storedLines.join('\n')
+          : 'Fino a $collaboratorLimit collaboratori',
+      'availableNow': rawMap?['availableNow'] is bool
+          ? rawMap!['availableNow'] as bool
+          : display?.availableNow ?? normalized == 'free',
+      'collaboratorLimit': '$collaboratorLimit',
+    };
+  }
+
+  static Map<String, dynamic> buildCompanyFirestorePlanPayload(
+    String planId,
+    Map<String, dynamic> payload,
+  ) {
+    final normalized = _normalizeCompanyPlanId(planId);
+    final defaultLimit = companyCollaboratorLimitForPlan(normalized);
+    final rawLimit = (payload['collaboratorLimit'] as String? ?? '').trim();
+    final collaboratorLimit =
+        int.tryParse(rawLimit) ?? defaultLimit;
+
+    return {
+      'tierLabel': (payload['tierLabel'] as String? ?? '').trim(),
+      'name': (payload['name'] as String? ?? '').trim(),
+      'price': (payload['price'] as String? ?? '').trim(),
+      'description': (payload['description'] as String? ?? '').trim(),
+      'limitLines': parseLimitLinesText(payload['limitLinesText'] as String?),
+      'availableNow': payload['availableNow'] == true,
+      'collaboratorLimit': collaboratorLimit,
+    };
+  }
+
+  static Map<String, String> generateTextsForCompanyPlan(
+    String planId,
+    Map<String, dynamic> payload,
+  ) {
+    final normalized = _normalizeCompanyPlanId(planId);
+    final display = companySubscriptionPlanForId(normalized);
+    final rawLimit = (payload['collaboratorLimit'] as String? ?? '').trim();
+    final collaboratorLimit =
+        int.tryParse(rawLimit) ?? companyCollaboratorLimitForPlan(normalized);
+    final intro = (display?.description ?? '')
+        .split('\n\n')
+        .first
+        .split('\n')
+        .first
+        .trim();
+
+    return {
+      if (intro.isNotEmpty) 'description': intro,
+      'limitLinesText': 'Fino a $collaboratorLimit collaboratori',
+    };
   }
 
   static Map<String, dynamic> buildPlanFormPayload(
@@ -142,6 +248,7 @@ abstract final class PublicPlanLimitsAdminService {
 
   static Future<void> savePlans(
     Map<String, Map<String, dynamic>> plans, {
+    Map<String, Map<String, dynamic>>? companyPlans,
     required PublicPlanLimitsAdminVerifier verifyAdmin,
   }) async {
     if (!await verifyAdmin(forceRefresh: true)) {
@@ -154,6 +261,7 @@ abstract final class PublicPlanLimitsAdminService {
         .doc(PublicPlanLimitsConfigService.docId)
         .set({
       'plans': plans,
+      if (companyPlans != null) 'companyPlans': companyPlans,
       'updatedAt': FieldValue.serverTimestamp(),
       if (uid != null) 'updatedBy': uid,
     }, SetOptions(merge: true));

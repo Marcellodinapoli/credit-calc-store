@@ -9,12 +9,25 @@ import 'subscription_plan_options.dart';
 abstract final class PublicPlanLimitsConfigService {
   static const docId = 'plan_limits';
 
+  static const publicPlanIds = ['free', 'plus', 'enterprise'];
+  static const companyPlanIds = [
+    'free',
+    'starter',
+    'business',
+    'professional',
+    'enterprise',
+  ];
+
   static Map<String, dynamic>? _plansConfig;
+  static Map<String, dynamic>? _companyPlansConfig;
   static StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _subscription;
   static final StreamController<void> _configChanges =
       StreamController<void>.broadcast();
   static final StreamController<Map<String, dynamic>?> _plansController =
       StreamController<Map<String, dynamic>?>.broadcast();
+  static final StreamController<({Map<String, dynamic>? users, Map<String, dynamic>? companies})>
+      _adminPlansBundleController =
+      StreamController<({Map<String, dynamic>? users, Map<String, dynamic>? companies})>.broadcast();
 
   static const _serverGet = GetOptions(source: Source.server);
 
@@ -29,7 +42,7 @@ abstract final class PublicPlanLimitsConfigService {
     _subscription = _doc.snapshots(includeMetadataChanges: true).listen(
       (snapshot) {
         if (!_isAuthoritativeSnapshot(snapshot)) return;
-        _publishPlans(_readPlans(snapshot.data()));
+        _applyDocument(snapshot.data());
       },
       onError: (_, __) {},
     );
@@ -42,9 +55,15 @@ abstract final class PublicPlanLimitsConfigService {
         !snapshot.metadata.isFromCache;
   }
 
-  static void _publishPlans(Map<String, dynamic>? plans) {
+  static void _applyDocument(Map<String, dynamic>? data) {
+    final plans = _readPlans(data);
+    final companyPlans = _readCompanyPlans(data);
     _plansConfig = plans;
+    _companyPlansConfig = companyPlans;
     if (!_plansController.isClosed) _plansController.add(plans);
+    if (!_adminPlansBundleController.isClosed) {
+      _adminPlansBundleController.add((users: plans, companies: companyPlans));
+    }
     if (!_configChanges.isClosed) _configChanges.add(null);
   }
 
@@ -52,6 +71,7 @@ abstract final class PublicPlanLimitsConfigService {
     _subscription?.cancel();
     _subscription = null;
     _plansConfig = null;
+    _companyPlansConfig = null;
   }
 
   /// Stream tempo reale dei piani (include pending write dopo salvataggio).
@@ -76,12 +96,44 @@ abstract final class PublicPlanLimitsConfigService {
     start();
     try {
       final snapshot = await _doc.get(_serverGet).timeout(timeout);
-      _publishPlans(_readPlans(snapshot.data()));
+      _applyDocument(snapshot.data());
     } catch (_) {}
+  }
+
+  /// Stream BackOffice: piani utenti e aziende da `settings/plan_limits`.
+  static Stream<({Map<String, dynamic>? users, Map<String, dynamic>? companies})>
+      watchAdminPlansBundle() {
+    start();
+    return Stream.multi((controller) {
+      controller.add((users: _plansConfig, companies: _companyPlansConfig));
+      final sub = _adminPlansBundleController.stream.listen(
+        controller.add,
+        onError: controller.addError,
+      );
+      controller.onCancel = sub.cancel;
+    });
+  }
+
+  static Future<({Map<String, dynamic>? users, Map<String, dynamic>? companies})>
+      fetchAdminPlansBundle() async {
+    try {
+      final snapshot = await _doc.get(_serverGet);
+      final data = snapshot.data();
+      return (users: _readPlans(data), companies: _readCompanyPlans(data));
+    } catch (_) {
+      return (users: null, companies: null);
+    }
   }
 
   static Map<String, dynamic>? _readPlans(Map<String, dynamic>? data) {
     final plans = data?['plans'];
+    if (plans is Map<String, dynamic>) return plans;
+    if (plans is Map) return Map<String, dynamic>.from(plans);
+    return null;
+  }
+
+  static Map<String, dynamic>? _readCompanyPlans(Map<String, dynamic>? data) {
+    final plans = data?['companyPlans'];
     if (plans is Map<String, dynamic>) return plans;
     if (plans is Map) return Map<String, dynamic>.from(plans);
     return null;
@@ -166,8 +218,6 @@ abstract final class PublicPlanLimitsConfigService {
       return null;
     }
   }
-
-  static const publicPlanIds = ['free', 'plus', 'enterprise'];
 
   static List<SubscriptionPlanOption> subscriptionPlansForPublic() {
     return [
