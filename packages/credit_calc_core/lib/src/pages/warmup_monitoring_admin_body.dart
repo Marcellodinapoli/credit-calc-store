@@ -238,7 +238,7 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
     );
   }
 
-  void _addItem({required String context}) {
+  void _addItem({required String contestationContext}) {
     final id = 'item_${DateTime.now().millisecondsSinceEpoch}';
     _formDirty = true;
     _itemPayloads[id] =
@@ -247,9 +247,9 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
       {
         'id': id,
         'title': 'Nuova contestazione',
-        'context': context,
+        'context': contestationContext,
         'order': _itemPayloads.values
-            .where((item) => (item['context'] ?? 'sollecito') == context)
+            .where((item) => (item['context'] ?? 'sollecito') == contestationContext)
             .length,
         'enabled': true,
         'systemPrompt': WarmupContestazioniTrainingDefaults.defaultSystemPrompt,
@@ -260,7 +260,7 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Nuova contestazione ($context) aggiunta. Ricordati di salvare.',
+          'Nuova contestazione ($contestationContext) aggiunta. Ricordati di salvare.',
         ),
       ),
     );
@@ -423,7 +423,7 @@ class _ContestazioniTab extends StatefulWidget {
   final List<String> itemIds;
   final Map<String, dynamic> Function(String) payloadFor;
   final void Function(String, Map<String, dynamic>) onChanged;
-  final void Function({required String context}) onAdd;
+  final void Function({required String contestationContext}) onAdd;
   final void Function(String) onRemove;
 
   @override
@@ -463,7 +463,7 @@ class _ContestazioniTabState extends State<_ContestazioniTab> {
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton.tonalIcon(
-            onPressed: () => widget.onAdd(context: _context),
+            onPressed: () => widget.onAdd(contestationContext: _context),
             icon: const Icon(Icons.add),
             label: const Text('Nuova contestazione'),
           ),
