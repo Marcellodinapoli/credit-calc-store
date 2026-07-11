@@ -70,10 +70,10 @@ class _UserContestationFormPageState extends State<UserContestationFormPage> {
 
       final declaredChanged = existing != null &&
           declared != existing.declared.trim();
-      final needsAi = existing == null ||
-          declaredChanged ||
-          (existing != null &&
-              !WarmupContestationService.hasCompleteSheets(existing));
+      final needsAi = existing == null
+          ? true
+          : declaredChanged ||
+              !WarmupContestationService.hasCompleteSheets(existing);
 
       late final String meaning;
       late final String risk;

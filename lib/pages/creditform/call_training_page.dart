@@ -255,7 +255,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   }
 
   String? get _previousPhaseKey {
-    switch (_config.phaseKey) {
+    switch (_cfg.phaseKey) {
       case 'Presentazione_standard':
         return 'Approccio';
       case 'Negoziazione':
@@ -407,7 +407,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   String get _stepTitle {
     switch (_step) {
       case 0:
-        return '1️⃣ ${_cfg.sectionTitle} – ${_step0ResponseLabel}';
+        return '1️⃣ ${_cfg.sectionTitle} – $_step0ResponseLabel';
       case 1:
         return '2️⃣ Cosa sta accadendo davvero';
       case 2:
@@ -420,7 +420,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   }
 
   String get _step0ResponseLabel {
-    switch (_config.phaseKey) {
+    switch (_cfg.phaseKey) {
       case 'Presentazione_standard':
       case 'Negoziazione':
       case 'Chiusura':
@@ -434,7 +434,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   }
 
   String get _customerLineIntro {
-    switch (_config.phaseKey) {
+    switch (_cfg.phaseKey) {
       case 'Presentazione_standard':
         return 'Il debitore continua così la conversazione:';
       case 'Negoziazione':
@@ -461,7 +461,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         const SizedBox(height: 16),
         Row(
           children: [
-            Icon(Icons.mic, color: _config.color, size: 20),
+            Icon(Icons.mic, color: _cfg.color, size: 20),
             const SizedBox(width: 8),
             Text(
               'La tua risposta – $_previousPhaseTitle',
@@ -683,9 +683,9 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         ),
         const SizedBox(height: 8),
         Text(
-          _config.phaseKey == 'Presentazione_standard' ||
-                  _config.phaseKey == 'Negoziazione' ||
-                  _config.phaseKey == 'Chiusura'
+          _cfg.phaseKey == 'Presentazione_standard' ||
+                  _cfg.phaseKey == 'Negoziazione' ||
+                  _cfg.phaseKey == 'Chiusura'
               ? 'Leggi la replica del debitore e registra la tua risposta: '
                   'nessuna frase predefinita, decidi tu come intervenire.'
               : 'Leggi la replica dell\'interlocutore e registra la tua risposta: '
@@ -725,9 +725,9 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
             Icon(Icons.record_voice_over, color: _cfg.color, size: 20),
             const SizedBox(width: 8),
             Text(
-              _config.phaseKey == 'Presentazione_standard' ||
-                      _config.phaseKey == 'Negoziazione' ||
-                      _config.phaseKey == 'Chiusura'
+              _cfg.phaseKey == 'Presentazione_standard' ||
+                      _cfg.phaseKey == 'Negoziazione' ||
+                      _cfg.phaseKey == 'Chiusura'
                   ? 'Debitore'
                   : 'Interlocutore',
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),

@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:credit_calc_core/credit_calc_core.dart';
 
 import '../../core/platform/native_audio_helper.dart';
 import '../../services/warmup_evaluation_service.dart';

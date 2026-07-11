@@ -278,7 +278,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
         _statusMessage =
             'Pacchetto pronto da ricevere. Tocca «Ricevi dati» '
             'entro ${DeviceTransferFormat.dateTime(
-              DateTime.fromMillisecondsSinceEpoch(transfer!.expiresAtMs),
+              DateTime.fromMillisecondsSinceEpoch(transfer.expiresAtMs),
             )}.';
       } else if (transfer?.isPending == true && isSender) {
         _statusMessage =
