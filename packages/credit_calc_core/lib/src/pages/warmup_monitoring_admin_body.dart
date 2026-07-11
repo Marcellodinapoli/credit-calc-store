@@ -37,7 +37,9 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
   bool _formDirty = false;
   String? _formError;
   String? _actionError;
+  int _selectedTab = 0;
   late final TabController _tabs;
+  late final VoidCallback _tabListener;
 
   final Map<String, Map<String, dynamic>> _phasePayloads = {};
   final Map<String, Map<String, dynamic>> _itemPayloads = {};
@@ -48,7 +50,13 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
+    _tabListener = () {
+      if (!_tabs.indexIsChanging && _selectedTab != _tabs.index) {
+        setState(() => _selectedTab = _tabs.index);
+      }
+    };
+    _tabs.addListener(_tabListener);
     _loadAdmin();
   }
 
@@ -57,6 +65,7 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
     _phasesSub?.cancel();
     _itemsSub?.cancel();
     _telefonataScroll.dispose();
+    _tabs.removeListener(_tabListener);
     _tabs.dispose();
     super.dispose();
   }
@@ -438,16 +447,19 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           child: Text(
-            'Gestisci scenari warm-up telefonata e contestazioni. Approva anche '
-            'le contestazioni inviate dagli utenti per la condivisione community.',
+            'Come in CreditCalc: telefonata, contestazioni nel sollecito e nel '
+            'recupero. Nella scheda Utenti approvi le contestazioni inviate dagli '
+            'utenti per la community.',
             style: TextStyle(color: Colors.grey.shade700, height: 1.45),
           ),
         ),
         TabBar(
           controller: _tabs,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'Telefonata'),
-            Tab(text: 'Contestazioni'),
+            Tab(text: 'Contestazioni nel sollecito'),
+            Tab(text: 'Contestazioni nel recupero'),
             Tab(text: 'Utenti'),
           ],
         ),
@@ -463,7 +475,16 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
                 onRemove: _removePhase,
                 scrollController: _telefonataScroll,
               ),
-              _ContestazioniTab(
+              _BuiltinContestazioniTab(
+                contestationContext: 'sollecito',
+                itemIds: _sortedItemIds,
+                payloadFor: _itemPayload,
+                onChanged: _updateItem,
+                onAdd: _addItem,
+                onRemove: _removeItem,
+              ),
+              _BuiltinContestazioniTab(
+                contestationContext: 'recupero',
                 itemIds: _sortedItemIds,
                 payloadFor: _itemPayload,
                 onChanged: _updateItem,
@@ -489,23 +510,24 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
               style: TextStyle(color: Colors.red.shade700),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: FilledButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: _saving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.save_outlined),
-            label: Text(_saving ? 'Salvataggio…' : 'Salva warm-up'),
+        if (_selectedTab < 3)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: FilledButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: Text(_saving ? 'Salvataggio…' : 'Salva warm-up'),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -556,8 +578,9 @@ class _TelefonataTab extends StatelessWidget {
   }
 }
 
-class _ContestazioniTab extends StatefulWidget {
-  const _ContestazioniTab({
+class _BuiltinContestazioniTab extends StatelessWidget {
+  const _BuiltinContestazioniTab({
+    required this.contestationContext,
     required this.itemIds,
     required this.payloadFor,
     required this.onChanged,
@@ -565,50 +588,35 @@ class _ContestazioniTab extends StatefulWidget {
     required this.onRemove,
   });
 
+  final String contestationContext;
   final List<String> itemIds;
   final Map<String, dynamic> Function(String) payloadFor;
   final void Function(String, Map<String, dynamic>) onChanged;
   final void Function({required String contestationContext}) onAdd;
   final void Function(String) onRemove;
 
-  @override
-  State<_ContestazioniTab> createState() => _ContestazioniTabState();
-}
-
-class _ContestazioniTabState extends State<_ContestazioniTab> {
-  String _context = 'sollecito';
-
   List<String> get _filteredIds {
-    return widget.itemIds.where((id) {
+    return itemIds.where((id) {
       final context =
-          (widget.payloadFor(id)['context'] ?? 'sollecito').toString();
-      return context == _context;
+          (payloadFor(id)['context'] ?? 'sollecito').toString();
+      return context == contestationContext;
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     final filteredIds = _filteredIds;
+    final contextLabel =
+        contestationContext == 'recupero' ? 'recupero' : 'sollecito';
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: [
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'sollecito', label: Text('Sollecito')),
-            ButtonSegment(value: 'recupero', label: Text('Recupero')),
-          ],
-          selected: {_context},
-          onSelectionChanged: (selection) {
-            setState(() => _context = selection.first);
-          },
-        ),
-        const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton.tonalIcon(
-            onPressed: () => widget.onAdd(contestationContext: _context),
+            onPressed: () => onAdd(contestationContext: contestationContext),
             icon: const Icon(Icons.add),
             label: const Text('Nuova contestazione'),
           ),
@@ -618,16 +626,16 @@ class _ContestazioniTabState extends State<_ContestazioniTab> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Text(
-              'Nessuna contestazione per $_context.',
+              'Nessuna contestazione per il $contextLabel.',
               style: TextStyle(color: Colors.grey.shade700),
             ),
           ),
         for (final id in filteredIds)
           _ContestationEditorCard(
             itemId: id,
-            payload: widget.payloadFor(id),
-            onChanged: (patch) => widget.onChanged(id, patch),
-            onRemove: () => widget.onRemove(id),
+            payload: payloadFor(id),
+            onChanged: (patch) => onChanged(id, patch),
+            onRemove: () => onRemove(id),
           ),
       ],
     );
@@ -939,7 +947,7 @@ class _ContestationEditorCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text('ID: $itemId ┬À ${payload['context']}'),
+        subtitle: Text('ID: $itemId · ${payload['context']}'),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
