@@ -82,13 +82,16 @@ abstract final class WarmupTelefonataDefaults {
           'professionale. Vietato parlare di insoluti, debiti o scadenze.',
       'systemPrompt': defaultSystemPrompt,
       'phaseInstruction':
-          'IMPORTANTE: in fase Presentazione standard l\'operatore deve SOLO '
-          'presentarsi (nome, cognome, società mandante). NON deve parlare '
-          'di insoluti, debiti, scadenze, comunicazioni amministrative o '
-          'motivo del contatto. NON penalizzare l\'assenza del motivo del '
-          'contatto: in questa fase non serve. Segnala come errore qualsiasi '
-          'riferimento al debito. Nell\'esempio (versione_migliorata) proponi '
-          'solo una presentazione breve, senza motivo del contatto.',
+          'IMPORTANTE: in fase Presentazione standard il debitore è già stato '
+          'identificato in Approccio. L\'operatore deve SOLO presentarsi (nome, '
+          'cognome, società mandante). NON chiedere di nuovo chi è l\'interlocutore: '
+          'vietato nell\'esempio (versione_migliorata) usare «Con chi ho il piacere '
+          'di parlare?» o altre verifiche di identità. NON parlare di insoluti, '
+          'debiti, scadenze, comunicazioni amministrative o motivo del contatto. '
+          'NON penalizzare l\'assenza del motivo del contatto: in questa fase non '
+          'serve. Segnala come errore qualsiasi riferimento al debito. Nell\'esempio '
+          '(versione_migliorata) proponi solo una presentazione breve, senza motivo '
+          'del contatto e senza domande sull\'identità.',
     },
     'Presentazione_privacy': {
       'phaseKey': 'Presentazione_privacy',

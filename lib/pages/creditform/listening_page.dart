@@ -533,6 +533,12 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
     return _completed[_builtinItems[index - 1].id] == true;
   }
 
+  bool _isCommunityEnabled(int index, List<WarmupContestation> community) {
+    if (!_allBuiltinCompleted) return false;
+    if (index == 0) return true;
+    return _completed[community[index - 1].progressKey] == true;
+  }
+
   ContestationCategory _categoryFromString(String value) {
     switch (value) {
       case 'amministrativa':
@@ -686,7 +692,11 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
     }
   }
 
-  Future<void> _openUser(WarmupContestation contestation) async {
+  Future<void> _openUser(
+    WarmupContestation contestation, {
+    required bool enabled,
+  }) async {
+    if (!enabled) return;
     if (contestation.canEdit) {
       final action = await showModalBottomSheet<String>(
         context: context,
@@ -810,20 +820,24 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
         _UserContestationCard(
           contestation: c,
           completed: _completed[c.progressKey] ?? false,
+          enabled: true,
           isMine: true,
-          onTap: () => _openUser(c),
+          onTap: () => _openUser(c, enabled: true),
         ),
       );
     }
 
-    for (final c in community) {
+    for (var i = 0; i < community.length; i++) {
+      final c = community[i];
+      final enabled = _isCommunityEnabled(i, community);
       children.add(const SizedBox(height: 16));
       children.add(
         _UserContestationCard(
           contestation: c,
           completed: _completed[c.progressKey] ?? false,
+          enabled: enabled,
           isMine: false,
-          onTap: () => _openUser(c),
+          onTap: () => _openUser(c, enabled: enabled),
         ),
       );
     }
@@ -924,12 +938,14 @@ class _UserContestationCard extends StatelessWidget {
   const _UserContestationCard({
     required this.contestation,
     required this.completed,
+    required this.enabled,
     required this.isMine,
     required this.onTap,
   });
 
   final WarmupContestation contestation;
   final bool completed;
+  final bool enabled;
   final bool isMine;
   final VoidCallback onTap;
 
@@ -945,22 +961,24 @@ class _UserContestationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _categoryColor();
+    final baseColor = _categoryColor();
+    final color = enabled ? baseColor : Colors.grey;
     final status = contestation.status;
 
     return SizedBox(
       width: double.infinity,
       child: Card(
-        elevation: 3,
+        elevation: enabled ? 3 : 0,
+        color: enabled ? Colors.white : Colors.grey.shade100,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: isMine
+          side: isMine && enabled
               ? BorderSide(color: Colors.orange.shade100)
               : BorderSide.none,
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Row(
@@ -1017,9 +1035,9 @@ class _UserContestationCard extends StatelessWidget {
                         contestation.declared,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
-                          color: Colors.black54,
+                          color: enabled ? Colors.black54 : Colors.black26,
                           height: 1.35,
                         ),
                       ),
@@ -1041,7 +1059,11 @@ class _UserContestationCard extends StatelessWidget {
                   ),
                 ),
                 Icon(
-                  completed ? Icons.check_circle : Icons.radio_button_unchecked,
+                  completed
+                      ? Icons.check_circle
+                      : enabled
+                      ? Icons.radio_button_unchecked
+                      : Icons.lock,
                   color: completed ? Colors.green : Colors.black26,
                   size: 28,
                 ),

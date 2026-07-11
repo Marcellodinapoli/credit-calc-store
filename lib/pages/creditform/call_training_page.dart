@@ -218,8 +218,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   static const int _minScoreToPass = 70;
   static const int _maxAttempts = 3;
 
-  String? _previousResponse;
-  String? _previousPhaseTitle;
+  List<_ConversationTurn> _conversationHistory = [];
 
   @override
   void initState() {
@@ -237,37 +236,49 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       _phaseInstruction = phase.phaseInstruction;
       _loadingConfig = false;
     });
-    await _loadPreviousResponse();
+    await _loadConversationHistory();
   }
 
-  Future<void> _loadPreviousResponse() async {
-    final previousKey = _previousPhaseKey;
-    if (previousKey == null) return;
-
-    final response =
-        await ListeningProgressService.getTelefonataResponse(previousKey);
-    if (!mounted) return;
-
-    setState(() {
-      _previousResponse = response;
-      _previousPhaseTitle = callTrainingConfigFor(previousKey).sectionTitle;
-    });
-  }
-
-  String? get _previousPhaseKey {
+  List<String> get _historyPhaseKeys {
     switch (_cfg.phaseKey) {
       case 'Presentazione_standard':
-        return 'Approccio';
+        return const ['Approccio'];
       case 'Negoziazione':
-        return 'Presentazione_standard';
+        return const ['Approccio', 'Presentazione_standard'];
       case 'Chiusura':
-        return 'Negoziazione';
+        return const ['Approccio', 'Presentazione_standard', 'Negoziazione'];
       default:
-        return null;
+        return const [];
     }
   }
 
-  bool get _showsConversationHistory => _previousPhaseKey != null;
+  Future<void> _loadConversationHistory() async {
+    final keys = _historyPhaseKeys;
+    if (keys.isEmpty) {
+      if (!mounted) return;
+      setState(() => _conversationHistory = []);
+      return;
+    }
+
+    final turns = <_ConversationTurn>[];
+    for (final key in keys) {
+      final phase = await WarmupTelefonataConfigService.loadPhase(key);
+      final config = callTrainingConfigFromPhase(phase);
+      final response =
+          await ListeningProgressService.getTelefonataResponse(key);
+      turns.add(
+        _ConversationTurn(
+          phaseKey: key,
+          phaseTitle: config.sectionTitle,
+          customerLine: config.customerLine,
+          consultantResponse: response,
+        ),
+      );
+    }
+
+    if (!mounted) return;
+    setState(() => _conversationHistory = turns);
+  }
 
   void _nextStep() {
     if (_step < 3) {
@@ -449,44 +460,62 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
     }
   }
 
-  Widget _previousResponseSection() {
-    final text = _previousResponse?.trim() ?? '';
-    if (!_showsConversationHistory || text.isEmpty) {
-      return const SizedBox.shrink();
-    }
+  Widget _conversationHistorySection() {
+    if (_conversationHistory.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Icon(Icons.mic, color: _cfg.color, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              'La tua risposta – $_previousPhaseTitle',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        for (final turn in _conversationHistory) ...[
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Icon(Icons.record_voice_over, color: _cfg.color, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                turn.phaseKey == 'Approccio' ? 'Interlocutore' : 'Debitore',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _customerLineBox(
+            fontSize: 17,
+            line: turn.customerLine,
+          ),
+          if ((turn.consultantResponse ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(Icons.mic, color: _cfg.color, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'La tua risposta – ${turn.phaseTitle}',
+                  style:
+                      const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Text(
+                '«${turn.consultantResponse!.trim()}»',
+                style: const TextStyle(
+                  fontSize: 17,
+                  color: Colors.black87,
+                  height: 1.45,
+                ),
+              ),
             ),
           ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Text(
-            '«$text»',
-            style: const TextStyle(
-              fontSize: 17,
-              color: Colors.black87,
-              height: 1.45,
-            ),
-          ),
-        ),
+        ],
       ],
     );
   }
@@ -598,7 +627,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
     );
   }
 
-  Widget _customerLineBox({double fontSize = 16}) {
+  Widget _customerLineBox({double fontSize = 16, String? line}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -608,7 +637,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         border: Border.all(color: _cfg.color.withValues(alpha: 0.35)),
       ),
       child: Text(
-        '«${_cfg.customerLine}»',
+        '«${line ?? _cfg.customerLine}»',
         style: TextStyle(
           fontSize: fontSize,
           fontStyle: FontStyle.italic,
@@ -720,6 +749,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
           ],
           const SizedBox(height: 16),
         ],
+        _conversationHistorySection(),
         Row(
           children: [
             Icon(Icons.record_voice_over, color: _cfg.color, size: 20),
@@ -736,7 +766,6 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         ),
         const SizedBox(height: 8),
         _customerLineBox(fontSize: 17),
-        _previousResponseSection(),
         if (_cfg.targetPersonName != null) ...[
           const SizedBox(height: 16),
           Row(
@@ -1090,4 +1119,18 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       ),
     );
   }
+}
+
+class _ConversationTurn {
+  const _ConversationTurn({
+    required this.phaseKey,
+    required this.phaseTitle,
+    required this.customerLine,
+    required this.consultantResponse,
+  });
+
+  final String phaseKey;
+  final String phaseTitle;
+  final String customerLine;
+  final String? consultantResponse;
 }
