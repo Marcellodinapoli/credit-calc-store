@@ -4,7 +4,8 @@ export type AiFeature =
   | "normativeSearch"
   | "callAnalysis"
   | "roleplayStep"
-  | "warmupEvaluate";
+  | "warmupEvaluate"
+  | "contestationGenerate";
 
 /** Tariffe indicative miste (USD → EUR, stima). */
 const CHAT_INPUT_USD_PER_1M = 0.15;

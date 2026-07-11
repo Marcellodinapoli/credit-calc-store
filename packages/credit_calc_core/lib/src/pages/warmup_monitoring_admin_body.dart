@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -8,6 +8,8 @@ import '../warmup/warmup_contestazioni_training_defaults.dart';
 import '../warmup/warmup_telefonata_admin_service.dart';
 import '../warmup/warmup_telefonata_config_service.dart';
 import '../warmup/warmup_telefonata_defaults.dart';
+import '../warmup/warmup_contestation_core.dart';
+import 'warmup_contestation_admin_form_body.dart';
 
 typedef WarmupMonitoringAdminVerifier = Future<bool> Function({
   bool forceRefresh,
@@ -34,6 +36,7 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
   bool _saving = false;
   bool _formDirty = false;
   String? _formError;
+  String? _actionError;
   late final TabController _tabs;
 
   final Map<String, Map<String, dynamic>> _phasePayloads = {};
@@ -45,7 +48,7 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    _tabs = TabController(length: 3, vsync: this);
     _loadAdmin();
   }
 
@@ -278,6 +281,140 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
     setState(() {});
   }
 
+  Future<void> _approve(WarmupContestationCore item) async {
+    setState(() => _actionError = null);
+    try {
+      await WarmupContestationAdminCore.ensureSheets(item);
+      await WarmupContestationAdminCore.approve(item.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('«${item.title}» approvata e condivisa.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = e.toString().replaceFirst('StateError: ', '');
+      });
+    }
+  }
+
+  Future<void> _reject(WarmupContestationCore item) async {
+    final noteCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rifiuta contestazione'),
+        content: TextField(
+          controller: noteCtrl,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Motivo (opzionale)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Rifiuta'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _actionError = null);
+    try {
+      await WarmupContestationAdminCore.reject(
+        id: item.id,
+        note: noteCtrl.text,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('«${item.title}» rifiutata.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = e.toString().replaceFirst('StateError: ', '');
+      });
+    } finally {
+      noteCtrl.dispose();
+    }
+  }
+
+  Future<void> _delete(WarmupContestationCore item) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Elimina contestazione'),
+        content: Text(
+          'Vuoi eliminare definitivamente «${item.title}»?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Elimina'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _actionError = null);
+    try {
+      await WarmupContestationAdminCore.delete(item.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('«${item.title}» eliminata.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = e.toString().replaceFirst('StateError: ', '');
+      });
+    }
+  }
+
+  Future<void> _openUserForm({WarmupContestationCore? existing}) async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(
+            title: Text(
+              existing == null
+                  ? 'Nuova contestazione'
+                  : 'Modifica contestazione',
+            ),
+          ),
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: WarmupContestationAdminFormBody(existing: existing),
+          ),
+        ),
+      ),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            existing == null
+                ? 'Contestazione creata con schede AI.'
+                : 'Contestazione aggiornata con schede AI.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_checkingAdmin) {
@@ -301,9 +438,8 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           child: Text(
-            'Gestisci scenari warm-up telefonata e contestazioni. Ogni fase o '
-            'contestazione ha il proprio prompt AI: l\'app usa solo questi '
-            'valori salvati qui.',
+            'Gestisci scenari warm-up telefonata e contestazioni. Approva anche '
+            'le contestazioni inviate dagli utenti per la condivisione community.',
             style: TextStyle(color: Colors.grey.shade700, height: 1.45),
           ),
         ),
@@ -312,6 +448,7 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
           tabs: const [
             Tab(text: 'Telefonata'),
             Tab(text: 'Contestazioni'),
+            Tab(text: 'Utenti'),
           ],
         ),
         Expanded(
@@ -332,6 +469,14 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
                 onChanged: _updateItem,
                 onAdd: _addItem,
                 onRemove: _removeItem,
+              ),
+              _UserModerationTab(
+                actionError: _actionError,
+                onApprove: _approve,
+                onReject: _reject,
+                onDelete: _delete,
+                onEdit: _openUserForm,
+                onCreate: () => _openUserForm(),
               ),
             ],
           ),
@@ -489,6 +634,216 @@ class _ContestazioniTabState extends State<_ContestazioniTab> {
   }
 }
 
+class _UserModerationTab extends StatelessWidget {
+  const _UserModerationTab({
+    required this.actionError,
+    required this.onApprove,
+    required this.onReject,
+    required this.onDelete,
+    required this.onEdit,
+    required this.onCreate,
+  });
+
+  final String? actionError;
+  final Future<void> Function(WarmupContestationCore item) onApprove;
+  final Future<void> Function(WarmupContestationCore item) onReject;
+  final Future<void> Function(WarmupContestationCore item) onDelete;
+  final Future<void> Function({WarmupContestationCore? existing}) onEdit;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<WarmupContestationCore>>(
+      stream: WarmupContestationAdminCore.watchPendingReview(),
+      builder: (context, snap) {
+        if (snap.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Errore lettura contestazioni: ${snap.error}',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.red.shade700),
+              ),
+            ),
+          );
+        }
+
+        if (snap.connectionState == ConnectionState.waiting &&
+            !snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final items = snap.data ?? const [];
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                onPressed: onCreate,
+                icon: const Icon(Icons.add),
+                label: const Text('Nuova contestazione'),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Approva le contestazioni inviate dagli utenti per '
+              'renderle visibili a tutta la community nel warm-up.',
+              style: TextStyle(
+                fontSize: 15,
+                color: Colors.grey.shade700,
+                height: 1.45,
+              ),
+            ),
+            if (actionError != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                actionError!,
+                style: TextStyle(color: Colors.red.shade700),
+              ),
+            ],
+            const SizedBox(height: 20),
+            if (items.isEmpty)
+              Card(
+                child: const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'Nessuna contestazione in attesa di valutazione.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
+            else
+              ...items.map(
+                (item) => _PendingCard(
+                  item: item,
+                  onApprove: () => onApprove(item),
+                  onReject: () => onReject(item),
+                  onEdit: () => onEdit(existing: item),
+                  onDelete: () => onDelete(item),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PendingCard extends StatelessWidget {
+  const _PendingCard({
+    required this.item,
+    required this.onApprove,
+    required this.onReject,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final WarmupContestationCore item;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.title,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Chip(
+                  label: Text(item.context.label),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${item.category.label} · ${item.authorName ?? item.authorUid}',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            _sheet('Dichiarata', item.declared),
+            _sheet('Significato', item.meaning),
+            _sheet('Rischio', item.risk),
+            _sheet('Obiettivo', item.objective),
+            _sheet('Risposta', item.response),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onEdit,
+                    child: const Text('Modifica'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onDelete,
+                    child: const Text('Elimina'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onReject,
+                    child: const Text('Rifiuta'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: onApprove,
+                    child: const Text('Approva'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sheet(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+          ),
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(height: 1.4, fontSize: 14)),
+        ],
+      ),
+    );
+  }
+}
+
 class _PhaseEditorCard extends StatelessWidget {
   const _PhaseEditorCard({
     required this.phaseKey,
@@ -584,7 +939,7 @@ class _ContestationEditorCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text('ID: $itemId · ${payload['context']}'),
+        subtitle: Text('ID: $itemId ┬À ${payload['context']}'),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),

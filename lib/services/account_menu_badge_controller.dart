@@ -21,9 +21,7 @@ final class AccountMenuBadgeController {
   int _warmupLastSeenMs = 0;
   int _jobOffersLastSeenMs = 0;
 
-  QuerySnapshot<Map<String, dynamic>>? _supportTickets;
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _supportMessages = {};
-  QuerySnapshot<Map<String, dynamic>>? _communityTopics;
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _communityMessages = {};
   QuerySnapshot<Map<String, dynamic>>? _courses;
   QuerySnapshot<Map<String, dynamic>>? _roleplay;
@@ -68,9 +66,7 @@ final class AccountMenuBadgeController {
     }
     _messageSubs.clear();
     _uid = null;
-    _supportTickets = null;
     _supportMessages.clear();
-    _communityTopics = null;
     _communityMessages.clear();
     _courses = null;
     _roleplay = null;
@@ -92,7 +88,6 @@ final class AccountMenuBadgeController {
           .where('userId', isEqualTo: uid)
           .snapshots()
           .listen((snap) {
-        _supportTickets = snap;
         _syncChildListeners(
           currentIds: snap.docs.map((doc) => doc.id).toSet(),
           prefix: 'support:',
@@ -101,7 +96,7 @@ final class AccountMenuBadgeController {
                 .collection('support')
                 .doc(ticketId)
                 .collection('messages')
-                .snapshots()
+                .snapshots(includeMetadataChanges: true)
                 .listen((messages) {
               _supportMessages[ticketId] = messages;
               _scheduleRecompute();
@@ -119,7 +114,6 @@ final class AccountMenuBadgeController {
           .where('status', isEqualTo: 'approved')
           .snapshots()
           .listen((snap) {
-        _communityTopics = snap;
         _syncChildListeners(
           currentIds: snap.docs.map((doc) => doc.id).toSet(),
           prefix: 'community:',
@@ -128,7 +122,7 @@ final class AccountMenuBadgeController {
                 .collection('community')
                 .doc(topicId)
                 .collection('messages')
-                .snapshots()
+                .snapshots(includeMetadataChanges: true)
                 .listen((messages) {
               _communityMessages[topicId] = messages;
               _scheduleRecompute();
@@ -237,13 +231,13 @@ final class AccountMenuBadgeController {
   }
 
   bool _hasSupportUnread() {
-    if (_supportLastSeenMs <= 0) return false;
     for (final messages in _supportMessages.values) {
       for (final doc in messages.docs) {
         final data = doc.data();
         if (data['sender'] == 'user') continue;
-        final ts = data['timestamp'];
-        if (ts is Timestamp && ts.millisecondsSinceEpoch > _supportLastSeenMs) {
+        final millis = _docMillis(data['timestamp']);
+        if (millis == null) continue;
+        if (_supportLastSeenMs <= 0 || millis > _supportLastSeenMs) {
           return true;
         }
       }
@@ -252,14 +246,13 @@ final class AccountMenuBadgeController {
   }
 
   bool _hasCommunityUnread(String uid) {
-    if (_communityMenuLastSeenMs <= 0) return false;
     for (final messages in _communityMessages.values) {
       for (final doc in messages.docs) {
         final data = doc.data();
         if ((data['userId'] ?? '').toString() == uid) continue;
-        final ts = data['timestamp'];
-        if (ts is Timestamp &&
-            ts.millisecondsSinceEpoch > _communityMenuLastSeenMs) {
+        final millis = _docMillis(data['timestamp']);
+        if (millis == null) continue;
+        if (_communityMenuLastSeenMs <= 0 || millis > _communityMenuLastSeenMs) {
           return true;
         }
       }

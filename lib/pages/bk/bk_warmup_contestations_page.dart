@@ -5,6 +5,7 @@ import '../../core/admin/warmup_contestation_admin_service.dart';
 import '../../models/warmup_contestation.dart';
 import '../../services/warmup_contestation_service.dart';
 import '../area/personal_area_shell.dart';
+import 'bk_warmup_contestation_form_page.dart';
 
 /// Backoffice — moderazione contestazioni warm-up inviate dagli utenti.
 class BkWarmupContestationsPage extends StatefulWidget {
@@ -38,7 +39,8 @@ class _BkWarmupContestationsPageState extends State<BkWarmupContestationsPage> {
   Future<void> _approve(WarmupContestation item) async {
     setState(() => _actionError = null);
     try {
-      await WarmupContestationAdminService.approve(item.id);
+      final ready = await WarmupContestationAdminService.ensureSheets(item);
+      await WarmupContestationAdminService.approve(ready.id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('«${item.title}» approvata e condivisa.')),
@@ -99,6 +101,63 @@ class _BkWarmupContestationsPageState extends State<BkWarmupContestationsPage> {
     }
   }
 
+  Future<void> _delete(WarmupContestation item) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Elimina contestazione'),
+        content: Text(
+          'Vuoi eliminare definitivamente «${item.title}»?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Elimina'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _actionError = null);
+    try {
+      await WarmupContestationAdminService.delete(item.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('«${item.title}» eliminata.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _actionError = e.toString().replaceFirst('StateError: ', '');
+      });
+    }
+  }
+
+  Future<void> _openForm({WarmupContestation? existing}) async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BkWarmupContestationFormPage(existing: existing),
+      ),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            existing == null
+                ? 'Contestazione creata con schede AI.'
+                : 'Contestazione aggiornata con schede AI.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PersonalAreaShell(
@@ -118,6 +177,19 @@ class _BkWarmupContestationsPageState extends State<BkWarmupContestationsPage> {
               : StreamBuilder<List<WarmupContestation>>(
                   stream: WarmupContestationService.watchPendingReview(),
                   builder: (context, snap) {
+                    if (snap.hasError) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            'Errore lettura contestazioni: ${snap.error}',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ),
+                      );
+                    }
+
                     if (snap.connectionState == ConnectionState.waiting &&
                         !snap.hasData) {
                       return const Center(child: CircularProgressIndicator());
@@ -128,6 +200,15 @@ class _BkWarmupContestationsPageState extends State<BkWarmupContestationsPage> {
                     return ListView(
                       padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
                       children: [
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton.icon(
+                            onPressed: () => _openForm(),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Nuova contestazione'),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         Text(
                           'Approva le contestazioni inviate dagli utenti per '
                           'renderle visibili a tutta la community nel warm-up.',
@@ -160,6 +241,8 @@ class _BkWarmupContestationsPageState extends State<BkWarmupContestationsPage> {
                                 item: item,
                                 onApprove: () => _approve(item),
                                 onReject: () => _reject(item),
+                                onEdit: () => _openForm(existing: item),
+                                onDelete: () => _delete(item),
                               )),
                       ],
                     );
@@ -174,11 +257,15 @@ class _PendingCard extends StatelessWidget {
     required this.item,
     required this.onApprove,
     required this.onReject,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   final WarmupContestation item;
   final VoidCallback onApprove;
   final VoidCallback onReject;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -218,6 +305,24 @@ class _PendingCard extends StatelessWidget {
             _sheet('Obiettivo', item.objective),
             _sheet('Risposta', item.response),
             const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onEdit,
+                    child: const Text('Modifica'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onDelete,
+                    child: const Text('Elimina'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(

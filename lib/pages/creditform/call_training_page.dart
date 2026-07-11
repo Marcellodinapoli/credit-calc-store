@@ -2,10 +2,13 @@
 // -----------------------------------------------------------------------------
 // CONFIG / IMPORT
 // -----------------------------------------------------------------------------
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
 
 import '../../core/platform/native_audio_helper.dart';
+import '../../services/listening_progress_service.dart';
 import '../../services/warmup_evaluation_service.dart';
 import 'personal_form_shell.dart';
 
@@ -161,8 +164,9 @@ CallTrainingConfig callTrainingConfigFor(String phaseKey) {
         customerLine: 'Pronto…',
         targetPersonName: 'Rossi Andrea',
         decodifica:
-            'Il cliente risponde alla chiamata: è il primo contatto. Non parlare '
-            'ancora del debito.',
+            'L\'interlocutore risponde alla chiamata: è il primo contatto e '
+            'non sappiamo ancora con chi stiamo parlando. Non parlare ancora '
+            'del debito.',
         spiegazione:
             'Obiettivo: capire se l\'interlocutore è il debitore corretto. '
             'Saluto breve e verifica identità, senza presentarti e senza '
@@ -214,6 +218,9 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   static const int _minScoreToPass = 70;
   static const int _maxAttempts = 3;
 
+  String? _previousResponse;
+  String? _previousPhaseTitle;
+
   @override
   void initState() {
     super.initState();
@@ -230,7 +237,37 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       _phaseInstruction = phase.phaseInstruction;
       _loadingConfig = false;
     });
+    await _loadPreviousResponse();
   }
+
+  Future<void> _loadPreviousResponse() async {
+    final previousKey = _previousPhaseKey;
+    if (previousKey == null) return;
+
+    final response =
+        await ListeningProgressService.getTelefonataResponse(previousKey);
+    if (!mounted) return;
+
+    setState(() {
+      _previousResponse = response;
+      _previousPhaseTitle = callTrainingConfigFor(previousKey).sectionTitle;
+    });
+  }
+
+  String? get _previousPhaseKey {
+    switch (_config.phaseKey) {
+      case 'Presentazione_standard':
+        return 'Approccio';
+      case 'Negoziazione':
+        return 'Presentazione_standard';
+      case 'Chiusura':
+        return 'Negoziazione';
+      default:
+        return null;
+    }
+  }
+
+  bool get _showsConversationHistory => _previousPhaseKey != null;
 
   void _nextStep() {
     if (_step < 3) {
@@ -257,6 +294,8 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   }
 
   bool get _phasePassed {
+    final explicit = _aiResult?['puo_proseguire'];
+    if (explicit is bool) return explicit;
     final score = _extractScore(_aiResult);
     return score >= _minScoreToPass;
   }
@@ -276,7 +315,8 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   bool get _canCompletePhase {
     if (!_hasRecorded) return false;
     if (_requiresAiBeforeFinish) {
-      return _aiResult != null && !_isProcessing;
+      if (_isProcessing || _aiResult == null) return false;
+      return _phasePassed || _attemptCount >= _maxAttempts;
     }
     return _phasePassed ||
         _attemptCount >= _maxAttempts ||
@@ -367,7 +407,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   String get _stepTitle {
     switch (_step) {
       case 0:
-        return '1️⃣ ${_cfg.sectionTitle} – Risposta del cliente';
+        return '1️⃣ ${_cfg.sectionTitle} – ${_step0ResponseLabel}';
       case 1:
         return '2️⃣ Cosa sta accadendo davvero';
       case 2:
@@ -377,6 +417,78 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       default:
         return '';
     }
+  }
+
+  String get _step0ResponseLabel {
+    switch (_config.phaseKey) {
+      case 'Presentazione_standard':
+      case 'Negoziazione':
+      case 'Chiusura':
+        return 'Risposta del debitore';
+      case 'Approccio':
+      case 'Presentazione_privacy':
+        return 'Risposta dell\'interlocutore';
+      default:
+        return 'Risposta del cliente';
+    }
+  }
+
+  String get _customerLineIntro {
+    switch (_config.phaseKey) {
+      case 'Presentazione_standard':
+        return 'Il debitore continua così la conversazione:';
+      case 'Negoziazione':
+      case 'Chiusura':
+        return 'Il debitore risponde così:';
+      case 'Approccio':
+        return 'L\'interlocutore apre così la conversazione:';
+      case 'Presentazione_privacy':
+        return 'L\'interlocutore risponde così:';
+      default:
+        return 'L\'interlocutore continua così la conversazione:';
+    }
+  }
+
+  Widget _previousResponseSection() {
+    final text = _previousResponse?.trim() ?? '';
+    if (!_showsConversationHistory || text.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Icon(Icons.mic, color: _config.color, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'La tua risposta – $_previousPhaseTitle',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Text(
+            '«$text»',
+            style: const TextStyle(
+              fontSize: 17,
+              color: Colors.black87,
+              height: 1.45,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _userResponseBox({double fontSize = 16}) {
@@ -417,35 +529,72 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   Widget _aiEvaluationCard() {
     final commento = (_aiResult!['commento'] ?? '').toString().trim();
     final versione = (_aiResult!['versione_migliorata'] ?? '').toString().trim();
+    final isOk = _phasePassed;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Suggerimento AI',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue.shade200),
           ),
-          if (commento.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(commento, style: const TextStyle(height: 1.45)),
-          ],
-          if (versione.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Esempio di risposta: $versione',
-              style: const TextStyle(height: 1.45),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Suggerimento AI',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+              if (commento.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(commento, style: const TextStyle(height: 1.45)),
+              ],
+              if (versione.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Esempio di risposta: $versione',
+                  style: const TextStyle(height: 1.45),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isOk
+                ? Colors.green.withValues(alpha: 0.1)
+                : Colors.red.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            isOk
+                ? '✔ Risposta sufficiente: puoi passare alla fase successiva.'
+                : '✖ Risposta lontana dal corretto: ripeti la simulazione.',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: isOk ? Colors.green.shade800 : Colors.red.shade800,
+              height: 1.45,
             ),
-          ],
+          ),
+        ),
+        if (!isOk && _attemptCount < _maxAttempts) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Tentativo $_attemptCount/$_maxAttempts. Registra di nuovo la tua risposta.',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.red.shade700,
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
 
@@ -495,9 +644,9 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Il cliente (o l’interlocutore) apre così la conversazione:',
-            style: TextStyle(fontSize: 15),
+          Text(
+            _customerLineIntro,
+            style: const TextStyle(fontSize: 15),
           ),
           const SizedBox(height: 12),
           _customerLineBox(),
@@ -533,10 +682,15 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Ascolta la replica del cliente e registra la tua risposta: '
-          'nessuna frase predefinita, decidi tu come intervenire.',
-          style: TextStyle(fontSize: 14, color: Colors.black54, height: 1.4),
+        Text(
+          _config.phaseKey == 'Presentazione_standard' ||
+                  _config.phaseKey == 'Negoziazione' ||
+                  _config.phaseKey == 'Chiusura'
+              ? 'Leggi la replica del debitore e registra la tua risposta: '
+                  'nessuna frase predefinita, decidi tu come intervenire.'
+              : 'Leggi la replica dell\'interlocutore e registra la tua risposta: '
+                  'nessuna frase predefinita, decidi tu come intervenire.',
+          style: const TextStyle(fontSize: 14, color: Colors.black54, height: 1.4),
         ),
         const SizedBox(height: 16),
         if (_cfg.targetPersonName != null) ...[
@@ -570,14 +724,19 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
           children: [
             Icon(Icons.record_voice_over, color: _cfg.color, size: 20),
             const SizedBox(width: 8),
-            const Text(
-              'Cliente / interlocutore',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            Text(
+              _config.phaseKey == 'Presentazione_standard' ||
+                      _config.phaseKey == 'Negoziazione' ||
+                      _config.phaseKey == 'Chiusura'
+                  ? 'Debitore'
+                  : 'Interlocutore',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             ),
           ],
         ),
         const SizedBox(height: 8),
         _customerLineBox(fontSize: 17),
+        _previousResponseSection(),
         if (_cfg.targetPersonName != null) ...[
           const SizedBox(height: 16),
           Row(
@@ -786,6 +945,16 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
             ),
           ),
         );
+        return;
+      }
+      if (!_phasePassed && _attemptCount < _maxAttempts) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Risposta lontana dal corretto: ripeti la simulazione prima di proseguire.',
+            ),
+          ),
+        );
       }
       return;
     }
@@ -801,6 +970,18 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
     }
   }
 
+  Future<void> _completePhase() async {
+    final transcription = (_aiResult?['trascrizione'] ?? '').toString().trim();
+    if (transcription.isNotEmpty) {
+      await ListeningProgressService.setTelefonataResponse(
+        widget.phaseKey,
+        transcription,
+      );
+    }
+    if (!mounted) return;
+    Navigator.pop(context, true);
+  }
+
   void _onActionPressed() {
     if (_step < 3) {
       _nextStep();
@@ -808,7 +989,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
     }
 
     if (_canCompletePhase) {
-      Navigator.pop(context, true);
+      unawaited(_completePhase());
     } else {
       _revealCompletionRequirements();
     }

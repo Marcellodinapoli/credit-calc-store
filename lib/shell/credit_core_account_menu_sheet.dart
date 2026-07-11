@@ -210,12 +210,19 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
     );
   }
 
-  Widget _areaHeader() {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Text(
-        'Area personale',
-        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+  Widget _areaHeader({bool showBadge = false}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Area personale',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+          ),
+          accountMenuBadgeDot(visible: showBadge),
+        ],
       ),
     );
   }
@@ -334,7 +341,7 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
 
             if (_blockedContext) {
               children.addAll([
-                _areaHeader(),
+                _areaHeader(showBadge: badges.hasArea),
                 _item(
                   icon: Icons.support_agent_outlined,
                   title: PersonalAreaMenuItem.directSupport.title,
@@ -453,7 +460,7 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
 
               children.addAll([
                 const Divider(height: 24),
-                _areaHeader(),
+                _areaHeader(showBadge: badges.hasArea),
                 if (!areaBlocked) ...[
                   _item(
                     icon: Icons.person_outline,

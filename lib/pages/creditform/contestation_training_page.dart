@@ -20,6 +20,7 @@ class ContestationTrainingItem {
   final String objective;
   final String response;
   final String systemPrompt;
+  final Color? accentColor;
 
   const ContestationTrainingItem({
     required this.title,
@@ -29,6 +30,7 @@ class ContestationTrainingItem {
     required this.objective,
     required this.response,
     required this.systemPrompt,
+    this.accentColor,
   });
 }
 
@@ -126,6 +128,9 @@ class _ContestationTrainingPageState
   // HELPERS
   // ---------------------------------------------------------------------------
   Color get _contestationColor {
+    final accent = widget.item.accentColor;
+    if (accent != null) return accent;
+
     switch (widget.item.title) {
       case 'Un giorno di ritardo':
       case 'Coobbligato':

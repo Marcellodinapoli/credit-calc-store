@@ -212,14 +212,14 @@ class _DirectSupportPageState extends State<DirectSupportPage> {
                   'userId': user?.uid,
                   'userEmail': user?.email,
                   'subject': subject,
-                  'createdAt': FieldValue.serverTimestamp(),
+                  'createdAt': Timestamp.now(),
                   'status': 'open',
                 });
 
                 final messageData = <String, dynamic>{
                   'sender': 'user',
                   'text': message,
-                  'timestamp': FieldValue.serverTimestamp(),
+                  'timestamp': Timestamp.now(),
                 };
 
                 if (selectedFile != null) {
@@ -233,6 +233,7 @@ class _DirectSupportPageState extends State<DirectSupportPage> {
                 }
 
                 await docRef.collection('messages').add(messageData);
+                await docRef.update({'lastMessageAt': Timestamp.now()});
 
                 if (!context.mounted) return;
                 Navigator.pop(dialogContext);
@@ -467,45 +468,55 @@ class _DirectSupportPageState extends State<DirectSupportPage> {
   Widget _buildReplyBox(String ticketId) {
     _replyControllers[ticketId] ??= TextEditingController();
 
+    Future<void> sendReply() async {
+      final text = _replyControllers[ticketId]!.text.trim();
+      if (text.isEmpty) return;
+
+      _replyControllers[ticketId]!.clear();
+
+      await FirebaseFirestore.instance
+          .collection('support')
+          .doc(ticketId)
+          .collection('messages')
+          .add({
+        'sender': 'user',
+        'text': text,
+        'timestamp': Timestamp.now(),
+      });
+
+      await FirebaseFirestore.instance
+          .collection('support')
+          .doc(ticketId)
+          .update({'lastMessageAt': Timestamp.now()});
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(),
-        const Text("Rispondi:", style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _replyControllers[ticketId],
-          maxLines: 2,
-          decoration: InputDecoration(
-            hintText: "Scrivi una risposta...",
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton.icon(
-            icon: const Icon(Icons.send),
-            label: const Text("Invia"),
-            onPressed: () async {
-              final text = _replyControllers[ticketId]!.text.trim();
-              if (text.isEmpty) return;
-
-              await FirebaseFirestore.instance
-                  .collection('support')
-                  .doc(ticketId)
-                  .collection('messages')
-                  .add({
-                'sender': 'user',
-                'text': text,
-                'timestamp': FieldValue.serverTimestamp(),
-              });
-
-              _replyControllers[ticketId]!.clear();
-            },
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _replyControllers[ticketId],
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: 'Scrivi una risposta...',
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Invia',
+              icon: const Icon(Icons.send),
+              onPressed: sendReply,
+            ),
+          ],
         ),
       ],
     );
@@ -612,14 +623,14 @@ class _DirectSupportPageState extends State<DirectSupportPage> {
                     return const Center(child: Text("Nessun ticket ancora inviato"));
                   }
 
-                  final tickets = snapshot.data!.docs;
-                  tickets.sort((a, b) {
-                    final ta = (a['createdAt'] as Timestamp?)?.toDate() ??
-                        DateTime(2000);
-                    final tb = (b['createdAt'] as Timestamp?)?.toDate() ??
-                        DateTime(2000);
-                    return tb.compareTo(ta);
-                  });
+                  final tickets = snapshot.data!.docs.toList()
+                    ..sort((a, b) {
+                      final ta = (a['createdAt'] as Timestamp?)?.toDate() ??
+                          DateTime.fromMillisecondsSinceEpoch(0);
+                      final tb = (b['createdAt'] as Timestamp?)?.toDate() ??
+                          DateTime.fromMillisecondsSinceEpoch(0);
+                      return ta.compareTo(tb);
+                    });
 
                   return ListView.builder(
                     itemCount: tickets.length,
@@ -725,7 +736,9 @@ class _DirectSupportPageState extends State<DirectSupportPage> {
                                           stream: ticket.reference
                                               .collection('messages')
                                               .orderBy('timestamp')
-                                              .snapshots(),
+                                              .snapshots(
+                                                  includeMetadataChanges:
+                                                      true),
                                           builder: (context, msgSnap) {
                                             if (msgSnap.connectionState ==
                                                     ConnectionState.waiting &&
@@ -737,7 +750,13 @@ class _DirectSupportPageState extends State<DirectSupportPage> {
                                               return const SizedBox.shrink();
                                             }
 
-                                            final msgs = msgSnap.data!.docs;
+                                            final msgs = msgSnap.data!.docs
+                                                .toList()
+                                              ..sort((a, b) {
+                                                final ta = _messageTimestamp(a);
+                                                final tb = _messageTimestamp(b);
+                                                return ta.compareTo(tb);
+                                              });
 
                                             return Column(
                                               crossAxisAlignment:
@@ -908,5 +927,12 @@ class _DirectSupportPageState extends State<DirectSupportPage> {
           ],
         ),
     );
+  }
+
+  DateTime _messageTimestamp(QueryDocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>?;
+    final ts = data?['timestamp'];
+    if (ts is Timestamp) return ts.toDate();
+    return DateTime.fromMillisecondsSinceEpoch(0);
   }
 }

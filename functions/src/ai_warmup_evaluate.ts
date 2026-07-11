@@ -109,6 +109,8 @@ async function evaluateTranscript(params: {
   systemPrompt?: string;
   phaseInstruction?: string;
 }): Promise<{
+  score: number;
+  puoProseguire: boolean;
   commento: string;
   versione_migliorata: string;
   usage: { promptTokens: number; completionTokens: number };
@@ -116,15 +118,22 @@ async function evaluateTranscript(params: {
   const defaultWarmupSystemPrompt =
     "Sei un formatore esperto in recupero crediti e warm-up telefonico "
     + "in Italia. Valuta la risposta vocale dell'operatore rispetto "
-    + "al contesto e alla linea corretta. Rispondi SOLO in JSON con due campi: "
-    + "commento (feedback breve e costruttivo in italiano) e versione_migliorata "
+    + "al contesto e alla linea corretta. Rispondi SOLO in JSON con: score "
+    + "(intero 0-100, quanto la risposta si avvicina a quella corretta), "
+    + "puo_proseguire (boolean: true se può passare alla fase successiva, "
+    + "false se la risposta è lontana dal corretto e deve ripetere la simulazione), "
+    + "commento (feedback breve in italiano; se puo_proseguire è false invita "
+    + "esplicitamente a ripetere la simulazione), versione_migliorata "
     + "(esempio di risposta vocale migliorata, 2-4 frasi).";
 
   const defaultContestationSystemPrompt =
     "Sei un formatore esperto in recupero crediti e gestione contestazioni "
     + "telefoniche in Italia. Valuta la risposta vocale dell'operatore rispetto "
-    + "al contesto e alla linea corretta. Rispondi SOLO in JSON con due campi: "
-    + "commento (feedback breve e costruttivo in italiano) e versione_migliorata "
+    + "al contesto e alla linea corretta. Rispondi SOLO in JSON con: score "
+    + "(intero 0-100, quanto la risposta si avvicina a quella corretta), "
+    + "puo_proseguire (boolean: true se può concludere, false se deve ripetere "
+    + "la simulazione), commento (feedback breve in italiano; se puo_proseguire "
+    + "è false invita esplicitamente a ripetere la simulazione), versione_migliorata "
     + "(esempio di risposta vocale migliorata, 2-4 frasi).";
 
   const clientSystemPrompt = (params.systemPrompt ?? "").trim();
@@ -161,14 +170,30 @@ async function evaluateTranscript(params: {
     },
   );
 
-  let parsed: { commento?: string; versione_migliorata?: string };
+  let parsed: {
+    score?: number | string;
+    puo_proseguire?: boolean | string;
+    commento?: string;
+    versione_migliorata?: string;
+  };
   try {
     parsed = JSON.parse(result.content);
   } catch (_) {
     parsed = { commento: result.content, versione_migliorata: "" };
   }
 
+  const scoreRaw = parsed.score;
+  const score = typeof scoreRaw === "number"
+    ? Math.round(scoreRaw)
+    : parseInt((scoreRaw ?? "0").toString(), 10) || 0;
+  const clampedScore = Math.max(0, Math.min(100, score));
+  const puoProseguire = typeof parsed.puo_proseguire === "boolean"
+    ? parsed.puo_proseguire
+    : clampedScore >= 70;
+
   return {
+    score: clampedScore,
+    puoProseguire,
     commento: (parsed.commento ?? "").toString().trim(),
     versione_migliorata: (parsed.versione_migliorata ?? "").toString().trim(),
     usage: {
@@ -236,6 +261,8 @@ export const warmupEvaluate = onCall(
 
     return {
       trascrizione: transcription.text,
+      score: evaluation.score,
+      puo_proseguire: evaluation.puoProseguire,
       commento: evaluation.commento,
       versione_migliorata: evaluation.versione_migliorata,
     };

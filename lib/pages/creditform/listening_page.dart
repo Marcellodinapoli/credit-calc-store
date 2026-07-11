@@ -578,6 +578,13 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
       objective: c.objective,
       response: c.response,
       systemPrompt: WarmupContestazioniTrainingDefaults.defaultSystemPrompt,
+      accentColor: switch (c.category) {
+        WarmupContestationCategory.economica => Colors.orange,
+        WarmupContestationCategory.legale => Colors.blue,
+        WarmupContestationCategory.salute => Colors.deepPurple,
+        WarmupContestationCategory.amministrativa => Colors.green,
+        WarmupContestationCategory.generica => Colors.blueGrey,
+      },
     );
   }
 
@@ -607,6 +614,75 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
     if (completed == true) {
       setState(() => _completed[item.id] = true);
       await ListeningProgressService.setContestationCompleted(item.id);
+    }
+  }
+
+  Future<WarmupContestation?> _prepareForTraining(
+    WarmupContestation contestation,
+  ) async {
+    if (WarmupContestationService.hasCompleteSheets(contestation)) {
+      return contestation;
+    }
+
+    if (!mounted) return null;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Generazione schede di analisi in corso…'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      return await WarmupContestationService.ensureSheets(contestation);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+      return null;
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+  }
+
+  Future<void> _openTraining(WarmupContestation contestation) async {
+    if (!mounted) return;
+    if (!await PublicUsageCounterRecorder.recordWithUi(
+      context,
+      PublicUsageMetric.contestation,
+    )) {
+      return;
+    }
+    if (!mounted) return;
+
+    final ready = await _prepareForTraining(contestation);
+    if (!mounted || ready == null) return;
+
+    final completed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ContestationTrainingPage(
+          item: _trainingItemFromUser(ready),
+        ),
+      ),
+    );
+
+    if (completed == true) {
+      setState(() => _completed[ready.progressKey] = true);
+      await ListeningProgressService.setContestationCompleted(
+        ready.progressKey,
+      );
     }
   }
 
@@ -678,30 +754,7 @@ class _ContestazioniTabState extends State<ContestazioniTab> {
       if (action != 'train') return;
     }
 
-    if (!mounted) return;
-    if (!await PublicUsageCounterRecorder.recordWithUi(
-      context,
-      PublicUsageMetric.contestation,
-    )) {
-      return;
-    }
-    if (!mounted) return;
-
-    final completed = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ContestationTrainingPage(
-          item: _trainingItemFromUser(contestation),
-        ),
-      ),
-    );
-
-    if (completed == true) {
-      setState(() => _completed[contestation.progressKey] = true);
-      await ListeningProgressService.setContestationCompleted(
-        contestation.progressKey,
-      );
-    }
+    await _openTraining(contestation);
   }
 
   Future<void> _addUserContestation() async {

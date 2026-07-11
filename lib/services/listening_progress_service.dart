@@ -103,6 +103,43 @@ class ListeningProgressService {
     }
   }
 
+  static Future<void> setTelefonataResponse(
+    String phase,
+    String transcription,
+  ) async {
+    final trimmed = transcription.trim();
+    if (trimmed.isEmpty) return;
+
+    try {
+      await _doc.set({
+        'telefonataResponses': {phase: trimmed},
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  static Future<String?> getTelefonataResponse(String phase) async {
+    try {
+      final snap = await _doc.get();
+      final data =
+          snap.data()?['telefonataResponses'] as Map<String, dynamic>? ?? {};
+      final value = data[phase];
+      if (value is! String) return null;
+      final trimmed = value.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // CONTESTAZIONI
   // ---------------------------------------------------------------------------

@@ -534,7 +534,7 @@ class _BrandTitle extends StatelessWidget {
     return FutureBuilder<PackageInfo>(
       future: DesktopAppUpdateButton.packageInfoFuture,
       builder: (context, snap) {
-        final version = snap.data?.version?.split('+').first;
+        final version = snap.data?.version.split('+').first;
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [

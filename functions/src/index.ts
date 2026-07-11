@@ -10,6 +10,7 @@ import { callAnalysis } from "./ai_call_analysis";
 import { roleplayStep } from "./ai_roleplay_step";
 import { roleplaySuggestion } from "./ai_roleplay_suggestion";
 import { warmupEvaluate } from "./ai_warmup_evaluate";
+import { contestationGenerate } from "./ai_contestation_generate";
 import {
   db,
   formatDateTime,
@@ -271,4 +272,4 @@ export const onFieldReminderRescheduled = onDocumentUpdated(
 );
 
 // Esportato per test/manutenzione: invio singolo a utente con preferenze attive.
-export { sendPushToUser, normativeSearch, callAnalysis, roleplayStep, roleplaySuggestion, warmupEvaluate };
+export { sendPushToUser, normativeSearch, callAnalysis, roleplayStep, roleplaySuggestion, warmupEvaluate, contestationGenerate };

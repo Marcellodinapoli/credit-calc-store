@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/warmup_contestation.dart';
+import 'contestation_generate_service.dart';
 
 /// CRUD contestazioni warm-up inserite dagli utenti.
 abstract final class WarmupContestationService {
@@ -13,6 +14,66 @@ abstract final class WarmupContestationService {
 
   static CollectionReference<Map<String, dynamic>> get _col =>
       _firestore.collection(collection);
+
+  static bool hasCompleteSheets(WarmupContestation item) {
+    return item.meaning.trim().isNotEmpty &&
+        item.risk.trim().isNotEmpty &&
+        item.objective.trim().isNotEmpty &&
+        item.response.trim().isNotEmpty;
+  }
+
+  static Future<ContestationGenerateResult> generateSheets({
+    required String declared,
+    required WarmupContestationContext context,
+  }) {
+    return ContestationGenerateService.generate(
+      declared: declared,
+      context: context,
+    );
+  }
+
+  static Future<WarmupContestation> ensureSheets(WarmupContestation item) async {
+    if (hasCompleteSheets(item)) return item;
+
+    final generated = await generateSheets(
+      declared: item.declared,
+      context: item.context,
+    );
+
+    await update(
+      id: item.id,
+      title: item.title,
+      declared: item.declared,
+      meaning: generated.meaning,
+      risk: generated.risk,
+      objective: generated.objective,
+      response: generated.response,
+      userRawInput: item.userRawInput,
+      category: generated.category,
+      status: item.status,
+    );
+
+    return WarmupContestation(
+      id: item.id,
+      authorUid: item.authorUid,
+      authorName: item.authorName,
+      context: item.context,
+      status: item.status,
+      title: item.title,
+      declared: item.declared,
+      meaning: generated.meaning,
+      risk: generated.risk,
+      objective: generated.objective,
+      response: generated.response,
+      userRawInput: item.userRawInput,
+      category: generated.category,
+      rejectionNote: item.rejectionNote,
+      reviewedAt: item.reviewedAt,
+      reviewedBy: item.reviewedBy,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    );
+  }
 
   /// Contestazioni approvate + proprie (qualsiasi stato) per contesto.
   static Stream<List<WarmupContestation>> watchForContext(

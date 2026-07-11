@@ -68,16 +68,47 @@ class _UserContestationFormPageState extends State<UserContestationFormPage> {
       final title = _autoTitle(declared);
       final existing = widget.existing;
 
+      final declaredChanged = existing != null &&
+          declared != existing.declared.trim();
+      final needsAi = existing == null ||
+          declaredChanged ||
+          (existing != null &&
+              !WarmupContestationService.hasCompleteSheets(existing));
+
+      late final String meaning;
+      late final String risk;
+      late final String objective;
+      late final String response;
+      late final WarmupContestationCategory category;
+
+      if (needsAi) {
+        final generated = await WarmupContestationService.generateSheets(
+          declared: declared,
+          context: widget.context,
+        );
+        meaning = generated.meaning;
+        risk = generated.risk;
+        objective = generated.objective;
+        response = generated.response;
+        category = generated.category;
+      } else {
+        meaning = existing.meaning;
+        risk = existing.risk;
+        objective = existing.objective;
+        response = existing.response;
+        category = existing.category;
+      }
+
       if (_isEdit) {
         await WarmupContestationService.update(
           id: existing!.id,
           title: title,
           declared: declared,
-          meaning: existing.meaning,
-          risk: existing.risk,
-          objective: existing.objective,
-          response: existing.response,
-          category: existing.category,
+          meaning: meaning,
+          risk: risk,
+          objective: objective,
+          response: response,
+          category: category,
           status: WarmupContestationStatus.pendingReview,
         );
       } else {
@@ -85,11 +116,12 @@ class _UserContestationFormPageState extends State<UserContestationFormPage> {
           context: widget.context,
           title: title,
           declared: declared,
-          meaning: '',
-          risk: '',
-          objective: '',
-          response: '',
-          category: WarmupContestationCategory.generica,
+          meaning: meaning,
+          risk: risk,
+          objective: objective,
+          response: response,
+          userRawInput: declared,
+          category: category,
           status: WarmupContestationStatus.pendingReview,
           authorName: displayName,
         );
@@ -121,7 +153,10 @@ class _UserContestationFormPageState extends State<UserContestationFormPage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = e.toString().replaceFirst('StateError: ', '');
+        _error = e
+            .toString()
+            .replaceFirst('Exception: ', '')
+            .replaceFirst('StateError: ', '');
       });
     }
   }
@@ -130,11 +165,8 @@ class _UserContestationFormPageState extends State<UserContestationFormPage> {
   Widget build(BuildContext context) {
     final ctxLabel = widget.context.label;
     final existing = widget.existing;
-    final hasAiSheets = existing != null &&
-        (existing.meaning.trim().isNotEmpty ||
-            existing.risk.trim().isNotEmpty ||
-            existing.objective.trim().isNotEmpty ||
-            existing.response.trim().isNotEmpty);
+    final hasAiSheets =
+        existing != null && WarmupContestationService.hasCompleteSheets(existing);
 
     return PersonalFormShell(
       pageTitle: _isEdit ? 'Modifica contestazione' : 'Nuova contestazione',
@@ -206,7 +238,11 @@ class _UserContestationFormPageState extends State<UserContestationFormPage> {
                       height: 22,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Text(_isEdit ? 'Salva modifiche' : 'Invia'),
+                  : Text(
+                      _isEdit
+                          ? 'Salva modifiche'
+                          : 'Invia e genera schede',
+                    ),
             ),
             if (_isEdit && existing!.canDelete) ...[
               const SizedBox(height: 16),
