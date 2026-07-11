@@ -453,20 +453,25 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
             style: TextStyle(color: Colors.grey.shade700, height: 1.45),
           ),
         ),
-        TabBar(
-          controller: _tabs,
-          isScrollable: true,
-          tabs: const [
-            Tab(text: 'Telefonata'),
-            Tab(text: 'Contestazioni nel sollecito'),
-            Tab(text: 'Contestazioni nel recupero'),
-            Tab(text: 'Utenti'),
-          ],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TabBar(
+            controller: _tabs,
+            isScrollable: true,
+            tabs: const [
+              Tab(text: 'Telefonata'),
+              Tab(text: 'Contestazioni nel sollecito'),
+              Tab(text: 'Contestazioni nel recupero'),
+              Tab(text: 'Utenti'),
+            ],
+          ),
         ),
         Expanded(
-          child: TabBarView(
-            controller: _tabs,
-            children: [
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TabBarView(
+              controller: _tabs,
+              children: [
               _TelefonataTab(
                 phaseKeys: _sortedPhaseKeys,
                 payloadFor: _phasePayload,
@@ -500,6 +505,7 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
                 onCreate: () => _openUserForm(),
               ),
             ],
+            ),
           ),
         ),
         if (_formError != null)
@@ -512,7 +518,7 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
           ),
         if (_selectedTab < 3)
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: FilledButton.icon(
               onPressed: _saving ? null : _save,
               icon: _saving
@@ -555,7 +561,7 @@ class _TelefonataTab extends StatelessWidget {
     return ListView(
       controller: scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 16),
       children: [
         Align(
           alignment: Alignment.centerRight,
@@ -611,7 +617,7 @@ class _BuiltinContestazioniTab extends StatelessWidget {
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 16),
       children: [
         Align(
           alignment: Alignment.centerRight,
@@ -685,7 +691,7 @@ class _UserModerationTab extends StatelessWidget {
         final items = snap.data ?? const [];
 
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(vertical: 16),
           children: [
             Align(
               alignment: Alignment.centerRight,
