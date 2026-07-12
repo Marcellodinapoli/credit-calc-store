@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 
 import { trackAiUsage } from "./ai_usage_tracker";
+import { buildRoleplayBehaviorBlock } from "./roleplay_simulation_params";
 import {
   callOpenAiChat,
   ChatMessage,
@@ -25,6 +26,19 @@ function trimHistory(history: HistoryItem[] = [], maxMessages = 24): ChatMessage
     .filter((item) => item.content.length > 0);
 }
 
+function buildPracticeText(practiceData: unknown): string {
+  if (!Array.isArray(practiceData)) return "";
+  return practiceData
+    .map((row) => {
+      if (!row || typeof row !== "object") return "";
+      const label = (row as { label?: string }).label ?? "";
+      const value = (row as { value?: string }).value ?? "";
+      return `${label}: ${value}`.trim();
+    })
+    .filter(Boolean)
+    .join("; ");
+}
+
 export const roleplaySuggestion = onCall(
   { region, secrets: [openAiApiKey] },
   async (request) => {
@@ -36,8 +50,12 @@ export const roleplaySuggestion = onCall(
     }
 
     const prompt = (request.data?.prompt ?? "").toString().trim();
-    const practiceText = (request.data?.practiceText ?? "").toString().trim();
+    const practiceData = request.data?.practiceData;
+    const practiceText = (request.data?.practiceText ?? "").toString().trim()
+      || buildPracticeText(practiceData);
     const title = (request.data?.title ?? "Simulazione").toString().trim();
+    const difficulty = request.data?.difficulty;
+    const personality = request.data?.personality;
     const history = Array.isArray(request.data?.history)
       ? (request.data.history as HistoryItem[])
       : [];
@@ -57,15 +75,21 @@ export const roleplaySuggestion = onCall(
     const systemPrompt = [
       prompt,
       "",
+      buildRoleplayBehaviorBlock({ difficulty, personality }),
+      "",
       "FASE VALUTAZIONE FINALE (dopo la telefonata simulata):",
       "Esci dal personaggio. Sei un coach per consulenti del recupero crediti.",
+      "Valuta il consulente rispetto al prompt di simulazione, alla difficoltà, "
+      + "alla personalità e ai dati pratica configurati in BackOffice.",
       "Analizza la trascrizione e fornisci in italiano, con queste sezioni:",
       "1. Punteggio (0-100)",
       "2. Errori (errori principali commessi dal consulente)",
       "3. Privacy (eventuali violazioni della privacy)",
       "4. Tecnica negoziale (ascolto, identificazione interlocutore, gestione contestazioni, persuasione, leve, chiusura)",
       "5. Come migliorare (massimo 5 suggerimenti pratici)",
-      practiceText ? `DATI PRATICA: ${practiceText}` : "",
+      practiceText
+        ? `DATI PRATICA (usa solo questi dati, non inventare altro): ${practiceText}`
+        : "DATI PRATICA: non disponibili; non inventare cifre o fatti.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -87,6 +111,7 @@ export const roleplaySuggestion = onCall(
       maxTokens: 1400,
       temperature: 0.45,
       model: OPENAI_MODEL_GPT_55_REALTIME,
+      reasoningEffort: "low",
     });
 
     trackAiUsage({

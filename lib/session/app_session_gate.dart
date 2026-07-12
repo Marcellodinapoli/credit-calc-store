@@ -184,7 +184,7 @@ class _SyncOnlyShell extends StatelessWidget {
                     'dall\'account sul primo dispositivo.\n\n'
                     'Nel frattempo puoi accedere solo alla pagina Sincronizza.\n\n'
                     'Se hai già chiuso l\'altro dispositivo, attendi fino a '
-                    '2 minuti oppure premi Riprova accesso.',
+                    'circa 1 minuto oppure premi Riprova accesso.',
                     style: TextStyle(
                       color: Colors.orange.shade900,
                       height: 1.45,

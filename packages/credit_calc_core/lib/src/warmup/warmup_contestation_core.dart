@@ -91,6 +91,7 @@ class WarmupContestationCore {
     required this.response,
     this.category = WarmupContestationCategoryCore.generica,
     this.createdAt,
+    this.reviewedAt,
   });
 
   final String id;
@@ -106,6 +107,7 @@ class WarmupContestationCore {
   final String response;
   final WarmupContestationCategoryCore category;
   final DateTime? createdAt;
+  final DateTime? reviewedAt;
 
   factory WarmupContestationCore.fromDoc(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -131,6 +133,7 @@ class WarmupContestationCore {
         data['category']?.toString(),
       ),
       createdAt: _readTimestamp(data['createdAt']),
+      reviewedAt: _readTimestamp(data['reviewedAt']),
     );
   }
 
@@ -170,6 +173,26 @@ abstract final class WarmupContestationAdminCore {
         .snapshots()
         .map(
           (snap) => snap.docs.map(WarmupContestationCore.fromDoc).toList()
+            ..sort((a, b) {
+              final at = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final bt = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+              return bt.compareTo(at);
+            }),
+        );
+  }
+
+  static Stream<List<WarmupContestationCore>> watchApprovedByContext(
+    String context,
+  ) {
+    return _firestore
+        .collection(collection)
+        .where('status', isEqualTo: 'approved')
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map(WarmupContestationCore.fromDoc)
+              .where((item) => item.context.firestoreValue == context)
+              .toList()
             ..sort((a, b) {
               final at = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
               final bt = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);

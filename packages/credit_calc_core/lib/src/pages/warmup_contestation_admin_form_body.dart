@@ -184,15 +184,32 @@ class _WarmupContestationAdminFormBodyState
             ),
           ],
           const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _saving ? null : _submit,
-            child: _saving
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(_isEdit ? 'Salva e rigenera schede' : 'Crea con AI'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _saving
+                      ? null
+                      : () => Navigator.pop(context, false),
+                  child: const Text('Annulla'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _saving ? null : _submit,
+                  child: _saving
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(
+                          _isEdit ? 'Salva e rigenera schede' : 'Crea con AI',
+                        ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

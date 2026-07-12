@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../offline/credit_calc_runtime.dart';
-import '../offline/services/session_service.dart';
 import 'credit_core_session_runtime.dart';
 
 /// Consente l'accesso agli utenti autenticati con sessione unica per dispositivo.
@@ -81,24 +80,11 @@ class _CreditCoreSessionCoordinatorState
       CreditCoreSessionRuntime.clear();
     }
 
-    CreditCoreSessionRuntime.bootstrapFuture ??= _runBootstrap(user);
-    try {
-      await CreditCoreSessionRuntime.bootstrapFuture;
-    } catch (_) {
-      CreditCoreSessionRuntime.bootstrapFuture = null;
-      CreditCoreSessionRuntime.bootstrapComplete = false;
-    }
+    await CreditCoreSessionRuntime.ensureBootstrap(user.uid);
 
     if (!mounted || _user?.uid != user.uid) return;
 
     setState(() => _ready = CreditCoreSessionRuntime.bootstrapComplete);
-  }
-
-  Future<void> _runBootstrap(User user) async {
-    final service = SessionService(userId: user.uid);
-    await service.initialize();
-    CreditCoreSessionRuntime.sessionService = service;
-    CreditCoreSessionRuntime.bootstrapComplete = true;
   }
 
   @override

@@ -4,8 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/dimensions.dart';
-import '../../services/field_reminder_notification_service.dart';
-import '../../services/field_visit_notification_service.dart';
 import '../../services/itinerary_notifications_service.dart';
 import '../../services/location_consent_service.dart';
 import '../../services/notification_preferences_notifier.dart';
@@ -25,9 +23,7 @@ class _NotificationPreferencesPageState
     extends State<NotificationPreferencesPage> {
   bool _loading = true;
   bool _enabled = false;
-  bool _itineraryEnabled = false;
   bool _saving = false;
-  bool _savingItinerary = false;
   StreamSubscription<void>? _prefsSub;
 
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
@@ -55,12 +51,11 @@ class _NotificationPreferencesPageState
     }
 
     final enabled = await ProductNotificationsService.loadEnabled(uid);
-    final itineraryEnabled =
-        await ItineraryNotificationsService.loadItineraryField(uid);
+    await ItineraryNotificationsService.ensureDisabled(uid);
+    await LocationConsentService.setEnabled(uid: uid, enabled: false);
     if (!mounted) return;
     setState(() {
       _enabled = enabled;
-      _itineraryEnabled = itineraryEnabled;
       _loading = false;
     });
   }
@@ -95,35 +90,8 @@ class _NotificationPreferencesPageState
       await ItineraryNotificationsService.setEnabled(uid: uid, enabled: false);
       await LocationConsentService.setEnabled(uid: uid, enabled: false);
       if (!mounted) return;
-      setState(() => _itineraryEnabled = false);
       _showSnack('Notifiche disattivate.');
     }
-    NotificationPreferencesNotifier.instance.notifyChanged();
-  }
-
-  Future<void> _onItineraryChanged(bool value) async {
-    final uid = _uid;
-    if (uid == null || _savingItinerary || !_enabled) return;
-
-    setState(() {
-      _savingItinerary = true;
-      _itineraryEnabled = value;
-    });
-
-    await ItineraryNotificationsService.setEnabled(uid: uid, enabled: value);
-    await LocationConsentService.setEnabled(uid: uid, enabled: value);
-    if (value) {
-      await FieldReminderNotificationService.syncAllForCurrentUser();
-      await FieldVisitNotificationService.syncAllForCurrentUser();
-    }
-
-    if (!mounted) return;
-    setState(() => _savingItinerary = false);
-    _showSnack(
-      value
-          ? 'Promemoria itinerario e uso posizione attivati.'
-          : 'Promemoria itinerario e uso posizione disattivati.',
-    );
     NotificationPreferencesNotifier.instance.notifyChanged();
   }
 
@@ -174,13 +142,10 @@ class _NotificationPreferencesPageState
                             style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                           subtitle: const Text(
-                            'Promemoria programmati e avviso 30 min prima delle visite.',
+                            'Funzione disattivata: i promemoria itinerario non sono disponibili.',
                           ),
-                          value: _itineraryEnabled,
-                          onChanged:
-                              _uid == null || _savingItinerary || !_enabled
-                                  ? null
-                                  : _onItineraryChanged,
+                          value: false,
+                          onChanged: null,
                         ),
                       ],
                     ),
@@ -207,11 +172,7 @@ class _NotificationPreferencesPageState
                   ),
                   _bullet(
                     context,
-                    'nuove funzioni o aggiornamenti importanti della piattaforma;',
-                  ),
-                  _bullet(
-                    context,
-                    'promemoria itinerario e avvisi pre-visita (se attivati).',
+                    'nuove funzioni o aggiornamenti importanti della piattaforma.',
                   ),
                   const SizedBox(height: 24),
                   _infoBox(
@@ -229,10 +190,9 @@ class _NotificationPreferencesPageState
                     context,
                     icon: Icons.verified_user_outlined,
                     title: 'Consenso da questa pagina',
-                    text: 'Attivando le opzioni confermi di voler ricevere gli '
-                        'avvisi indicati e, per l\'itinerario, di autorizzare '
-                        'l\'uso della posizione per i percorsi. La scelta resta '
-                        'valida su questo dispositivo finché non la modifichi.',
+                    text: 'Attivando l\'opzione confermi di voler ricevere gli '
+                        'avvisi indicati. La scelta resta valida su questo '
+                        'dispositivo finché non la modifichi.',
                   ),
                 ],
               ),

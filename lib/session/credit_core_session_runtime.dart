@@ -23,6 +23,34 @@ abstract final class CreditCoreSessionRuntime {
     }
   }
 
+  /// Avvia subito il claim sessione (in parallelo ad altri controlli di avvio).
+  static Future<void> ensureBootstrap(String userId) async {
+    if (bootstrapComplete &&
+        sessionService != null &&
+        sessionService!.userId == userId) {
+      return;
+    }
+
+    if (sessionService != null && sessionService!.userId != userId) {
+      clear();
+    }
+
+    bootstrapFuture ??= _runBootstrap(userId);
+    try {
+      await bootstrapFuture;
+    } catch (_) {
+      bootstrapFuture = null;
+      bootstrapComplete = false;
+    }
+  }
+
+  static Future<void> _runBootstrap(String userId) async {
+    final service = SessionService(userId: userId);
+    await service.initialize();
+    sessionService = service;
+    bootstrapComplete = true;
+  }
+
   static void resetPendingBootstrap() {
     if (bootstrapComplete) return;
     bootstrapFuture = null;

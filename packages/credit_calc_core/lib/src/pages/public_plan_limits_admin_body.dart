@@ -350,22 +350,12 @@ class _PublicPlanLimitsAdminBodyState extends State<PublicPlanLimitsAdminBody>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SegmentedButton<PublicPlanLimitsAudience>(
-                segments: const [
-                  ButtonSegment(
-                    value: PublicPlanLimitsAudience.users,
-                    label: Text('Utenti'),
-                    icon: Icon(Icons.person_outline),
-                  ),
-                  ButtonSegment(
-                    value: PublicPlanLimitsAudience.companies,
-                    label: Text('Aziende'),
-                    icon: Icon(Icons.business_outlined),
-                  ),
-                ],
-                selected: {_audience},
-                onSelectionChanged: (selection) =>
-                    _switchAudience(selection.first),
+              _AudienceSelector(
+                isUsers: isUsers,
+                onUsers: () =>
+                    _switchAudience(PublicPlanLimitsAudience.users),
+                onCompanies: () =>
+                    _switchAudience(PublicPlanLimitsAudience.companies),
               ),
               const SizedBox(height: 12),
               Text(
@@ -1008,6 +998,96 @@ class _CompanyPlanLimitsPlanFormState extends State<_CompanyPlanLimitsPlanForm> 
           ),
         ),
       ],
+    );
+  }
+}
+
+class _AudienceSelector extends StatelessWidget {
+  const _AudienceSelector({
+    required this.isUsers,
+    required this.onUsers,
+    required this.onCompanies,
+  });
+
+  final bool isUsers;
+  final VoidCallback onUsers;
+  final VoidCallback onCompanies;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFE2E8F0),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF0F4C81), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _AudienceTab(
+              label: 'Utenti',
+              icon: Icons.person_outline,
+              selected: isUsers,
+              onTap: onUsers,
+            ),
+          ),
+          Expanded(
+            child: _AudienceTab(
+              label: 'Aziende',
+              icon: Icons.business_outlined,
+              selected: !isUsers,
+              onTap: onCompanies,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AudienceTab extends StatelessWidget {
+  const _AudienceTab({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = selected ? const Color(0xFF0F4C81) : Colors.transparent;
+    final fg = selected ? Colors.white : const Color(0xFF0F4C81);
+
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 20, color: fg),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: fg,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -74,19 +74,29 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
   Future<void> _bootstrapCore(User user) async {
     await _waitForPlatformSession(user.uid);
     _sessionService = CreditCoreSessionRuntime.sessionService;
+    if (_sessionService?.role == AppSessionRole.secondaryBlocked) {
+      _finishReady();
+      return;
+    }
     await _continueAfterLogin(user.uid);
   }
 
   Future<void> _waitForPlatformSession(String userId) async {
-    const attempts = 30;
+    const attempts = 40;
     for (var i = 0; i < attempts; i++) {
       if (CreditCoreSessionRuntime.isSessionReady &&
           CreditCoreSessionRuntime.sessionService?.userId == userId) {
         return;
       }
       await CreditCoreSessionRuntime.waitUntilReady();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
     }
+  }
+
+  void _finishReady() {
+    if (!mounted) return;
+    _cancelStartupWatchdog();
+    setState(() => _step = _BootstrapStep.ready);
   }
 
   void _cancelStartupWatchdog() {
@@ -96,6 +106,10 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
 
   Future<void> _continueAfterLogin(String userId) async {
     _sessionService ??= CreditCoreSessionRuntime.sessionService;
+    if (_sessionService?.role == AppSessionRole.secondaryBlocked) {
+      _finishReady();
+      return;
+    }
 
     PublicPlanLimitsConfigService.start();
     await PublicPlanLimitsConfigService.ensureLoaded();
@@ -125,9 +139,7 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
 
     await LocalItineraryCoordinator.start(userId);
 
-    if (!mounted) return;
-    _cancelStartupWatchdog();
-    setState(() => _step = _BootstrapStep.ready);
+    _finishReady();
   }
 
   @override

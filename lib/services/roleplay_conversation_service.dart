@@ -36,13 +36,19 @@ abstract final class RoleplayConversationService {
     required String prompt,
     required String title,
     required List<Map<String, String>> history,
+    List<dynamic> practiceData = const [],
     String practiceText = '',
+    String? difficulty,
+    String? personality,
   }) async {
     final data = await CallableFunctionClient.call('roleplaySuggestion', {
       'prompt': prompt,
       'title': title,
       'history': history,
-      'practiceText': practiceText,
+      'practiceData': practiceData,
+      if (practiceText.isNotEmpty) 'practiceText': practiceText,
+      if (difficulty != null) 'difficulty': difficulty,
+      if (personality != null) 'personality': personality,
     });
 
     if (data is! Map) {

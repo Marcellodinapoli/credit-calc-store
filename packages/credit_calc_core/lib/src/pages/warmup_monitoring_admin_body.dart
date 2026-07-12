@@ -20,9 +20,11 @@ class WarmupMonitoringAdminBody extends StatefulWidget {
   const WarmupMonitoringAdminBody({
     super.key,
     required this.verifyAdmin,
+    this.onUtentiTabSeen,
   });
 
   final WarmupMonitoringAdminVerifier verifyAdmin;
+  final VoidCallback? onUtentiTabSeen;
 
   @override
   State<WarmupMonitoringAdminBody> createState() =>
@@ -38,6 +40,8 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
   String? _formError;
   String? _actionError;
   int _selectedTab = 0;
+  bool _utentiTabSeenNotified = false;
+  static const int _utentiTabIndex = 3;
   late final TabController _tabs;
   late final VoidCallback _tabListener;
 
@@ -55,6 +59,9 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
       if (!_tabs.indexIsChanging && _selectedTab != _tabs.index) {
         setState(() => _selectedTab = _tabs.index);
       }
+      if (!_tabs.indexIsChanging && _tabs.index == _utentiTabIndex) {
+        _notifyUtentiTabSeen();
+      }
     };
     _tabs.addListener(_tabListener);
     _loadAdmin();
@@ -68,6 +75,12 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
     _tabs.removeListener(_tabListener);
     _tabs.dispose();
     super.dispose();
+  }
+
+  void _notifyUtentiTabSeen() {
+    if (_utentiTabSeenNotified) return;
+    _utentiTabSeenNotified = true;
+    widget.onUtentiTabSeen?.call();
   }
 
   Future<void> _loadAdmin() async {
@@ -455,15 +468,27 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TabBar(
-            controller: _tabs,
-            isScrollable: true,
-            tabs: const [
-              Tab(text: 'Telefonata'),
-              Tab(text: 'Contestazioni nel sollecito'),
-              Tab(text: 'Contestazioni nel recupero'),
-              Tab(text: 'Utenti'),
-            ],
+          child: StreamBuilder<List<WarmupContestationCore>>(
+            stream: WarmupContestationAdminCore.watchPendingReview(),
+            builder: (context, pendingSnap) {
+              final pendingCount = pendingSnap.data?.length ?? 0;
+              return TabBar(
+                controller: _tabs,
+                isScrollable: true,
+                tabs: [
+                  const Tab(text: 'Telefonata'),
+                  const Tab(text: 'Contestazioni nel sollecito'),
+                  const Tab(text: 'Contestazioni nel recupero'),
+                  Tab(
+                    child: Badge(
+                      isLabelVisible: pendingCount > 0,
+                      label: Text('$pendingCount'),
+                      child: const Text('Utenti'),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
         Expanded(
@@ -487,6 +512,8 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
                 onChanged: _updateItem,
                 onAdd: _addItem,
                 onRemove: _removeItem,
+                onEditUser: _openUserForm,
+                onDeleteUser: _delete,
               ),
               _BuiltinContestazioniTab(
                 contestationContext: 'recupero',
@@ -495,6 +522,8 @@ class _WarmupMonitoringAdminBodyState extends State<WarmupMonitoringAdminBody>
                 onChanged: _updateItem,
                 onAdd: _addItem,
                 onRemove: _removeItem,
+                onEditUser: _openUserForm,
+                onDeleteUser: _delete,
               ),
               _UserModerationTab(
                 actionError: _actionError,
@@ -592,6 +621,8 @@ class _BuiltinContestazioniTab extends StatelessWidget {
     required this.onChanged,
     required this.onAdd,
     required this.onRemove,
+    required this.onEditUser,
+    required this.onDeleteUser,
   });
 
   final String contestationContext;
@@ -600,6 +631,8 @@ class _BuiltinContestazioniTab extends StatelessWidget {
   final void Function(String, Map<String, dynamic>) onChanged;
   final void Function({required String contestationContext}) onAdd;
   final void Function(String) onRemove;
+  final Future<void> Function({WarmupContestationCore? existing}) onEditUser;
+  final Future<void> Function(WarmupContestationCore item) onDeleteUser;
 
   List<String> get _filteredIds {
     return itemIds.where((id) {
@@ -615,35 +648,185 @@ class _BuiltinContestazioniTab extends StatelessWidget {
     final contextLabel =
         contestationContext == 'recupero' ? 'recupero' : 'sollecito';
 
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton.tonalIcon(
-            onPressed: () => onAdd(contestationContext: contestationContext),
-            icon: const Icon(Icons.add),
-            label: const Text('Nuova contestazione'),
-          ),
+    return StreamBuilder<List<WarmupContestationCore>>(
+      stream: WarmupContestationAdminCore.watchApprovedByContext(
+        contestationContext,
+      ),
+      builder: (context, userSnap) {
+        if (userSnap.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Errore lettura contestazioni utente: ${userSnap.error}',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.red.shade700),
+              ),
+            ),
+          );
+        }
+
+        final userApproved = userSnap.data ?? const [];
+        final waitingUserItems =
+            userSnap.connectionState == ConnectionState.waiting &&
+                !userSnap.hasData;
+
+        return ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonalIcon(
+                onPressed: () => onAdd(contestationContext: contestationContext),
+                icon: const Icon(Icons.add),
+                label: const Text('Nuova contestazione'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (filteredIds.isEmpty && userApproved.isEmpty && !waitingUserItems)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  'Nessuna contestazione per il $contextLabel.',
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+              ),
+            for (final id in filteredIds)
+              _ContestationEditorCard(
+                itemId: id,
+                payload: payloadFor(id),
+                onChanged: (patch) => onChanged(id, patch),
+                onRemove: () => onRemove(id),
+              ),
+            if (waitingUserItems && userApproved.isEmpty) ...[
+              const SizedBox(height: 12),
+              const Center(child: CircularProgressIndicator()),
+            ] else if (userApproved.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text(
+                'Inserite dagli utenti e condivise',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final item in userApproved)
+                _ApprovedUserContestationCard(
+                  item: item,
+                  onEdit: () => onEditUser(existing: item),
+                  onDelete: () => onDeleteUser(item),
+                ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ApprovedUserContestationCard extends StatelessWidget {
+  const _ApprovedUserContestationCard({
+    required this.item,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final WarmupContestationCore item;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final author = item.authorName?.trim().isNotEmpty == true
+        ? item.authorName!.trim()
+        : 'Utente';
+    final insertedAt = _formatWarmupContestationDate(item.createdAt);
+    final approvedAt = item.reviewedAt != null
+        ? ' · Condivisa il ${_formatWarmupContestationDate(item.reviewedAt)}'
+        : '';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      color: Colors.blue.shade50,
+      child: ExpansionTile(
+        leading: Icon(Icons.person_outline, color: Colors.blue.shade700),
+        title: Text(
+          item.title,
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        const SizedBox(height: 8),
-        if (filteredIds.isEmpty)
+        subtitle: Text(
+          'Inserita da $author il $insertedAt$approvedAt',
+          style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+        ),
+        children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Text(
-              'Nessuna contestazione per il $contextLabel.',
-              style: TextStyle(color: Colors.grey.shade700),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(
+                      label: const Text('Inserita da utente'),
+                      visualDensity: VisualDensity.compact,
+                      backgroundColor: Colors.blue.shade100,
+                    ),
+                    Chip(
+                      label: Text(item.category.label),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _approvedSheet('Dichiarata', item.declared),
+                _approvedSheet('Significato', item.meaning),
+                _approvedSheet('Rischio', item.risk),
+                _approvedSheet('Obiettivo', item.objective),
+                _approvedSheet('Risposta', item.response),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onEdit,
+                        child: const Text('Modifica'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onDelete,
+                        child: const Text('Elimina'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-        for (final id in filteredIds)
-          _ContestationEditorCard(
-            itemId: id,
-            payload: payloadFor(id),
-            onChanged: (patch) => onChanged(id, patch),
-            onRemove: () => onRemove(id),
+        ],
+      ),
+    );
+  }
+
+  Widget _approvedSheet(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
           ),
-      ],
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(height: 1.4, fontSize: 14)),
+        ],
+      ),
     );
   }
 }
@@ -763,8 +946,14 @@ class _PendingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cardTheme = Theme.of(context).cardTheme;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      color: cardTheme.color,
+      elevation: cardTheme.elevation ?? 0,
+      shadowColor: cardTheme.shadowColor,
+      shape: cardTheme.shape,
+      clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -874,14 +1063,20 @@ class _PhaseEditorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = (payload['sectionTitle'] ?? phaseKey).toString();
+    final cardTheme = Theme.of(context).cardTheme;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      color: cardTheme.color,
+      elevation: cardTheme.elevation ?? 0,
+      shadowColor: cardTheme.shadowColor,
+      shape: cardTheme.shape,
+      clipBehavior: Clip.none,
       child: ExpansionTile(
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text('Chiave: $phaseKey'),
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: Column(
               children: [
                 _textField('Titolo sezione', 'sectionTitle', phaseKey, payload, onChanged),
@@ -949,14 +1144,20 @@ class _ContestationEditorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = (payload['title'] ?? itemId).toString();
+    final cardTheme = Theme.of(context).cardTheme;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      color: cardTheme.color,
+      elevation: cardTheme.elevation ?? 0,
+      shadowColor: cardTheme.shadowColor,
+      shape: cardTheme.shape,
+      clipBehavior: Clip.none,
       child: ExpansionTile(
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text('ID: $itemId · ${payload['context']}'),
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: Column(
               children: [
                 _textField('Titolo', 'title', itemId, payload, onChanged),
@@ -1029,6 +1230,14 @@ Widget _textField(
       maxLines: maxLines,
       decoration: InputDecoration(
         labelText: label,
+        labelStyle: const TextStyle(
+          color: Color(0xFF475569),
+          fontWeight: FontWeight.w600,
+        ),
+        floatingLabelStyle: const TextStyle(
+          color: Color(0xFF0F4C81),
+          fontWeight: FontWeight.w600,
+        ),
         border: const OutlineInputBorder(),
         alignLabelWithHint: maxLines > 1,
       ),
@@ -1052,6 +1261,14 @@ Widget _numberField(
       keyboardType: TextInputType.number,
       decoration: InputDecoration(
         labelText: label,
+        labelStyle: const TextStyle(
+          color: Color(0xFF475569),
+          fontWeight: FontWeight.w600,
+        ),
+        floatingLabelStyle: const TextStyle(
+          color: Color(0xFF0F4C81),
+          fontWeight: FontWeight.w600,
+        ),
         border: const OutlineInputBorder(),
       ),
       onChanged: (value) => onChanged({key: int.tryParse(value) ?? 0}),
@@ -1084,4 +1301,13 @@ Widget _dropdown(
       },
     ),
   );
+}
+
+String _formatWarmupContestationDate(DateTime? date) {
+  if (date == null) return 'data non disponibile';
+  final day = date.day.toString().padLeft(2, '0');
+  final month = date.month.toString().padLeft(2, '0');
+  final hour = date.hour.toString().padLeft(2, '0');
+  final minute = date.minute.toString().padLeft(2, '0');
+  return '$day/$month/${date.year} $hour:$minute';
 }

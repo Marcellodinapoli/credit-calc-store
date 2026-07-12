@@ -9,12 +9,14 @@ class CustomTabBarTheme {
     required List<Widget> tabs,
     bool? isScrollable,
   }) {
+    final scrollable =
+        isScrollable ?? tabs.length > 2 || Dimensions.isTablet(context);
+
     return TabBar(
       controller: controller,
       tabs: tabs,
-      isScrollable:
-          isScrollable ?? tabs.length > 2 || Dimensions.isTablet(context),
-      tabAlignment: TabAlignment.start,
+      isScrollable: scrollable,
+      tabAlignment: scrollable ? TabAlignment.start : TabAlignment.fill,
       labelColor: Colors.black,
       unselectedLabelColor: Colors.black54,
       indicatorColor: const Color(0xFFFFA726),

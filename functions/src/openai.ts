@@ -48,6 +48,7 @@ export async function callOpenAiChat(
     model?: string;
     maxTokens?: number;
     temperature?: number;
+    reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
     responseFormat?: { type: "json_object" };
   },
 ): Promise<OpenAiChatResult> {
@@ -69,6 +70,9 @@ export async function callOpenAiChat(
 
   // API recenti: max_completion_tokens (max_tokens fallisce su gpt-5.x e modelli nuovi).
   requestBody.max_completion_tokens = options?.maxTokens ?? 1200;
+  if (isReasoning && options?.reasoningEffort) {
+    requestBody.reasoning_effort = options.reasoningEffort;
+  }
   if (!isReasoning) {
     requestBody.temperature = options?.temperature ?? 0.4;
   }

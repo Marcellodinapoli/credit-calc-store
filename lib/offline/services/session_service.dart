@@ -14,7 +14,8 @@ enum AppSessionRole { primary, secondaryBlocked }
 class SessionService {
   SessionService({required this.userId});
 
-  static const _staleAfter = Duration(minutes: 2);
+  static const _staleAfter = Duration(seconds: 45);
+  static const _heartbeatEvery = Duration(seconds: 15);
   static const _deviceIdKey = 'credit_calc_device_id';
   static const _platform = 'calc_store';
 
@@ -43,6 +44,7 @@ class SessionService {
 
     if (_role == AppSessionRole.primary) {
       _startHeartbeat();
+      unawaited(_touch());
     }
 
     _watchSub = _ref.snapshots().listen(
@@ -147,7 +149,7 @@ class SessionService {
 
   void _startHeartbeat() {
     _heartbeat?.cancel();
-    _heartbeat = Timer.periodic(const Duration(minutes: 1), (_) {
+    _heartbeat = Timer.periodic(_heartbeatEvery, (_) {
       unawaited(_touch());
     });
   }

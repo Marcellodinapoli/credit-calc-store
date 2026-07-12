@@ -7,10 +7,22 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:credit_calc_core/credit_calc_core.dart';
+import 'package:credit_calc_core/credit_calc_core.dart'
+    show
+        UserSubscriptionService,
+        UserSubscriptionSnapshot,
+        companyDedicatedSubscriptionPlan,
+        isCompanySubscriptionAudience,
+        subscriptionPlanLabel,
+        subscriptionPlansForType,
+        LimitsResetCouponSection,
+        appFormTextField,
+        appFormFieldDecoration;
 import '../../session/credit_core_session_runtime.dart';
 import '../../core/dimensions.dart';
+import '../../core/theme/project_colors.dart';
 import '../../core/work_code_helpers.dart';
+import 'personal_area_menu.dart';
 import 'personal_area_shell.dart';
 
 class MyDataPage extends StatefulWidget {
@@ -310,6 +322,12 @@ class _MyDataPageState extends State<MyDataPage> {
     }
 
     try {
+      await _firestore.collection('roleplay_progress').doc(uid).delete();
+    } catch (e) {
+      debugPrint('❌ Errore cancellazione roleplay_progress: $e');
+    }
+
+    try {
       final upDoc =
       _firestore.collection('userProgress').doc(uid);
 
@@ -365,231 +383,219 @@ class _MyDataPageState extends State<MyDataPage> {
     return PersonalAreaShell(
       pageTitle: 'I miei dati',
       body: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          isMobile ? 16 : 28,
+          8,
+          isMobile ? 16 : 28,
+          32,
+        ),
         child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      isCompany
-                          ? Icons.business_outlined
-                          : Icons.person_outline,
-                      size: 32,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      isCompany ? 'Dati azienda' : 'Profilo',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Gestisci dati profilo e sicurezza.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 24),
-
-                // ---------------- UTENTE ----------------
-                if (!isCompany) ...[
-                  _kv('Nome', firstName.isNotEmpty ? firstName : '—', isMobile),
-                  _kv('Cognome',
-                      lastName.isNotEmpty ? lastName : '—', isMobile),
-                  _kv('Email', email.isNotEmpty ? email : '—', isMobile),
-                  _kv('Data registrazione', registrationDateTime, isMobile),
-                  const SizedBox(height: 8),
-                  if (isWork)
-                    _kv(
-                      'Codice utente',
-                      workUserCode.isNotEmpty ? workUserCode : '—',
-                      isMobile,
-                    )
-                  else ...[
-                    if (userCode.isNotEmpty)
-                      _kv('Codice progressi', userCode, isMobile),
-                    _kv('Codice piattaforma', userUid, isMobile),
-                  ],
-                ],
-
-                // ---------------- AZIENDA ----------------
-                if (isCompany) ...[
-                  _kv('Ragione sociale',
-                      companyName.isNotEmpty ? companyName : '—', isMobile),
-                  _kv('Partita IVA', piva.isNotEmpty ? piva : '—', isMobile),
-                  _kv('Email azienda',
-                      companyEmail.isNotEmpty ? companyEmail : '—', isMobile),
-                  _kv('Telefono', phone.isNotEmpty ? phone : '—', isMobile),
-                  _kv('Indirizzo',
-                      address.isNotEmpty ? address : '—', isMobile),
-                  _kv('Sito web',
-                      website.isNotEmpty ? website : '—', isMobile),
-                  _kv('Data registrazione', registrationDateTime, isMobile),
-                  const Divider(height: 32),
-                  _kv('Referente',
-                      referencePerson.isNotEmpty ? referencePerson : '—',
-                      isMobile),
-                  _kv('Ruolo referente',
-                      referenceRole.isNotEmpty ? referenceRole : '—',
-                      isMobile),
-                  const Divider(height: 32),
-
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: isMobile ? 140 : 200,
-                          child: const SelectableText(
-                            'Codice aziendale',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        Expanded(
-                          child: SelectableText(
-                            companyCode.isNotEmpty ? companyCode : '—',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: isMobile ? 140 : 200,
-                          child: const SelectableText(
-                            'Codice collaboratori',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        Expanded(
-                          child: SelectableText(
-                            collaboratorsCode.isNotEmpty
-                                ? collaboratorsCode
-                                : '—',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: isMobile ? 140 : 200,
-                          child: const SelectableText(
-                            'Codice supervisori',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        Expanded(
-                          child: SelectableText(
-                            supervisorsCode.isNotEmpty
-                                ? supervisorsCode
-                                : '—',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-                  SelectableText(
-                    'Accesso operatori e TL:\n'
-                        'https://creditplanet-work.netlify.app',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-
-                if (userType == 'public') ...[
-                  const SizedBox(height: 24),
-                  Text(
-                    'Coupon limiti',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Inserisci un coupon creato dal backoffice per azzerare '
-                    'i contatori mensili del tuo piano.',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  const LimitsResetCouponSection(),
-                ],
-
-                const SizedBox(height: 24),
-
-                if (isMobile)
-                  Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ProfilePageHeader(isCompany: isCompany),
+            const SizedBox(height: 20),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final sideBySide = constraints.maxWidth >= 640;
+                if (!sideBySide) {
+                  return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      FilledButton.icon(
-                        onPressed: () => _openEditDialog(context),
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Modifica dati'),
+                      if (!isWork) ...[
+                        const _PlanSummaryCard(),
+                        const SizedBox(height: 28),
+                      ],
+                      _SectionHeading(
+                        title: isCompany
+                            ? 'Anagrafica azienda'
+                            : 'Dati personali',
+                        subtitle: isCompany
+                            ? 'Informazioni registrate per il workspace aziendale.'
+                            : 'Informazioni del tuo account CreditCalc.',
                       ),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: () => _openPasswordDialog(context),
-                        icon: const Icon(Icons.lock_reset),
-                        label: const Text('Cambia password'),
-                      ),
-                      const SizedBox(height: 10),
-                      TextButton.icon(
-                        onPressed: () => _confirmDelete(context),
-                        icon: const Icon(Icons.delete_outline),
-                        label: Text(
-                          isCompany && !canDeleteCompany
-                              ? 'Disattiva account (ci sono collegamenti)'
-                              : 'Elimina account',
-                        ),
-                      ),
+                      const SizedBox(height: 12),
+                      _buildPersonalDataCard(isCompany, isWork, isMobile),
                     ],
-                  )
-                else
-                  Row(
+                  );
+                }
+                if (isWork) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      FilledButton.icon(
-                        onPressed: () => _openEditDialog(context),
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Modifica dati'),
+                      const _SectionHeading(
+                        title: 'Dati personali',
+                        subtitle:
+                            'Informazioni del tuo account CreditCalc.',
                       ),
-                      const SizedBox(width: 10),
-                      OutlinedButton.icon(
-                        onPressed: () => _openPasswordDialog(context),
-                        icon: const Icon(Icons.lock_reset),
-                        label: const Text('Cambia password'),
-                      ),
-                      const SizedBox(width: 10),
-                      TextButton.icon(
-                        onPressed: () => _confirmDelete(context),
-                        icon: const Icon(Icons.delete_outline),
-                        label: Text(
-                          isCompany && !canDeleteCompany
-                              ? 'Disattiva account (ci sono collegamenti)'
-                              : 'Elimina account',
-                        ),
-                      ),
+                      const SizedBox(height: 12),
+                      _buildPersonalDataCard(isCompany, isWork, isMobile),
                     ],
-                  ),
-              ],
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Expanded(
+                          child: _SectionHeading(
+                            title: 'Il tuo piano',
+                            subtitle:
+                                'Piano attivo, coupon e gestione abbonamento.',
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: _SectionHeading(
+                            title: isCompany
+                                ? 'Anagrafica azienda'
+                                : 'Dati personali',
+                            subtitle: isCompany
+                                ? 'Informazioni registrate per il workspace aziendale.'
+                                : 'Informazioni del tuo account CreditCalc.',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Expanded(
+                            child: _PlanSummaryCard(
+                              showHeader: false,
+                              stretch: true,
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: _buildPersonalDataCard(
+                              isCompany,
+                              isWork,
+                              isMobile,
+                              stretch: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
+            if (userType == 'public') ...[
+              const SizedBox(height: 28),
+              const _SectionHeading(
+                title: 'Coupon limiti',
+                subtitle:
+                    'Inserisci un coupon creato dal backoffice per azzerare '
+                    'i contatori mensili del tuo piano.',
+              ),
+              const SizedBox(height: 12),
+              const LimitsResetCouponSection(),
+            ],
+            const SizedBox(height: 28),
+            const _SectionHeading(
+              title: 'Sicurezza e account',
+              subtitle: 'Aggiorna i dati, la password o gestisci l\'account.',
+            ),
+            const SizedBox(height: 12),
+            _ProfileDataCard(
+              isMobile: isMobile,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: isMobile
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: () => _openEditDialog(context),
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                            label: const Text('Modifica dati'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: ProjectColors.area,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            onPressed: () => _openPasswordDialog(context),
+                            icon: const Icon(Icons.lock_reset, size: 20),
+                            label: const Text('Cambia password'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: ProjectColors.area,
+                              side: const BorderSide(color: ProjectColors.area),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: () => _confirmDelete(context),
+                            icon: Icon(
+                              Icons.delete_outline,
+                              size: 20,
+                              color: Colors.red.shade700,
+                            ),
+                            label: Text(
+                              isCompany && !canDeleteCompany
+                                  ? 'Disattiva account (ci sono collegamenti)'
+                                  : 'Elimina account',
+                              style: TextStyle(color: Colors.red.shade700),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: () => _openEditDialog(context),
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                            label: const Text('Modifica dati'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: ProjectColors.area,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 14,
+                              ),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => _openPasswordDialog(context),
+                            icon: const Icon(Icons.lock_reset, size: 20),
+                            label: const Text('Cambia password'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: ProjectColors.area,
+                              side: const BorderSide(color: ProjectColors.area),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 14,
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => _confirmDelete(context),
+                            icon: Icon(
+                              Icons.delete_outline,
+                              size: 20,
+                              color: Colors.red.shade700,
+                            ),
+                            label: Text(
+                              isCompany && !canDeleteCompany
+                                  ? 'Disattiva account (ci sono collegamenti)'
+                                  : 'Elimina account',
+                              style: TextStyle(color: Colors.red.shade700),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -598,21 +604,172 @@ class _MyDataPageState extends State<MyDataPage> {
 // -----------------------------------------------------------------------------
 // UI HELPERS
 // -----------------------------------------------------------------------------
-  Widget _kv(String k, String v, bool isMobile) {
+  Widget _buildPersonalDataCard(
+    bool isCompany,
+    bool isWork,
+    bool isMobile, {
+    bool stretch = false,
+  }) {
+    return _ProfileDataCard(
+      isMobile: isMobile,
+      stretch: stretch,
+      children: [
+        if (!isCompany) ...[
+          _profileRow(
+            'Nome',
+            firstName.isNotEmpty ? firstName : '—',
+            isMobile,
+          ),
+          _profileRow(
+            'Cognome',
+            lastName.isNotEmpty ? lastName : '—',
+            isMobile,
+          ),
+          _profileRow(
+            'Email',
+            email.isNotEmpty ? email : '—',
+            isMobile,
+          ),
+          _profileRow(
+            'Data registrazione',
+            registrationDateTime,
+            isMobile,
+          ),
+          if (isWork)
+            _profileRow(
+              'Codice utente',
+              workUserCode.isNotEmpty ? workUserCode : '—',
+              isMobile,
+            )
+          else ...[
+            if (userCode.isNotEmpty)
+              _profileRow(
+                'Codice progressi',
+                userCode,
+                isMobile,
+              ),
+            _profileRow(
+              'Codice piattaforma',
+              userUid,
+              isMobile,
+              monospace: true,
+            ),
+          ],
+        ],
+        if (isCompany) ...[
+          _profileRow(
+            'Ragione sociale',
+            companyName.isNotEmpty ? companyName : '—',
+            isMobile,
+          ),
+          _profileRow(
+            'Partita IVA',
+            piva.isNotEmpty ? piva : '—',
+            isMobile,
+          ),
+          _profileRow(
+            'Email azienda',
+            companyEmail.isNotEmpty ? companyEmail : '—',
+            isMobile,
+          ),
+          _profileRow(
+            'Telefono',
+            phone.isNotEmpty ? phone : '—',
+            isMobile,
+          ),
+          _profileRow(
+            'Indirizzo',
+            address.isNotEmpty ? address : '—',
+            isMobile,
+          ),
+          _profileRow(
+            'Sito web',
+            website.isNotEmpty ? website : '—',
+            isMobile,
+          ),
+          _profileRow(
+            'Data registrazione',
+            registrationDateTime,
+            isMobile,
+          ),
+          _profileRow(
+            'Referente',
+            referencePerson.isNotEmpty ? referencePerson : '—',
+            isMobile,
+          ),
+          _profileRow(
+            'Ruolo referente',
+            referenceRole.isNotEmpty ? referenceRole : '—',
+            isMobile,
+          ),
+          _profileRow(
+            'Codice aziendale',
+            companyCode.isNotEmpty ? companyCode : '—',
+            isMobile,
+            monospace: true,
+          ),
+          _profileRow(
+            'Codice collaboratori',
+            collaboratorsCode.isNotEmpty ? collaboratorsCode : '—',
+            isMobile,
+            monospace: true,
+          ),
+          _profileRow(
+            'Codice supervisori',
+            supervisorsCode.isNotEmpty ? supervisorsCode : '—',
+            isMobile,
+            monospace: true,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            child: SelectableText(
+              'Accesso operatori e TL:\n'
+              'https://creditplanet-work.netlify.app',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: ProjectColors.area,
+                    fontWeight: FontWeight.w600,
+                    height: 1.45,
+                  ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _profileRow(
+    String label,
+    String value,
+    bool isMobile, {
+    bool monospace = false,
+  }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: isMobile ? 140 : 200,
-            child: SelectableText(
-              k,
-              style: const TextStyle(fontWeight: FontWeight.w700),
+            width: isMobile ? 128 : 168,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade600,
+                letterSpacing: 0.02,
+              ),
             ),
           ),
           Expanded(
-            child: SelectableText(v),
+            child: SelectableText(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                height: 1.4,
+                fontFamily: monospace ? 'monospace' : null,
+                color: const Color(0xFF1F2937),
+              ),
+            ),
           ),
         ],
       ),
@@ -890,6 +1047,489 @@ class _MyDataPageState extends State<MyDataPage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ProfilePageHeader extends StatelessWidget {
+  const _ProfilePageHeader({required this.isCompany});
+
+  final bool isCompany;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            color: ProjectColors.area.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: ProjectColors.area.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Icon(
+            isCompany ? Icons.business_outlined : Icons.person_outline,
+            color: ProjectColors.area,
+            size: 28,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isCompany ? 'Dati azienda' : 'Profilo',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF111827),
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Gestisci piano, dati personali e sicurezza dell\'account.',
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.45,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF111827),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileDataCard extends StatelessWidget {
+  const _ProfileDataCard({
+    required this.isMobile,
+    this.children,
+    this.child,
+    this.stretch = false,
+  });
+
+  final bool isMobile;
+  final List<Widget>? children;
+  final Widget? child;
+  final bool stretch;
+
+  @override
+  Widget build(BuildContext context) {
+    final card = DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: child ??
+            Column(
+              children: [
+                for (var i = 0; i < children!.length; i++) ...[
+                  children![i],
+                  if (i < children!.length - 1)
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: Colors.grey.shade100,
+                      indent: 20,
+                      endIndent: 20,
+                    ),
+                ],
+              ],
+            ),
+      ),
+    );
+
+    if (!stretch) return card;
+    return SizedBox(width: double.infinity, height: double.infinity, child: card);
+  }
+}
+
+String _planTierLabel(String planId) {
+  return switch (planId) {
+    'enterprise' => 'ENTERPRISE',
+    'plus' => 'PLUS',
+    _ => 'FREE',
+  };
+}
+
+class _PlanSummaryCard extends StatelessWidget {
+  const _PlanSummaryCard({
+    this.showHeader = true,
+    this.stretch = false,
+  });
+
+  final bool showHeader;
+  final bool stretch;
+
+  void _openPlanPage(BuildContext context) {
+    PersonalAreaMenuItem.subscription.open(context);
+  }
+
+  static String _formatCouponDate(DateTime dt) =>
+      '${dt.day.toString().padLeft(2, '0')}/'
+      '${dt.month.toString().padLeft(2, '0')}/'
+      '${dt.year}';
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<UserSubscriptionSnapshot>(
+      stream: UserSubscriptionService.watchCurrent(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+
+        final sub = snapshot.data!;
+        final isCompany = isCompanySubscriptionAudience(sub.registerType);
+        final plan = isCompany
+            ? companyDedicatedSubscriptionPlan
+            : sub.planOption(subscriptionPlansForType(sub.registerType));
+        final planName =
+            plan?.name ?? subscriptionPlanLabel(sub.planId);
+        final tierLabel = isCompany
+            ? 'AZIENDA'
+            : _planTierLabel(sub.planId);
+        final expired = sub.isCouponLimitsEffectExpired;
+
+        final cardBody = DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                ProjectColors.area.withValues(alpha: 0.08),
+                const Color(0xFFF8FAFC),
+              ],
+            ),
+            border: Border.all(
+              color: ProjectColors.area.withValues(alpha: 0.22),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: ProjectColors.area.withValues(alpha: 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 5,
+                  color: ProjectColors.area,
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize:
+                          stretch ? MainAxisSize.max : MainAxisSize.min,
+                      children: [
+                        if (showHeader)
+                          Row(
+                            children: [
+                              const Text(
+                                'Il tuo piano',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  letterSpacing: 0.06,
+                                  color: ProjectColors.area,
+                                ),
+                              ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: ProjectColors.area
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  tierLabel,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.08,
+                                    color: ProjectColors.area,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    ProjectColors.area.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                tierLabel,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.08,
+                                  color: ProjectColors.area,
+                                ),
+                              ),
+                            ),
+                          ),
+                        SizedBox(height: showHeader ? 12 : 8),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              planName,
+                              style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF111827),
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            if (plan != null) ...[
+                              const SizedBox(width: 10),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text(
+                                  plan.price,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (plan != null) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            plan.description,
+                            style: TextStyle(
+                              color: Colors.grey.shade700,
+                              height: 1.5,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: expired
+                                ? const Color(0xFFFFF7ED)
+                                : Colors.white.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: expired
+                                  ? const Color(0xFFFDBA74)
+                                  : const Color(0xFFE5E7EB),
+                            ),
+                          ),
+                          child: Text(
+                            sub.statusLabel,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: expired
+                                  ? Colors.orange.shade900
+                                  : const Color(0xFF374151),
+                            ),
+                          ),
+                        ),
+                        if (sub.hasCoupon || sub.lifetimeAccess) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: expired
+                                  ? const Color(0xFFFFF7ED)
+                                  : const Color(0xFFF0FDF4),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: expired
+                                    ? const Color(0xFFFDBA74)
+                                    : const Color(0xFF86EFAC),
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  expired
+                                      ? Icons.event_busy_outlined
+                                      : Icons.verified_outlined,
+                                  size: 20,
+                                  color: expired
+                                      ? Colors.orange.shade800
+                                      : Colors.green.shade700,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        expired
+                                            ? 'Coupon applicato (effetto scaduto)'
+                                            : 'Coupon applicato',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      if (sub.hasCoupon) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Codice: ${sub.couponCode}',
+                                          style: const TextStyle(
+                                            fontFamily: 'monospace',
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                      if (sub.couponAppliedAt != null) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Data inserimento: '
+                                          '${_formatCouponDate(sub.couponAppliedAt!)}',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade800,
+                                            height: 1.4,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        expired
+                                            ? 'Effetto limiti terminato il '
+                                                '${_formatCouponDate(sub.limitsEffectExpiresAt!)}. '
+                                                'Sono attivi i limiti del piano Gratis.'
+                                            : sub.limitsEffectExpiresAt != null
+                                                ? 'Data effetto limiti: '
+                                                    '${_formatCouponDate(sub.limitsEffectExpiresAt!)}'
+                                                : sub.lifetimeAccess
+                                                    ? 'Accesso lifetime attivo senza abbonamento ricorrente.'
+                                                    : 'Coupon registrato in fase di iscrizione.',
+                                        style: TextStyle(
+                                          color: expired
+                                              ? Colors.orange.shade900
+                                              : Colors.grey.shade800,
+                                          height: 1.4,
+                                          fontSize: 13,
+                                          fontWeight: expired
+                                              ? FontWeight.w600
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        if (stretch) const Spacer(),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: () => _openPlanPage(context),
+                          icon: const Icon(Icons.workspace_premium_outlined,
+                              size: 18),
+                          label: const Text('Gestisci piano e abbonamento'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: ProjectColors.area,
+                            side: const BorderSide(color: ProjectColors.area),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        if (!stretch) return cardBody;
+        return SizedBox(
+          width: double.infinity,
+          height: double.infinity,
+          child: cardBody,
+        );
+      },
     );
   }
 }

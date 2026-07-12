@@ -10,6 +10,7 @@ import '../pages/bk/bk_coupons_page.dart';
 import '../pages/bk/bk_warmup_monitoring_page.dart';
 import '../pages/bk/bk_warmup_contestations_page.dart';
 import '../pages/bk/bk_call_analysis_page.dart';
+import '../pages/bk/bk_normative_search_page.dart';
 import '../pages/bk/bk_ecosystem_sections_page.dart';
 import '../pages/bk/bk_plan_limits_page.dart';
 import '../pages/creditcalc/device_sync_page.dart';
@@ -496,6 +497,13 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                     onTap: () => _closeAndArea(PersonalAreaMenuItem.community),
                   ),
                   _item(
+                    icon: Icons.support_agent_outlined,
+                    title: PersonalAreaMenuItem.directSupport.title,
+                    iconColor: _areaColor,
+                    showBadge: badges.directSupport,
+                    onTap: () => _closeAndArea(PersonalAreaMenuItem.directSupport),
+                  ),
+                  _item(
                     icon: Icons.menu_book_outlined,
                     title: PersonalAreaMenuItem.guide.title,
                     iconColor: _areaColor,
@@ -584,6 +592,18 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                     }),
                   ),
                   _item(
+                    icon: Icons.search_outlined,
+                    title: 'Prompt ricerca normativa',
+                    iconColor: _areaColor,
+                    onTap: () => _closeAnd(() {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const BkNormativeSearchPage(),
+                        ),
+                      );
+                    }),
+                  ),
+                  _item(
                     icon: Icons.call_outlined,
                     title: 'Prompt analisi telefonata',
                     iconColor: _areaColor,
@@ -596,13 +616,6 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                     }),
                   ),
                 ],
-                _item(
-                  icon: Icons.support_agent_outlined,
-                  title: PersonalAreaMenuItem.directSupport.title,
-                  iconColor: _areaColor,
-                  showBadge: badges.directSupport,
-                  onTap: () => _closeAndArea(PersonalAreaMenuItem.directSupport),
-                ),
               ]);
             }
 

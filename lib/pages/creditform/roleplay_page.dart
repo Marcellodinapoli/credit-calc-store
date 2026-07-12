@@ -30,7 +30,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
   int _lastSeen = 0;
   bool _readStateReady = false;
 
-  SpeechToText _speech = SpeechToText();
+  final SpeechToText _speech = SpeechToText();
   final FlutterTts _tts = FlutterTts();
   bool _speechReady = false;
   String? _speechLocaleId;
@@ -45,6 +45,8 @@ class _RoleplayPageState extends State<RoleplayPage> {
 
   bool _simulationActive = false;
   bool _isSpeaking = false;
+  bool? _ttsVoiceMale;
+  bool _ttsReady = false;
 
   Map<String, dynamic>? _currentSimulation;
   String? _currentSimulationId;
@@ -145,41 +147,46 @@ class _RoleplayPageState extends State<RoleplayPage> {
   }
 
   Future<void> _configureTtsVoice({required bool preferMale}) async {
+    if (_ttsReady && _ttsVoiceMale == preferMale) return;
+
     await _tts.setLanguage('it-IT');
-    await _tts.setSpeechRate(0.48);
+    await _tts.setSpeechRate(0.52);
     await _tts.setPitch(preferMale ? 0.78 : 1.0);
 
     final voices = await _tts.getVoices;
-    if (voices is! List) return;
+    if (voices is List) {
+      Map<String, String>? italian;
+      Map<String, String>? maleItalian;
 
-    Map<String, String>? italian;
-    Map<String, String>? maleItalian;
+      for (final raw in voices) {
+        if (raw is! Map) continue;
+        final voice = Map<String, String>.from(
+          raw.map((k, v) => MapEntry(k.toString(), v.toString())),
+        );
+        final locale = (voice['locale'] ?? '').toLowerCase();
+        final name = (voice['name'] ?? '').toLowerCase();
+        if (!locale.contains('it')) continue;
 
-    for (final raw in voices) {
-      if (raw is! Map) continue;
-      final voice = Map<String, String>.from(
-        raw.map((k, v) => MapEntry(k.toString(), v.toString())),
-      );
-      final locale = (voice['locale'] ?? '').toLowerCase();
-      final name = (voice['name'] ?? '').toLowerCase();
-      if (!locale.contains('it')) continue;
+        italian ??= voice;
+        if (name.contains('male') ||
+            name.contains('luca') ||
+            name.contains('diego') ||
+            name.contains('cosimo') ||
+            name.contains('matteo') ||
+            name.contains('it-it-x-itd')) {
+          maleItalian = voice;
+          break;
+        }
+      }
 
-      italian ??= voice;
-      if (name.contains('male') ||
-          name.contains('luca') ||
-          name.contains('diego') ||
-          name.contains('cosimo') ||
-          name.contains('matteo') ||
-          name.contains('it-it-x-itd')) {
-        maleItalian = voice;
-        break;
+      final chosen = preferMale ? (maleItalian ?? italian) : italian;
+      if (chosen != null) {
+        await _tts.setVoice(chosen);
       }
     }
 
-    final chosen = preferMale ? (maleItalian ?? italian) : italian;
-    if (chosen != null) {
-      await _tts.setVoice(chosen);
-    }
+    _ttsVoiceMale = preferMale;
+    _ttsReady = true;
   }
 
   Map<String, dynamic> _conversationPayload({required String userText}) {
@@ -209,54 +216,66 @@ class _RoleplayPageState extends State<RoleplayPage> {
     setState(() => _awaitingReply = true);
 
     try {
-      await _speech.stop();
-    } catch (_) {}
-    if (mounted) setState(() => _micListening = false);
+      unawaited(_speech.stop().catchError((_) {}));
+      if (mounted) setState(() => _micListening = false);
 
-    final payload = _conversationPayload(userText: userText);
-    final priorHistory = userText.isEmpty
-        ? _chatHistory
-            .map((m) => {
-                  'role': m['role'] ?? 'user',
-                  'content': m['content'] ?? '',
-                })
-            .toList()
-        : _chatHistory
-            .where((m) =>
-                m['role'] != 'user' || m['content'] != userText)
-            .map((m) => {
-                  'role': m['role'] ?? 'user',
-                  'content': m['content'] ?? '',
-                })
-            .toList();
+      final payload = _conversationPayload(userText: userText);
+      final priorHistory = userText.isEmpty
+          ? _chatHistory
+              .map((m) => {
+                    'role': m['role'] ?? 'user',
+                    'content': m['content'] ?? '',
+                  })
+              .toList()
+          : _chatHistory
+              .where((m) =>
+                  m['role'] != 'user' || m['content'] != userText)
+              .map((m) => {
+                    'role': m['role'] ?? 'user',
+                    'content': m['content'] ?? '',
+                  })
+              .toList();
 
-    final result = await RoleplayConversationService.step(
-      userText: userText,
-      prompt: payload['prompt'] as String,
-      sessionId: payload['sessionId'] as String,
-      history: priorHistory,
-      practiceData: payload['practiceData'] as List<dynamic>,
-      scenarioWeights: payload['scenarioWeights'] as Map<String, dynamic>?,
-      responderRole: payload['responderRole'] as String?,
-      difficulty: payload['difficulty'] as String?,
-      personality: payload['personality'] as String?,
-    );
+      final result = await RoleplayConversationService.step(
+        userText: userText,
+        prompt: payload['prompt'] as String,
+        sessionId: payload['sessionId'] as String,
+        history: priorHistory,
+        practiceData: payload['practiceData'] as List<dynamic>,
+        scenarioWeights: payload['scenarioWeights'] as Map<String, dynamic>?,
+        responderRole: payload['responderRole'] as String?,
+        difficulty: payload['difficulty'] as String?,
+        personality: payload['personality'] as String?,
+      );
 
-    if (!mounted || !_simulationActive) return;
+      if (!mounted || !_simulationActive) return;
 
-    final reply = (result['reply'] ?? '').toString().trim();
-    if (result['role'] != null) {
-      _responderRole = result['role'].toString();
-    }
+      final reply = (result['reply'] ?? '').toString().trim();
+      if (result['role'] != null) {
+        _responderRole = result['role'].toString();
+      }
 
-    setState(() => _awaitingReply = false);
-
-    if (reply.isNotEmpty) {
-      _chatHistory.add({'role': 'assistant', 'content': reply});
-      if (mounted) setState(() {});
-      await _speak(reply);
-    } else if (_simulationActive && mounted) {
-      _scheduleContinuousListening();
+      if (reply.isNotEmpty) {
+        _chatHistory.add({'role': 'assistant', 'content': reply});
+        if (mounted) setState(() {});
+        await _speak(reply);
+      } else if (_simulationActive && mounted) {
+        _scheduleContinuousListening();
+      }
+    } catch (e, st) {
+      debugPrint('Roleplay step error: $e\n$st');
+      if (mounted && _simulationActive) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Errore nella simulazione. Riprova a parlare.\n$e',
+            ),
+          ),
+        );
+        _scheduleContinuousListening();
+      }
+    } finally {
+      if (mounted) setState(() => _awaitingReply = false);
     }
   }
 
@@ -282,7 +301,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
   }
 
   void _scheduleContinuousListening({
-    Duration delay = const Duration(milliseconds: 250),
+    Duration delay = const Duration(milliseconds: 80),
   }) {
     if (!_shouldKeepListening) return;
     final token = ++_micRestartToken;
@@ -291,7 +310,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
       await _startListeningOnce();
       if (!mounted || !_shouldKeepListening) return;
       if (!_speech.isListening) {
-        _scheduleContinuousListening(delay: const Duration(milliseconds: 500));
+        _scheduleContinuousListening(delay: const Duration(milliseconds: 300));
       }
     });
   }
@@ -332,17 +351,6 @@ class _RoleplayPageState extends State<RoleplayPage> {
     } catch (_) {}
   }
 
-  Future<void> _refreshSpeechEngine() async {
-    _cancelMicRestart();
-    try {
-      await _speech.stop();
-    } catch (_) {}
-    _speech = SpeechToText();
-    _speechReady = false;
-    _speechLocaleId = null;
-    await _initSpeech();
-  }
-
   Future<void> _startListeningOnce() async {
     if (!_speechReady || !_shouldKeepListening || _startingListen) return;
     if (_speech.isListening) return;
@@ -352,7 +360,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
       try {
         await _speech.stop();
       } catch (_) {}
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
 
       if (!_shouldKeepListening || !mounted) return;
 
@@ -361,7 +369,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
           localeId: _speechLocaleId,
           listenMode: ListenMode.dictation,
           listenFor: const Duration(minutes: 30),
-          pauseFor: const Duration(seconds: 8),
+          pauseFor: const Duration(seconds: 3),
           cancelOnError: false,
           partialResults: true,
         ),
@@ -407,12 +415,11 @@ class _RoleplayPageState extends State<RoleplayPage> {
     setState(() {});
 
     _stopSpeech();
-    unawaited(_refreshSpeechEngine());
+    if (!_speechReady) {
+      await _initSpeech();
+    }
 
     await _requestRoleplayReply(userText: '');
-    if (_simulationActive && mounted) {
-      _scheduleContinuousListening();
-    }
   }
 
   Future<void> _stopSimulation() async {
@@ -496,7 +503,10 @@ class _RoleplayPageState extends State<RoleplayPage> {
         prompt: RoleplayConfigService.resolveSimulationPrompt(simulationData),
         title: title,
         history: _chatHistory,
+        practiceData: practiceData,
         practiceText: practiceText,
+        difficulty: RoleplayConfigService.resolveDifficulty(simulationData),
+        personality: RoleplayConfigService.resolvePersonality(simulationData),
       );
 
       if (!mounted) return;
@@ -582,21 +592,28 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _isSpeaking = true;
     if (mounted) setState(() => _micListening = false);
     try {
-      await _speech.stop();
-    } catch (_) {}
-    await _tts.stop();
+      unawaited(_speech.stop().catchError((_) {}));
+      await _tts.stop();
 
-    final role = (_responderRole ?? '').toUpperCase();
-    final preferMale = role != 'TERZO';
-    await _configureTtsVoice(preferMale: preferMale);
+      final role = (_responderRole ?? '').toUpperCase();
+      final preferMale = role != 'TERZO';
+      await _configureTtsVoice(preferMale: preferMale);
 
-    _tts.setCompletionHandler(() {
+      await _tts.awaitSpeakCompletion(true);
+      _tts.setCompletionHandler(() {
+        _isSpeaking = false;
+        if (_simulationActive && mounted) {
+          _scheduleContinuousListening();
+        }
+      });
+      await _tts.speak(text);
+    } catch (e, st) {
+      debugPrint('TTS error: $e\n$st');
       _isSpeaking = false;
       if (_simulationActive && mounted) {
         _scheduleContinuousListening();
       }
-    });
-    await _tts.speak(text);
+    }
   }
 
   @override
@@ -794,6 +811,10 @@ class _RoleplayPageState extends State<RoleplayPage> {
             final title = (data['title'] ?? 'Simulazione').toString();
             final practiceData =
                 (data['practiceData'] as List<dynamic>? ?? []);
+            final difficulty =
+                RoleplayConfigService.resolveDifficulty(data);
+            final personality =
+                RoleplayConfigService.resolvePersonality(data);
             final completed = data['completed'] == true;
 
             final createdAt = data['date'];
@@ -809,6 +830,8 @@ class _RoleplayPageState extends State<RoleplayPage> {
             return _RoleplaySimulationCard(
               title: title,
               practiceData: practiceData,
+              difficulty: difficulty,
+              personality: personality,
               isNew: isNew,
               completed: completed,
               simulationActive: _simulationActive,
@@ -850,6 +873,8 @@ class _RoleplayPageState extends State<RoleplayPage> {
 class _RoleplaySimulationCard extends StatelessWidget {
   final String title;
   final List<dynamic> practiceData;
+  final String difficulty;
+  final String personality;
   final bool isNew;
   final bool completed;
   final bool simulationActive;
@@ -861,6 +886,8 @@ class _RoleplaySimulationCard extends StatelessWidget {
   const _RoleplaySimulationCard({
     required this.title,
     required this.practiceData,
+    required this.difficulty,
+    required this.personality,
     required this.isNew,
     required this.completed,
     required this.simulationActive,
@@ -913,6 +940,16 @@ class _RoleplaySimulationCard extends StatelessWidget {
                   ),
                 ),
             ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Difficoltà: ${RoleplayConfigService.difficultyLabel(difficulty)}'
+            ' · Personalità: ${RoleplayConfigService.personalityLabel(personality)}',
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.black54,
+              height: 1.4,
+            ),
           ),
           if (practiceData.isNotEmpty) ...[
             const SizedBox(height: 12),

@@ -489,10 +489,16 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
               children: [
                 Icon(Icons.mic, color: _cfg.color, size: 20),
                 const SizedBox(width: 8),
-                Text(
-                  'La tua risposta – ${turn.phaseTitle}',
-                  style:
-                      const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                Expanded(
+                  child: Text(
+                    'La tua risposta – ${turn.phaseTitle}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),

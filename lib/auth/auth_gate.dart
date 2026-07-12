@@ -104,6 +104,7 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
   void initState() {
     super.initState();
     FcmService.syncForCurrentUser();
+    unawaited(CreditCoreSessionRuntime.ensureBootstrap(widget.user.uid));
     _checkAccess();
   }
 

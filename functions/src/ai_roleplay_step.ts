@@ -11,7 +11,7 @@ interface HistoryItem {
   content?: string;
 }
 
-function trimHistory(history: HistoryItem[] = [], maxMessages = 10): HistoryItem[] {
+function trimHistory(history: HistoryItem[] = [], maxMessages = 6): HistoryItem[] {
   return history
     .slice(-maxMessages)
     .map((item) => ({
@@ -97,6 +97,11 @@ export const roleplayStep = onCall(
     const systemPrompt = [
       prompt,
       "",
+      "CONFIGURAZIONE BACKOFFICE (obbligatoria):",
+      "Segui il prompt di simulazione sopra e i parametri sotto.",
+      "Difficoltà, personalità e dati pratica hanno priorità su ogni istruzione "
+      + "di scelta casuale presente nel prompt.",
+      "",
       buildRoleplayBehaviorBlock({ difficulty, personality }),
       "",
       "CONTESTO LIVE ASSEGNATO DAL SISTEMA:",
@@ -126,13 +131,16 @@ export const roleplayStep = onCall(
         role: item.role === "assistant" ? ("assistant" as const) : ("user" as const),
         content: item.content ?? "",
       })),
-      { role: "user" as const, content: userText || "Pronto, chi parla?" },
+      {
+        role: "user" as const,
+        content: userText || "Pronto, chi parla?",
+      },
     ];
 
     const result = await callOpenAiChat(messages, {
-      maxTokens: 120,
-      temperature: 0.75,
+      maxTokens: 60,
       model: OPENAI_MODEL_GPT_55_REALTIME,
+      reasoningEffort: "none",
     });
 
     trackAiUsage({
