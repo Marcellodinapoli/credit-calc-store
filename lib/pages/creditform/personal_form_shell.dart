@@ -91,7 +91,7 @@ class _PersonalFormShellState extends State<PersonalFormShell> {
     return PrimaryModuleScaffold(
       project: BrandedPageProject.form,
       pageTitle: widget.pageTitle,
-      automaticallyImplyLeading: !widget.showAccountMenu,
+      automaticallyImplyLeading: true,
       bottomBar: widget.bottomBar == null
           ? null
           : Theme(data: buildFormTheme(), child: widget.bottomBar!),

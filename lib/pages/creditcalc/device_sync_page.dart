@@ -494,7 +494,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: true,
         title: const BrandedProjectName(project: BrandedPageProject.calc),
         backgroundColor: PageShellTheme.appBarBackground,
         actions: [

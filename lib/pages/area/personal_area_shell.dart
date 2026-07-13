@@ -87,7 +87,7 @@ class _PersonalAreaShellState extends State<PersonalAreaShell> {
       return PrimaryModuleScaffold(
         project: BrandedPageProject.area,
         pageTitle: widget.pageTitle,
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: true,
         bodyScrolls: true,
         bottomBar: widget.bottomBar,
         extraAppBarActions: [

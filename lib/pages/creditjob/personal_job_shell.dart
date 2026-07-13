@@ -91,7 +91,7 @@ class _PersonalJobShellState extends State<PersonalJobShell> {
     return PrimaryModuleScaffold(
       project: BrandedPageProject.job,
       pageTitle: widget.pageTitle,
-      automaticallyImplyLeading: !widget.showAccountMenu,
+      automaticallyImplyLeading: true,
       bottomBar: widget.bottomBar == null
           ? null
           : Theme(data: buildJobTheme(), child: widget.bottomBar!),
