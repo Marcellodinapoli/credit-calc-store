@@ -385,27 +385,29 @@ class _MyDataPageState extends State<MyDataPage> {
 
     return PersonalAreaShell(
       pageTitle: 'I miei dati',
-      body: ListView(
+      body: SingleChildScrollView(
         padding: EdgeInsets.only(
           bottom: 24 + Dimensions.resolvedBottomInset(context),
         ),
-        children: [
-          Text(
-            'Gestisci piano, dati personali e sicurezza dell\'account.',
-            style: TextStyle(
-              fontSize: 14,
-              height: 1.45,
-              color: Colors.grey.shade600,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Gestisci piano, dati personali e sicurezza dell\'account.',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.45,
+                color: Colors.grey.shade600,
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          _buildProfileSections(
-            context: context,
-            isCompany: isCompany,
-            isWork: isWork,
-            isMobile: isMobile,
-            contentWidth: contentWidth,
-          ),
+            const SizedBox(height: 20),
+            _buildProfileSections(
+              context: context,
+              isCompany: isCompany,
+              isWork: isWork,
+              isMobile: isMobile,
+              contentWidth: contentWidth,
+            ),
           if (userType == 'public') ...[
             const SizedBox(height: 28),
             const _SectionHeading(
@@ -515,7 +517,8 @@ class _MyDataPageState extends State<MyDataPage> {
                     ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -88,7 +88,6 @@ class _PersonalAreaShellState extends State<PersonalAreaShell> {
         project: BrandedPageProject.area,
         pageTitle: widget.pageTitle,
         automaticallyImplyLeading: true,
-        bodyScrolls: true,
         bottomBar: widget.bottomBar,
         extraAppBarActions: [
           AccountMenuBadgeIconButton(onPressed: _showAccountMenu),
