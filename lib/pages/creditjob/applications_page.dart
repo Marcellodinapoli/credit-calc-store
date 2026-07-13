@@ -49,6 +49,7 @@ class _ApplicationsPageState extends State<ApplicationsPage> {
 
     return PersonalJobShell(
       pageTitle: 'Le mie candidature',
+      showAccountMenu: true,
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('job_applications')

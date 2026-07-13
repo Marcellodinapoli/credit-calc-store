@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -7,7 +8,12 @@ import '../../offline/device_transfer/device_transfer_config.dart';
 import '../../offline/device_transfer/device_transfer_models.dart';
 import '../../offline/device_transfer/device_transfer_service.dart';
 import '../../offline/services/connectivity_service.dart';
+import '../../services/account_menu_badge_controller.dart';
+import '../../session/credit_core_session_runtime.dart';
+import '../../shell/credit_core_account_menu_sheet.dart';
+import '../../shell/credit_module_shell_actions.dart';
 import '../../ui/layout/page_shell.dart';
+import '../../widgets/account_menu_badge_icon_button.dart';
 
 class DeviceSyncPage extends StatefulWidget {
   const DeviceSyncPage({super.key});
@@ -18,6 +24,7 @@ class DeviceSyncPage extends StatefulWidget {
 
 class _DeviceSyncPageState extends State<DeviceSyncPage>
     with WidgetsBindingObserver {
+  final _accountMenuBadgeController = AccountMenuBadgeController();
   bool _loading = true;
   bool _busy = false;
   bool _online = true;
@@ -40,6 +47,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
   @override
   void initState() {
     super.initState();
+    _accountMenuBadgeController.start();
     WidgetsBinding.instance.addObserver(this);
     _refresh();
   }
@@ -120,6 +128,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
 
   @override
   void dispose() {
+    _accountMenuBadgeController.stop();
     WidgetsBinding.instance.removeObserver(this);
     _receiverSub?.cancel();
     _peerSub?.cancel();
@@ -457,12 +466,41 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
   bool get _waitingReceiver =>
       _isSender && _activeTransfer?.isPrepared == true && !_receiverReady;
 
+  Future<void> _logout() async {
+    await CreditCoreSessionRuntime.signOutWithSessionRelease();
+  }
+
+  void _openAnnouncements() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const AnnouncementsPage(),
+      ),
+    );
+  }
+
+  void _showAccountMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => CreditCoreAccountMenuSheet(
+        onAnnouncements: _openAnnouncements,
+        onLogout: _logout,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const BrandedProjectName(project: BrandedPageProject.calc),
         backgroundColor: PageShellTheme.appBarBackground,
+        actions: [
+          ...CreditModuleShellActions.appBarActions(context),
+          AccountMenuBadgeIconButton(onPressed: _showAccountMenu),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

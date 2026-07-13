@@ -123,6 +123,8 @@ class PrimaryModuleScaffold extends StatelessWidget {
   final String pageTitle;
   final Widget body;
   final Widget? bottomBar;
+  final List<Widget>? extraAppBarActions;
+  final bool automaticallyImplyLeading;
 
   const PrimaryModuleScaffold({
     super.key,
@@ -130,6 +132,8 @@ class PrimaryModuleScaffold extends StatelessWidget {
     required this.pageTitle,
     required this.body,
     this.bottomBar,
+    this.extraAppBarActions,
+    this.automaticallyImplyLeading = true,
   });
 
   @override
@@ -138,9 +142,13 @@ class PrimaryModuleScaffold extends StatelessWidget {
       backgroundColor: PageShellTheme.scaffoldBackground,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
+        automaticallyImplyLeading: automaticallyImplyLeading,
         backgroundColor: PageShellTheme.appBarBackground,
         title: BrandedProjectName(project: project),
-        actions: CreditModuleShellActions.appBarActions(context),
+        actions: [
+          ...CreditModuleShellActions.appBarActions(context),
+          if (extraAppBarActions != null) ...extraAppBarActions!,
+        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -176,6 +184,8 @@ class SecondaryPageScaffold extends StatelessWidget {
   final Widget body;
   final Widget? bottomBar;
   final bool padded;
+  final List<Widget>? extraAppBarActions;
+  final bool automaticallyImplyLeading;
 
   const SecondaryPageScaffold({
     super.key,
@@ -184,6 +194,8 @@ class SecondaryPageScaffold extends StatelessWidget {
     required this.body,
     this.bottomBar,
     this.padded = true,
+    this.extraAppBarActions,
+    this.automaticallyImplyLeading = true,
   });
 
   @override
@@ -210,11 +222,14 @@ class SecondaryPageScaffold extends StatelessWidget {
                 height: kToolbarHeight,
                 child: Row(
                   children: [
-                    IconButton(
-                      tooltip: 'Indietro',
-                      onPressed: () => Navigator.maybePop(context),
-                      icon: const Icon(Icons.arrow_back, color: Colors.black),
-                    ),
+                    if (automaticallyImplyLeading)
+                      IconButton(
+                        tooltip: 'Indietro',
+                        onPressed: () => Navigator.maybePop(context),
+                        icon: const Icon(Icons.arrow_back, color: Colors.black),
+                      )
+                    else
+                      const SizedBox(width: 16),
                     Expanded(
                       child: Text(
                         pageTitle,
@@ -227,6 +242,7 @@ class SecondaryPageScaffold extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (extraAppBarActions != null) ...extraAppBarActions!,
                     const SizedBox(width: 8),
                   ],
                 ),

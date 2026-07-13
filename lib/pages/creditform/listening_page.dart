@@ -82,6 +82,7 @@ class _ListeningPageState extends State<ListeningPage>
 
     return PersonalFormShell(
       pageTitle: "Warm-up",
+      showAccountMenu: true,
       body: Column(
         children: [
           const SizedBox(height: 8),

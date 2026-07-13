@@ -105,6 +105,7 @@ class _JobOffersPageState extends State<JobOffersPage> {
 
     return PersonalJobShell(
       pageTitle: 'Offerte di lavoro',
+      showAccountMenu: true,
       body: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

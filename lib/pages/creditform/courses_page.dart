@@ -67,6 +67,7 @@ class _CoursesPageState extends State<CoursesPage>
   Widget build(BuildContext context) {
     return PersonalFormShell(
       pageTitle: 'Corsi',
+      showAccountMenu: true,
       body: Column(
         children: [
           const SizedBox(height: 8),

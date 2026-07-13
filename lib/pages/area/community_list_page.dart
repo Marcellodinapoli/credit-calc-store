@@ -337,6 +337,7 @@ class _CommunityListPageState extends State<CommunityListPage> {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: "Community",
+      showAccountMenu: true,
       body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

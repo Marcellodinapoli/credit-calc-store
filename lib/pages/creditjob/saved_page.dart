@@ -40,8 +40,9 @@ class SavedPage extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      return const PersonalJobShell(
+      return PersonalJobShell(
       pageTitle: 'Salvati',
+        showAccountMenu: true,
         body: Center(
           child: Text("Utente non autenticato"),
         ),
@@ -50,6 +51,7 @@ class SavedPage extends StatelessWidget {
 
     return PersonalJobShell(
       pageTitle: 'Salvati',
+      showAccountMenu: true,
       body: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('users')

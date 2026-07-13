@@ -36,6 +36,7 @@ class _ReviewPageState extends State<ReviewPage> {
   Widget build(BuildContext context) {
     return PersonalFormShell(
       pageTitle: 'Recensione',
+      showAccountMenu: true,
       body: Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.all(Dimensions.pagePaddingFor(context)),

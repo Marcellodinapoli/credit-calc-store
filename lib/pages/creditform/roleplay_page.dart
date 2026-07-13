@@ -622,6 +622,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
 
     return PersonalFormShell(
       pageTitle: 'Role Play',
+      showAccountMenu: true,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

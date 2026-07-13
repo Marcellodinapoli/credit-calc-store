@@ -372,6 +372,7 @@ class _MyDataPageState extends State<MyDataPage> {
     if (_loading || userType == null) {
       return const PersonalAreaShell(
         pageTitle: 'I miei dati',
+        showAccountMenu: true,
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -382,6 +383,7 @@ class _MyDataPageState extends State<MyDataPage> {
 
     return PersonalAreaShell(
       pageTitle: 'I miei dati',
+      showAccountMenu: true,
       body: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           isMobile ? 16 : 28,

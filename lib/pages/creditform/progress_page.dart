@@ -343,6 +343,7 @@ class _CrediFormProgressPageState
 
     return PersonalFormShell(
       pageTitle: 'I miei progressi',
+      showAccountMenu: true,
       body: Padding(
         padding: EdgeInsets.all(pad),
         child: Card(
