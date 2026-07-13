@@ -12,6 +12,7 @@ import '../../services/account_menu_badge_controller.dart';
 import '../../session/credit_core_session_runtime.dart';
 import '../../shell/credit_core_account_menu_sheet.dart';
 import '../../shell/credit_module_shell_actions.dart';
+import '../../shell/credit_core_module_navigation.dart';
 import '../../ui/layout/page_shell.dart';
 import '../../widgets/account_menu_badge_icon_button.dart';
 
@@ -494,7 +495,12 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: true,
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          tooltip: 'Torna a CreditCalc',
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => popToCreditCalcHome(context),
+        ),
         title: const BrandedProjectName(project: BrandedPageProject.calc),
         backgroundColor: PageShellTheme.appBarBackground,
         actions: [

@@ -14,6 +14,7 @@ import '../pages/bk/bk_normative_search_page.dart';
 import '../pages/bk/bk_ecosystem_sections_page.dart';
 import '../pages/bk/bk_plan_limits_page.dart';
 import '../pages/creditcalc/device_sync_page.dart';
+import '../shell/credit_core_module_navigation.dart';
 import '../services/account_menu_badge_notifier.dart';
 import '../ui/layout/page_shell.dart';
 import '../pages/creditform/personal_form_menu.dart';
@@ -29,6 +30,7 @@ class CreditCoreAccountMenuSheet extends StatefulWidget {
   final Future<void> Function() onLogout;
   final PersonalFormMenuItem? selectedFormItem;
   final PersonalJobMenuItem? selectedJobItem;
+  final PersonalAreaMenuItem? selectedAreaItem;
 
   const CreditCoreAccountMenuSheet({
     super.key,
@@ -36,6 +38,7 @@ class CreditCoreAccountMenuSheet extends StatefulWidget {
     required this.onLogout,
     this.selectedFormItem,
     this.selectedJobItem,
+    this.selectedAreaItem,
   });
 
   @override
@@ -157,6 +160,10 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
   }
 
   void _closeAndArea(PersonalAreaMenuItem item) {
+    if (widget.selectedAreaItem == item) {
+      Navigator.pop(context);
+      return;
+    }
     _closeAnd(() => item.open(context));
   }
 
@@ -306,11 +313,34 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
     required VoidCallback onTap,
     Color? iconColor,
     bool showBadge = false,
+    bool selected = false,
   }) {
+    final accent = iconColor ?? Colors.black54;
     return ListTile(
-      leading: Icon(icon, color: iconColor ?? Colors.black54),
-      title: Text(title),
-      trailing: accountMenuBadgeDot(visible: showBadge),
+      leading: Icon(icon, color: selected ? _areaColor : accent),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+          color: selected ? _areaColor : Colors.black87,
+        ),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showBadge) ...[
+            accountMenuBadgeDot(visible: true),
+            const SizedBox(width: 8),
+          ],
+          if (selected) Icon(Icons.check_circle, color: _areaColor, size: 20),
+        ],
+      ),
+      tileColor: selected ? _areaColor.withValues(alpha: 0.12) : null,
+      shape: selected
+          ? const Border(
+              left: BorderSide(color: _areaColor, width: 3),
+            )
+          : null,
       onTap: onTap,
     );
   }
@@ -522,6 +552,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                     icon: Icons.person_outline,
                     title: PersonalAreaMenuItem.myData.title,
                     iconColor: _areaColor,
+                    selected:
+                        widget.selectedAreaItem == PersonalAreaMenuItem.myData,
                     onTap: () => _closeAndArea(PersonalAreaMenuItem.myData),
                   ),
                   if (!isWork)
@@ -529,6 +561,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                       icon: Icons.card_membership_outlined,
                       title: PersonalAreaMenuItem.subscription.title,
                       iconColor: _areaColor,
+                      selected: widget.selectedAreaItem ==
+                          PersonalAreaMenuItem.subscription,
                       onTap: () =>
                           _closeAndArea(PersonalAreaMenuItem.subscription),
                     ),
@@ -538,8 +572,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                     iconColor: _areaColor,
                     onTap: () => _closeAnd(() {
                       Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const DeviceSyncPage(),
+                        creditCoreModuleRoute<void>(
+                          (_) => const DeviceSyncPage(),
                         ),
                       );
                     }),
@@ -549,6 +583,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                     title: PersonalAreaMenuItem.community.title,
                     iconColor: _areaColor,
                     showBadge: badges.community,
+                    selected: widget.selectedAreaItem ==
+                        PersonalAreaMenuItem.community,
                     onTap: () => _closeAndArea(PersonalAreaMenuItem.community),
                   ),
                   _item(
@@ -556,26 +592,36 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                     title: PersonalAreaMenuItem.directSupport.title,
                     iconColor: _areaColor,
                     showBadge: badges.directSupport,
+                    selected: widget.selectedAreaItem ==
+                        PersonalAreaMenuItem.directSupport,
                     onTap: () => _closeAndArea(PersonalAreaMenuItem.directSupport),
                   ),
                   _item(
                     icon: Icons.menu_book_outlined,
                     title: PersonalAreaMenuItem.guide.title,
                     iconColor: _areaColor,
+                    selected:
+                        widget.selectedAreaItem == PersonalAreaMenuItem.guide,
                     onTap: () => _closeAndArea(PersonalAreaMenuItem.guide),
                   ),
                   _item(
                     icon: Icons.tune_outlined,
                     title: PersonalAreaMenuItem.notificationPreferences.title,
                     iconColor: _areaColor,
-                    onTap: () =>
-                        _closeAndArea(PersonalAreaMenuItem.notificationPreferences),
+                    selected: widget.selectedAreaItem ==
+                        PersonalAreaMenuItem.notificationPreferences,
+                    onTap: () => _closeAndArea(
+                      PersonalAreaMenuItem.notificationPreferences,
+                    ),
                   ),
                   _item(
                     icon: Icons.privacy_tip_outlined,
                     title: PersonalAreaMenuItem.privacyConsents.title,
                     iconColor: _areaColor,
-                    onTap: () => _closeAndArea(PersonalAreaMenuItem.privacyConsents),
+                    selected: widget.selectedAreaItem ==
+                        PersonalAreaMenuItem.privacyConsents,
+                    onTap: () =>
+                        _closeAndArea(PersonalAreaMenuItem.privacyConsents),
                   ),
                 ],
                 if (_isBkAdmin) ...[

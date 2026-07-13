@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/dimensions.dart';
+import 'personal_area_menu.dart';
 import 'personal_area_shell.dart';
 
 class _GuideEntry {
@@ -219,6 +220,8 @@ class GuidePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: "Guida all'utilizzo",
+      activeMenuItem: PersonalAreaMenuItem.guide,
+      backToCreditCalcHome: true,
       body: SingleChildScrollView(
         padding: Dimensions.scrollPadding(context),
         child: Column(

@@ -126,6 +126,7 @@ class PrimaryModuleScaffold extends StatelessWidget {
   final List<Widget>? extraAppBarActions;
   final bool automaticallyImplyLeading;
   final bool bodyScrolls;
+  final VoidCallback? onBackPressed;
 
   const PrimaryModuleScaffold({
     super.key,
@@ -136,6 +137,7 @@ class PrimaryModuleScaffold extends StatelessWidget {
     this.extraAppBarActions,
     this.automaticallyImplyLeading = true,
     this.bodyScrolls = false,
+    this.onBackPressed,
   });
 
   @override
@@ -144,7 +146,15 @@ class PrimaryModuleScaffold extends StatelessWidget {
       backgroundColor: PageShellTheme.scaffoldBackground,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        automaticallyImplyLeading: automaticallyImplyLeading,
+        automaticallyImplyLeading:
+            onBackPressed == null && automaticallyImplyLeading,
+        leading: onBackPressed == null
+            ? null
+            : IconButton(
+                tooltip: 'Torna a CreditCalc',
+                icon: const Icon(Icons.arrow_back),
+                onPressed: onBackPressed,
+              ),
         backgroundColor: PageShellTheme.appBarBackground,
         title: BrandedProjectName(project: project),
         actions: [

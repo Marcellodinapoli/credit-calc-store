@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shell/credit_core_module_navigation.dart';
 import 'company_collaborators_page.dart';
 import 'courses_page.dart';
 import 'listening_page.dart';
@@ -38,7 +39,7 @@ extension PersonalFormMenuItemX on PersonalFormMenuItem {
 
   void open(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => page()),
+      creditCoreModuleRoute<void>((_) => page()),
     );
   }
 }

@@ -5,7 +5,9 @@ import '../../core/maintenance_service.dart';
 import '../../services/account_menu_badge_controller.dart';
 import '../../session/credit_core_session_runtime.dart';
 import '../../shell/credit_core_account_menu_sheet.dart';
+import '../../shell/credit_core_module_navigation.dart';
 import '../../ui/layout/page_shell.dart';
+import '../../pages/area/personal_area_menu.dart';
 import '../../widgets/account_menu_badge_icon_button.dart';
 import '../../widgets/maintenance_section_gate.dart';
 
@@ -17,6 +19,8 @@ class PersonalAreaShell extends StatefulWidget {
   final bool bypassMaintenance;
   final String maintenanceSection;
   final bool showAccountMenu;
+  final PersonalAreaMenuItem? activeMenuItem;
+  final bool backToCreditCalcHome;
 
   const PersonalAreaShell({
     super.key,
@@ -26,6 +30,8 @@ class PersonalAreaShell extends StatefulWidget {
     this.bypassMaintenance = false,
     this.maintenanceSection = MaintenanceService.area,
     this.showAccountMenu = true,
+    this.activeMenuItem,
+    this.backToCreditCalcHome = false,
   });
 
   @override
@@ -71,6 +77,8 @@ class _PersonalAreaShellState extends State<PersonalAreaShell> {
       builder: (ctx) => CreditCoreAccountMenuSheet(
         onAnnouncements: _openAnnouncements,
         onLogout: _logout,
+        selectedAreaItem:
+            widget.showAccountMenu ? widget.activeMenuItem : null,
       ),
     );
   }
@@ -87,7 +95,10 @@ class _PersonalAreaShellState extends State<PersonalAreaShell> {
       return PrimaryModuleScaffold(
         project: BrandedPageProject.area,
         pageTitle: widget.pageTitle,
-        automaticallyImplyLeading: true,
+        automaticallyImplyLeading: !widget.backToCreditCalcHome,
+        onBackPressed: widget.backToCreditCalcHome
+            ? () => popToCreditCalcHome(context)
+            : null,
         bottomBar: widget.bottomBar,
         extraAppBarActions: [
           AccountMenuBadgeIconButton(onPressed: _showAccountMenu),

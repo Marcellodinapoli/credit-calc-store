@@ -7,6 +7,7 @@ import '../../session/credit_core_session_runtime.dart';
 import '../../pages/creditform/personal_form_menu.dart';
 import '../../services/account_menu_badge_controller.dart';
 import '../../shell/credit_core_account_menu_sheet.dart';
+import '../../shell/credit_core_module_navigation.dart';
 import '../../ui/layout/page_shell.dart';
 import '../../widgets/account_menu_badge_icon_button.dart';
 import '../../widgets/maintenance_section_gate.dart';
@@ -91,7 +92,9 @@ class _PersonalFormShellState extends State<PersonalFormShell> {
     return PrimaryModuleScaffold(
       project: BrandedPageProject.form,
       pageTitle: widget.pageTitle,
-      automaticallyImplyLeading: true,
+      automaticallyImplyLeading: !widget.showAccountMenu,
+      onBackPressed:
+          widget.showAccountMenu ? () => popToCreditCalcHome(context) : null,
       bottomBar: widget.bottomBar == null
           ? null
           : Theme(data: buildFormTheme(), child: widget.bottomBar!),

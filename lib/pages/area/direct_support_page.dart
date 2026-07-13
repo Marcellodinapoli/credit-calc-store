@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/read_state_service.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
+import 'personal_area_menu.dart';
 import 'personal_area_shell.dart';
 
 /// Pagina Assistenza diretta
@@ -594,6 +595,8 @@ class _DirectSupportPageState extends State<DirectSupportPage> {
 
     return PersonalAreaShell(
       pageTitle: "Assistenza diretta",
+      activeMenuItem: PersonalAreaMenuItem.directSupport,
+      backToCreditCalcHome: true,
       bypassMaintenance: true,
       body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

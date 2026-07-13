@@ -8,6 +8,7 @@ import '../../services/itinerary_notifications_service.dart';
 import '../../services/location_consent_service.dart';
 import '../../services/notification_preferences_notifier.dart';
 import '../../services/product_notifications_service.dart';
+import 'personal_area_menu.dart';
 import 'personal_area_shell.dart';
 
 /// Preferenze notifiche di prodotto nell'area personale (CreditArea).
@@ -107,6 +108,8 @@ class _NotificationPreferencesPageState
 
     return PersonalAreaShell(
       pageTitle: 'Notifiche',
+      activeMenuItem: PersonalAreaMenuItem.notificationPreferences,
+      backToCreditCalcHome: true,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(

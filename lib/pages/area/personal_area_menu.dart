@@ -1,6 +1,7 @@
 import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
+import '../../shell/credit_core_module_navigation.dart';
 import 'consents_page.dart';
 import 'direct_support_page.dart';
 import 'community_list_page.dart';
@@ -32,8 +33,10 @@ extension PersonalAreaMenuItemX on PersonalAreaMenuItem {
 
   Widget page() => switch (this) {
         PersonalAreaMenuItem.myData => const MyDataPage(),
-        PersonalAreaMenuItem.subscription => const PersonalAreaShell(
+        PersonalAreaMenuItem.subscription => PersonalAreaShell(
               pageTitle: 'Il mio piano',
+              activeMenuItem: PersonalAreaMenuItem.subscription,
+              backToCreditCalcHome: true,
               body: SubscriptionAccountBody(),
             ),
         PersonalAreaMenuItem.directSupport => const DirectSupportPage(),
@@ -46,7 +49,7 @@ extension PersonalAreaMenuItemX on PersonalAreaMenuItem {
 
   void open(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => page()),
+      creditCoreModuleRoute<void>((_) => page()),
     );
   }
 }

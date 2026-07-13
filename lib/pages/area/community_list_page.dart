@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/read_state_service.dart';
+import 'personal_area_menu.dart';
 import 'personal_area_shell.dart';
 import 'community_topic_page.dart';
 
@@ -337,6 +338,8 @@ class _CommunityListPageState extends State<CommunityListPage> {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: "Community",
+      activeMenuItem: PersonalAreaMenuItem.community,
+      backToCreditCalcHome: true,
       body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

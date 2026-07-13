@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shell/credit_core_module_navigation.dart';
 import '../../job/job_repository.dart';
 import 'applications_page.dart';
 import 'company_users_page.dart';
@@ -54,7 +55,7 @@ extension PersonalJobMenuItemX on PersonalJobMenuItem {
 
   void open(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => page()),
+      creditCoreModuleRoute<void>((_) => page()),
     );
   }
 }

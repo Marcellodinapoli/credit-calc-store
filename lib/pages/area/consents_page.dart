@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../core/dimensions.dart';
+import 'personal_area_menu.dart';
 import 'personal_area_shell.dart';
 
 // ================================================================
@@ -152,6 +153,8 @@ class _PrivacyConsentsPageState extends State<PrivacyConsentsPage> {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: 'Privacy e consensi',
+      activeMenuItem: PersonalAreaMenuItem.privacyConsents,
+      backToCreditCalcHome: true,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(

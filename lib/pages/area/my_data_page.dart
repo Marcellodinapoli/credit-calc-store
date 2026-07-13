@@ -385,6 +385,8 @@ class _MyDataPageState extends State<MyDataPage> {
 
     return PersonalAreaShell(
       pageTitle: 'I miei dati',
+      activeMenuItem: PersonalAreaMenuItem.myData,
+      backToCreditCalcHome: true,
       body: SingleChildScrollView(
         padding: EdgeInsets.only(
           bottom: 24 + Dimensions.resolvedBottomInset(context),
