@@ -487,6 +487,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
       builder: (ctx) => CreditCoreAccountMenuSheet(
         onAnnouncements: _openAnnouncements,
         onLogout: _logout,
+        selectedSync: true,
       ),
     );
   }

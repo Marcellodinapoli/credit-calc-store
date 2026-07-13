@@ -31,6 +31,7 @@ class CreditCoreAccountMenuSheet extends StatefulWidget {
   final PersonalFormMenuItem? selectedFormItem;
   final PersonalJobMenuItem? selectedJobItem;
   final PersonalAreaMenuItem? selectedAreaItem;
+  final bool selectedSync;
 
   const CreditCoreAccountMenuSheet({
     super.key,
@@ -39,6 +40,7 @@ class CreditCoreAccountMenuSheet extends StatefulWidget {
     this.selectedFormItem,
     this.selectedJobItem,
     this.selectedAreaItem,
+    this.selectedSync = false,
   });
 
   @override
@@ -165,6 +167,20 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
       return;
     }
     _closeAnd(() => item.open(context));
+  }
+
+  void _closeAndSync() {
+    if (widget.selectedSync) {
+      Navigator.pop(context);
+      return;
+    }
+    _closeAnd(() {
+      Navigator.of(context).push(
+        creditCoreModuleRoute<void>(
+          (_) => const DeviceSyncPage(),
+        ),
+      );
+    });
   }
 
   void _showMaintenanceSnackBar() {
@@ -570,13 +586,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                     icon: Icons.sync_alt,
                     title: 'Sincronizza',
                     iconColor: _areaColor,
-                    onTap: () => _closeAnd(() {
-                      Navigator.of(context).push(
-                        creditCoreModuleRoute<void>(
-                          (_) => const DeviceSyncPage(),
-                        ),
-                      );
-                    }),
+                    selected: widget.selectedSync,
+                    onTap: _closeAndSync,
                   ),
                   _item(
                     icon: Icons.groups_outlined,

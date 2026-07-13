@@ -21,6 +21,7 @@ class PersonalAreaShell extends StatefulWidget {
   final bool showAccountMenu;
   final PersonalAreaMenuItem? activeMenuItem;
   final bool backToCreditCalcHome;
+  final bool bodyScrolls;
 
   const PersonalAreaShell({
     super.key,
@@ -32,6 +33,7 @@ class PersonalAreaShell extends StatefulWidget {
     this.showAccountMenu = true,
     this.activeMenuItem,
     this.backToCreditCalcHome = false,
+    this.bodyScrolls = false,
   });
 
   @override
@@ -103,6 +105,7 @@ class _PersonalAreaShellState extends State<PersonalAreaShell> {
         extraAppBarActions: [
           AccountMenuBadgeIconButton(onPressed: _showAccountMenu),
         ],
+        bodyScrolls: widget.bodyScrolls,
         body: themedBody,
       );
     }

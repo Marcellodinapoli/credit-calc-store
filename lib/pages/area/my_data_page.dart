@@ -387,13 +387,12 @@ class _MyDataPageState extends State<MyDataPage> {
       pageTitle: 'I miei dati',
       activeMenuItem: PersonalAreaMenuItem.myData,
       backToCreditCalcHome: true,
-      body: SingleChildScrollView(
+      bodyScrolls: true,
+      body: ListView(
         padding: EdgeInsets.only(
           bottom: 24 + Dimensions.resolvedBottomInset(context),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        children: [
             Text(
               'Gestisci piano, dati personali e sicurezza dell\'account.',
               style: TextStyle(
@@ -519,8 +518,7 @@ class _MyDataPageState extends State<MyDataPage> {
                     ),
             ),
           ),
-          ],
-        ),
+        ],
       ),
     );
   }
