@@ -126,6 +126,7 @@ class _BkCouponsPageState extends State<BkCouponsPage> {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: 'Coupon registrazione',
+      showAccountMenu: false,
       bypassMaintenance: true,
       body: _checkingAdmin
           ? const Center(child: CircularProgressIndicator())

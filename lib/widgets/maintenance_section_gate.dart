@@ -4,17 +4,8 @@ import 'package:credit_calc_core/credit_calc_core.dart';
 
 import 'package:flutter/material.dart';
 
-
-
-import '../session/credit_core_session_runtime.dart';
 import '../core/maintenance_service.dart';
-
-import '../shell/credit_core_account_menu_sheet.dart';
-
 import '../ui/layout/page_shell.dart';
-
-import '../widgets/account_menu_badge_icon_button.dart';
-
 import 'maintenance_blocked_view.dart';
 
 
@@ -62,56 +53,7 @@ class MaintenanceSectionGate extends StatefulWidget {
 
 
 class _MaintenanceSectionGateState extends State<MaintenanceSectionGate> {
-
   bool _wasBlocked = false;
-
-
-
-  Future<void> _logout() async {
-
-    await CreditCoreSessionRuntime.signOutWithSessionRelease();
-
-  }
-
-
-
-  void _showAccountMenu() {
-
-    showModalBottomSheet<void>(
-
-      context: context,
-
-      isScrollControlled: true,
-
-      useSafeArea: true,
-
-      builder: (ctx) => CreditCoreAccountMenuSheet(
-
-        onAnnouncements: () {
-
-          Navigator.of(context).pop();
-
-          Navigator.of(context).push(
-
-            MaterialPageRoute<void>(
-
-              builder: (_) => const AnnouncementsPage(),
-
-            ),
-
-          );
-
-        },
-
-        onLogout: _logout,
-
-      ),
-
-    );
-
-  }
-
-
 
   void _handleBlockedTransition(bool blocked) {
 
@@ -166,11 +108,7 @@ class _MaintenanceSectionGateState extends State<MaintenanceSectionGate> {
         title: const _BrandTitle(),
 
         actions: [
-
           const AnnouncementsBellButton(iconColor: Colors.black87),
-
-          AccountMenuBadgeIconButton(onPressed: _showAccountMenu),
-
         ],
 
       ),

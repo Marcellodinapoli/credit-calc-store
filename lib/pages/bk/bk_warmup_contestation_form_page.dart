@@ -88,6 +88,7 @@ class _BkWarmupContestationFormPageState
 
     return PersonalAreaShell(
       pageTitle: _isEdit ? 'Modifica contestazione' : 'Nuova contestazione',
+      showAccountMenu: false,
       body: Form(
         key: _formKey,
         child: ListView(

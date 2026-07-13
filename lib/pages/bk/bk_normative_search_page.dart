@@ -12,6 +12,7 @@ class BkNormativeSearchPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: 'Prompt ricerca normativa',
+      showAccountMenu: false,
       body: NormativeSearchAdminBody(
         verifyAdmin: BkAdminService.isAdmin,
       ),

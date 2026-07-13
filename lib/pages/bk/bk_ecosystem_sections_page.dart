@@ -12,6 +12,7 @@ class BkEcosystemSectionsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: 'Sezioni ecosistema',
+      showAccountMenu: false,
       body: EcosystemSectionsAdminBody(
         verifyAdmin: BkAdminService.isAdmin,
       ),

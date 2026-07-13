@@ -162,6 +162,7 @@ class _BkWarmupContestationsPageState extends State<BkWarmupContestationsPage> {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: 'Contestazioni warm-up',
+      showAccountMenu: false,
       body: _checkingAdmin
           ? const Center(child: CircularProgressIndicator())
           : !_isAdmin

@@ -12,6 +12,7 @@ class BkCallAnalysisPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: 'Prompt analisi telefonata',
+      showAccountMenu: false,
       body: CallAnalysisAdminBody(
         verifyAdmin: BkAdminService.isAdmin,
       ),

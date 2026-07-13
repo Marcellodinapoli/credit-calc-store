@@ -25,7 +25,7 @@ class PersonalAreaShell extends StatefulWidget {
     this.bottomBar,
     this.bypassMaintenance = false,
     this.maintenanceSection = MaintenanceService.area,
-    this.showAccountMenu = false,
+    this.showAccountMenu = true,
   });
 
   @override

@@ -219,7 +219,6 @@ class GuidePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: "Guida all'utilizzo",
-      showAccountMenu: true,
       body: SingleChildScrollView(
         padding: Dimensions.scrollPadding(context),
         child: Column(

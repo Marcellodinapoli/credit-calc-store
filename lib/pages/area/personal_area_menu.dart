@@ -34,7 +34,6 @@ extension PersonalAreaMenuItemX on PersonalAreaMenuItem {
         PersonalAreaMenuItem.myData => const MyDataPage(),
         PersonalAreaMenuItem.subscription => const PersonalAreaShell(
               pageTitle: 'Il mio piano',
-              showAccountMenu: true,
               body: SubscriptionAccountBody(),
             ),
         PersonalAreaMenuItem.directSupport => const DirectSupportPage(),

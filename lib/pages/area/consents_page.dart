@@ -152,7 +152,6 @@ class _PrivacyConsentsPageState extends State<PrivacyConsentsPage> {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: 'Privacy e consensi',
-      showAccountMenu: true,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(

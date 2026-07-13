@@ -12,6 +12,7 @@ class BkPlanLimitsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: 'Piani FREE / PLUS / ENTERPRISE',
+      showAccountMenu: false,
       body: PublicPlanLimitsAdminBody(
         verifyAdmin: BkAdminService.isAdmin,
       ),

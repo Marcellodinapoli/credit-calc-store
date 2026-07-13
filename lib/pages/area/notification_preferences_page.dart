@@ -107,7 +107,6 @@ class _NotificationPreferencesPageState
 
     return PersonalAreaShell(
       pageTitle: 'Notifiche',
-      showAccountMenu: true,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(

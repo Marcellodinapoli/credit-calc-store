@@ -12,6 +12,7 @@ class BkWarmupMonitoringPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return PersonalAreaShell(
       pageTitle: 'Warm-up telefonata e contestazioni',
+      showAccountMenu: false,
       body: WarmupMonitoringAdminBody(
         verifyAdmin: BkAdminService.isAdmin,
       ),
