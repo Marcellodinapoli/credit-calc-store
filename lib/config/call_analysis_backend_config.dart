@@ -1,4 +1,4 @@
-/// Endpoint backend analisi telefonata (Ollama su Hetzner).
+/// Endpoint backend analisi telefonata (`ai.creditcore.it`).
 abstract final class CallAnalysisBackendConfig {
   static const String secureHost = 'ai.creditcore.it';
 

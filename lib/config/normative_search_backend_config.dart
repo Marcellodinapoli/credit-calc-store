@@ -1,4 +1,4 @@
-/// Endpoint backend ricerca normativa (Ollama su Hetzner).
+/// Endpoint backend ricerca normativa (`ai.creditcore.it`).
 abstract final class NormativeSearchBackendConfig {
   static const String secureHost = 'ai.creditcore.it';
 

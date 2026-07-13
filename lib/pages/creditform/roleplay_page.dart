@@ -7,15 +7,15 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:speech_to_text/speech_to_text.dart';
-import 'package:speech_to_text/speech_recognition_error.dart';
-import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
+import '../../config/roleplay_ai_provider.dart';
 import '../../services/read_state_service.dart';
 import '../../services/roleplay_progress_service.dart';
 import '../../services/roleplay_conversation_service.dart';
+import '../../services/roleplay_session.dart';
+import '../../services/roleplay_session_factory.dart';
+import '../../services/roleplay_voice_status.dart';
 import 'personal_form_shell.dart';
 
 class RoleplayPage extends StatefulWidget {
@@ -30,290 +30,64 @@ class _RoleplayPageState extends State<RoleplayPage> {
   int _lastSeen = 0;
   bool _readStateReady = false;
 
-  final SpeechToText _speech = SpeechToText();
-  final FlutterTts _tts = FlutterTts();
-  bool _speechReady = false;
-  String? _speechLocaleId;
-
-  String _lastUserText = '';
-  String? _sessionId;
-  bool _awaitingReply = false;
-  bool _micListening = false;
-  String? _responderRole;
-  int _micRestartToken = 0;
-  bool _startingListen = false;
-
-  bool _simulationActive = false;
-  bool _isSpeaking = false;
-  bool? _ttsVoiceMale;
-  bool _ttsReady = false;
+  RoleplaySession? _session;
+  String? _sessionEngine;
 
   Map<String, dynamic>? _currentSimulation;
   String? _currentSimulationId;
   String? _currentSimulationCategory;
-
-  final List<Map<String, String>> _chatHistory = [];
+  String? _currentAiProvider;
 
   @override
   void initState() {
     super.initState();
     _initReadState();
-    _initSpeech();
   }
 
-  bool get _shouldKeepListening =>
-      _simulationActive && !_isSpeaking && !_awaitingReply;
-  bool _isBenignSpeechError(String msg) =>
-      msg == 'error_no_match' ||
-      msg == 'error_speech_timeout' ||
-      msg == 'error_client';
-
-  Future<String?> _resolveItalianLocale() async {
-    final locales = await _speech.locales();
-    for (final locale in locales) {
-      final id = locale.localeId.toLowerCase();
-      if (id == 'it_it' || id == 'it-it' || id.startsWith('it')) {
-        return locale.localeId;
-      }
-    }
-    return null;
+  RoleplaySession _requireSession() {
+    return _session ??= _createSession(RoleplayAiProvider.gpt);
   }
 
-  void _runAfterSpeechEvent(VoidCallback action) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      try {
-        action();
-      } catch (e, st) {
-        debugPrint('Speech handler error: $e\n$st');
-      }
-    });
-  }
-
-  Future<void> _initSpeech() async {
-    _speechReady = await _speech.initialize(
-      onStatus: (status) {
-        if (kDebugMode && status == 'listening') {
-          debugPrint('Speech status: $status');
-        }
-        _runAfterSpeechEvent(() => _handleSpeechStatus(status));
-      },
-      onError: (error) {
-        if (!_isBenignSpeechError(error.errorMsg)) {
-          debugPrint('Speech error: $error');
-        }
-        _runAfterSpeechEvent(() => _handleSpeechError(error));
-      },
-    );
-    if (_speechReady) {
-      _speechLocaleId = await _resolveItalianLocale();
-    }
-    await _configureTtsVoice(preferMale: true);
-  }
-
-  void _handleSpeechStatus(String status) {
-    if (!mounted) return;
-
-    if (status == 'listening') {
-      if (!_micListening && mounted) {
-        setState(() => _micListening = true);
-      }
-      return;
-    }
-
-    if (status == 'done' || status == 'notListening') {
-      if (_micListening && mounted) {
-        setState(() => _micListening = false);
-      }
-      if (_shouldKeepListening) {
-        _scheduleContinuousListening();
-      }
-    }
-  }
-
-  void _handleSpeechError(SpeechRecognitionError error) {
-    if (!mounted) return;
-
-    final benign = _isBenignSpeechError(error.errorMsg);
-
-    if (benign && _shouldKeepListening) {
-      _scheduleContinuousListening();
-      return;
-    }
-
-    if (_shouldKeepListening) {
-      _scheduleContinuousListening(delay: const Duration(milliseconds: 600));
-    }
-  }
-
-  Future<void> _configureTtsVoice({required bool preferMale}) async {
-    if (_ttsReady && _ttsVoiceMale == preferMale) return;
-
-    await _tts.setLanguage('it-IT');
-    await _tts.setSpeechRate(0.52);
-    await _tts.setPitch(preferMale ? 0.78 : 1.0);
-
-    final voices = await _tts.getVoices;
-    if (voices is List) {
-      Map<String, String>? italian;
-      Map<String, String>? maleItalian;
-
-      for (final raw in voices) {
-        if (raw is! Map) continue;
-        final voice = Map<String, String>.from(
-          raw.map((k, v) => MapEntry(k.toString(), v.toString())),
-        );
-        final locale = (voice['locale'] ?? '').toLowerCase();
-        final name = (voice['name'] ?? '').toLowerCase();
-        if (!locale.contains('it')) continue;
-
-        italian ??= voice;
-        if (name.contains('male') ||
-            name.contains('luca') ||
-            name.contains('diego') ||
-            name.contains('cosimo') ||
-            name.contains('matteo') ||
-            name.contains('it-it-x-itd')) {
-          maleItalian = voice;
-          break;
-        }
-      }
-
-      final chosen = preferMale ? (maleItalian ?? italian) : italian;
-      if (chosen != null) {
-        await _tts.setVoice(chosen);
-      }
-    }
-
-    _ttsVoiceMale = preferMale;
-    _ttsReady = true;
-  }
-
-  Map<String, dynamic> _conversationPayload({required String userText}) {
-    return {
-      'userText': userText,
-      'history': _chatHistory,
-      'practiceData': _currentSimulation?['practiceData'] ?? [],
-      'sessionId': _sessionId ?? 'default',
-      'prompt': RoleplayConfigService.resolveSimulationPrompt(
-        Map<String, dynamic>.from(_currentSimulation ?? const {}),
-      ),
-      if (_currentSimulation?['scenarioWeights'] != null)
-        'scenarioWeights': _currentSimulation!['scenarioWeights'],
-      if (_responderRole != null) 'responderRole': _responderRole,
-      'difficulty': RoleplayConfigService.resolveDifficulty(
-        Map<String, dynamic>.from(_currentSimulation ?? const {}),
-      ),
-      'personality': RoleplayConfigService.resolvePersonality(
-        Map<String, dynamic>.from(_currentSimulation ?? const {}),
-      ),
-    };
-  }
-
-  Future<void> _requestRoleplayReply({required String userText}) async {
-    if (!_simulationActive || _currentSimulation == null) return;
-
-    setState(() => _awaitingReply = true);
-
-    try {
-      unawaited(_speech.stop().catchError((_) {}));
-      if (mounted) setState(() => _micListening = false);
-
-      final payload = _conversationPayload(userText: userText);
-      final priorHistory = userText.isEmpty
-          ? _chatHistory
-              .map((m) => {
-                    'role': m['role'] ?? 'user',
-                    'content': m['content'] ?? '',
-                  })
-              .toList()
-          : _chatHistory
-              .where((m) =>
-                  m['role'] != 'user' || m['content'] != userText)
-              .map((m) => {
-                    'role': m['role'] ?? 'user',
-                    'content': m['content'] ?? '',
-                  })
-              .toList();
-
-      final result = await RoleplayConversationService.step(
-        userText: userText,
-        prompt: payload['prompt'] as String,
-        sessionId: payload['sessionId'] as String,
-        history: priorHistory,
-        practiceData: payload['practiceData'] as List<dynamic>,
-        scenarioWeights: payload['scenarioWeights'] as Map<String, dynamic>?,
-        responderRole: payload['responderRole'] as String?,
-        difficulty: payload['difficulty'] as String?,
-        personality: payload['personality'] as String?,
-      );
-
-      if (!mounted || !_simulationActive) return;
-
-      final reply = (result['reply'] ?? '').toString().trim();
-      if (result['role'] != null) {
-        _responderRole = result['role'].toString();
-      }
-
-      if (reply.isNotEmpty) {
-        _chatHistory.add({'role': 'assistant', 'content': reply});
+  RoleplaySession _createSession(String engine) {
+    return RoleplaySessionFactory.create(
+      aiProvider: engine,
+      onStateChanged: () {
         if (mounted) setState(() {});
-        await _speak(reply);
-      } else if (_simulationActive && mounted) {
-        _scheduleContinuousListening();
-      }
-    } catch (e, st) {
-      debugPrint('Roleplay step error: $e\n$st');
-      if (mounted && _simulationActive) {
+      },
+      onError: (message) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Errore nella simulazione. Riprova a parlare.\n$e',
-            ),
-          ),
+          SnackBar(content: Text(message)),
         );
-        _scheduleContinuousListening();
-      }
-    } finally {
-      if (mounted) setState(() => _awaitingReply = false);
+      },
+      isContextActive: () => mounted,
+    );
+  }
+
+  Future<void> _ensureSession(String engine) async {
+    if (_session != null && _sessionEngine == engine) {
+      return;
     }
+    if (_session != null) {
+      await _session!.stop();
+      _session!.dispose();
+      _session = null;
+    }
+    _session = _createSession(engine);
+    _sessionEngine = engine;
+    await _session!.init();
   }
 
-  void _cancelMicRestart() {
-    _micRestartToken++;
-  }
+  bool get _isSimulationActive => _session?.isActive ?? false;
 
-  Future<void> _handleUserTranscript(SpeechRecognitionResult result) async {
-    if (!result.finalResult || !_simulationActive || _awaitingReply) return;
-    final transcript = result.recognizedWords.trim();
-    if (transcript.isEmpty || transcript == _lastUserText) return;
+  List<Map<String, String>> get _chatHistory =>
+      _session?.history ?? const [];
+  RoleplayVoiceStatus get _voiceStatus =>
+      _session?.voiceStatus ?? RoleplayVoiceStatus.idle;
 
-    _lastUserText = transcript;
-    _cancelMicRestart();
-
-    _chatHistory.add({
-      'role': 'user',
-      'content': transcript,
-    });
-
-    if (!mounted || !_simulationActive) return;
-    await _requestRoleplayReply(userText: transcript);
-  }
-
-  void _scheduleContinuousListening({
-    Duration delay = const Duration(milliseconds: 80),
-  }) {
-    if (!_shouldKeepListening) return;
-    final token = ++_micRestartToken;
-    Future.delayed(delay, () async {
-      if (token != _micRestartToken || !_shouldKeepListening) return;
-      await _startListeningOnce();
-      if (!mounted || !_shouldKeepListening) return;
-      if (!_speech.isListening) {
-        _scheduleContinuousListening(delay: const Duration(milliseconds: 300));
-      }
-    });
-  }
+  bool get _isThinking => _voiceStatus == RoleplayVoiceStatus.thinking;
+  bool get _isSpeaking => _voiceStatus == RoleplayVoiceStatus.speaking;
+  bool get _isCallBusy => _isThinking || _isSpeaking;
 
   Future<void> _initReadState() async {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -339,52 +113,12 @@ class _RoleplayPageState extends State<RoleplayPage> {
 
   @override
   void dispose() {
-    _stopSpeech();
-    _tts.stop();
-    super.dispose();
-  }
-
-  void _stopSpeech() {
-    _cancelMicRestart();
-    try {
-      _speech.stop();
-    } catch (_) {}
-  }
-
-  Future<void> _startListeningOnce() async {
-    if (!_speechReady || !_shouldKeepListening || _startingListen) return;
-    if (_speech.isListening) return;
-
-    _startingListen = true;
-    try {
-      try {
-        await _speech.stop();
-      } catch (_) {}
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-
-      if (!_shouldKeepListening || !mounted) return;
-
-      await _speech.listen(
-        listenOptions: SpeechListenOptions(
-          localeId: _speechLocaleId,
-          listenMode: ListenMode.dictation,
-          listenFor: const Duration(minutes: 30),
-          pauseFor: const Duration(seconds: 3),
-          cancelOnError: false,
-          partialResults: true,
-        ),
-        onResult: (result) {
-          unawaited(_handleUserTranscript(result));
-        },
-      );
-    } catch (e) {
-      debugPrint('Speech listen error: $e');
-      if (_shouldKeepListening) {
-        _scheduleContinuousListening(delay: const Duration(milliseconds: 900));
-      }
-    } finally {
-      _startingListen = false;
+    if (_session != null) {
+      unawaited(_session!.stop());
+      _session!.dispose();
+      _session = null;
     }
+    super.dispose();
   }
 
   Future<void> _startSimulation(
@@ -401,29 +135,28 @@ class _RoleplayPageState extends State<RoleplayPage> {
     }
     if (!mounted) return;
 
+    final normalizedProvider =
+        RoleplaySessionFactory.resolveProvider(simulationData);
+    final engine = RoleplaySessionFactory.activeEngine(normalizedProvider);
+    _currentAiProvider = engine;
+
+    await _ensureSession(engine);
+
     _currentSimulation = simulationData;
     _currentSimulationId = simulationId;
     _currentSimulationCategory = category;
-    _chatHistory.clear();
-    _lastUserText = '';
-    _sessionId = '${simulationId}_${DateTime.now().millisecondsSinceEpoch}';
-    _awaitingReply = false;
-    _micListening = false;
-    _responderRole = null;
 
-    _simulationActive = true;
     setState(() {});
 
-    _stopSpeech();
-    if (!_speechReady) {
-      await _initSpeech();
-    }
-
-    await _requestRoleplayReply(userText: '');
+    final sessionId = '${simulationId}_${DateTime.now().millisecondsSinceEpoch}';
+    await _session!.start(
+      simulationData: simulationData,
+      sessionId: sessionId,
+    );
   }
 
   Future<void> _stopSimulation() async {
-    if (_simulationActive && _currentSimulation != null) {
+    if (_isSimulationActive && _currentSimulation != null) {
       final userExchanges =
           _chatHistory.where((m) => m['role'] == 'user').length;
       if (userExchanges > 0 || _chatHistory.isNotEmpty) {
@@ -439,16 +172,13 @@ class _RoleplayPageState extends State<RoleplayPage> {
       }
     }
 
-    _simulationActive = false;
     _currentSimulation = null;
     _currentSimulationId = null;
     _currentSimulationCategory = null;
+    _currentAiProvider = null;
 
-    _stopSpeech();
-    _tts.stop();
-    _isSpeaking = false;
-    _micListening = false;
-    setState(() {});
+    await _session?.stop();
+    if (mounted) setState(() {});
   }
 
   Future<void> _showAiSuggestion({
@@ -587,35 +317,6 @@ class _RoleplayPageState extends State<RoleplayPage> {
   // BUILD
   // ============================================================
 
-  Future<void> _speak(String text) async {
-    _cancelMicRestart();
-    _isSpeaking = true;
-    if (mounted) setState(() => _micListening = false);
-    try {
-      unawaited(_speech.stop().catchError((_) {}));
-      await _tts.stop();
-
-      final role = (_responderRole ?? '').toUpperCase();
-      final preferMale = role != 'TERZO';
-      await _configureTtsVoice(preferMale: preferMale);
-
-      await _tts.awaitSpeakCompletion(true);
-      _tts.setCompletionHandler(() {
-        _isSpeaking = false;
-        if (_simulationActive && mounted) {
-          _scheduleContinuousListening();
-        }
-      });
-      await _tts.speak(text);
-    } catch (e, st) {
-      debugPrint('TTS error: $e\n$st');
-      _isSpeaking = false;
-      if (_simulationActive && mounted) {
-        _scheduleContinuousListening();
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final category = _tabIndex == 0 ? 'Sollecito' : 'Recupero';
@@ -626,7 +327,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_simulationActive) ...[
+          if (_isSimulationActive) ...[
             Material(
               color: const Color(0xFF1B5E20),
               borderRadius: BorderRadius.circular(10),
@@ -636,7 +337,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      _awaitingReply
+                      _isThinking
                           ? 'Il debitore sta pensando...'
                           : _isSpeaking
                               ? 'Il debitore parla...'
@@ -651,7 +352,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
                       height: 72,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: _awaitingReply || _isSpeaking
+                        color: _isCallBusy
                             ? Colors.grey.shade600
                             : const Color(0xFF1B5E20),
                         borderRadius: BorderRadius.circular(12),
@@ -660,14 +361,14 @@ class _RoleplayPageState extends State<RoleplayPage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            _awaitingReply || _isSpeaking
+                            _isCallBusy
                                 ? Icons.phone_in_talk_outlined
                                 : Icons.phone_callback_outlined,
                             color: Colors.white,
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            _awaitingReply
+                            _isThinking
                                 ? 'In attesa risposta'
                                 : _isSpeaking
                                     ? 'Linea occupata'
@@ -835,7 +536,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
               personality: personality,
               isNew: isNew,
               completed: completed,
-              simulationActive: _simulationActive,
+              simulationActive: _isSimulationActive,
               onOpenSimulation: () => _startSimulation(
                 {
                   'title': title,
@@ -846,6 +547,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
                       data['scenarioWeights'] as Map<String, dynamic>?,
                   'difficulty': data['difficulty'] ?? '',
                   'personality': data['personality'] ?? '',
+                  'aiProvider': data[RoleplayConfigService.aiProviderField],
                 },
                 simulationId: doc.id,
                 category: type,

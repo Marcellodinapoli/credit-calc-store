@@ -1,0 +1,174 @@
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+
+import 'dart:async';
+import 'dart:convert';
+import 'dart:html' as html;
+import 'dart:js' as js;
+import 'dart:js_util' as js_util;
+import 'dart:math' as math;
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart';
+
+import 'roleplay_realtime_audio.dart';
+
+RoleplayRealtimeAudio createRoleplayRealtimeAudio() =>
+    RoleplayRealtimeAudioWeb();
+
+class RoleplayRealtimeAudioWeb implements RoleplayRealtimeAudio {
+  html.MediaStream? _micStream;
+  dynamic _audioContext;
+  dynamic _micSource;
+  dynamic _scriptProcessor;
+  dynamic _playbackContext;
+  double _playbackTime = 0;
+  void Function(List<int> pcmChunk)? _onChunk;
+
+  @override
+  Future<void> startMicrophone(void Function(List<int> pcmChunk) onChunk) async {
+    _onChunk = onChunk;
+    _micStream = await html.window.navigator.mediaDevices
+        ?.getUserMedia({'audio': true});
+    if (_micStream == null) {
+      throw Exception('Microfono non disponibile.');
+    }
+
+    _audioContext ??= js_util.callConstructor(
+      js_util.getProperty(html.window, 'AudioContext'),
+      [],
+    );
+
+    _micSource = js_util.callMethod(
+      _audioContext,
+      'createMediaStreamSource',
+      [_micStream],
+    );
+
+    _scriptProcessor = js_util.callMethod(
+      _audioContext,
+      'createScriptProcessor',
+      [4096, 1, 1],
+    );
+
+    js_util.setProperty(
+      _scriptProcessor,
+      'onaudioprocess',
+      js.allowInterop((event) {
+        final inputBuffer = js_util.getProperty(event, 'inputBuffer');
+        final channelData = js_util.callMethod(
+          inputBuffer,
+          'getChannelData',
+          [0],
+        );
+        final length = js_util.getProperty(channelData, 'length') as int? ?? 0;
+        if (length == 0) return;
+
+        final pcm = Int16List(length);
+        for (var i = 0; i < length; i++) {
+          final sample = (js_util.getProperty(channelData, i) as num?) ?? 0;
+          final clamped = sample.clamp(-1.0, 1.0);
+          pcm[i] = (clamped * 32767).round();
+        }
+
+        _onChunk?.call(Uint8List.view(pcm.buffer).toList());
+      }),
+    );
+
+    js_util.callMethod(_micSource, 'connect', [_scriptProcessor]);
+    js_util.callMethod(
+      _scriptProcessor,
+      'connect',
+      [js_util.getProperty(_audioContext, 'destination')],
+    );
+  }
+
+  @override
+  Future<void> stopMicrophone() async {
+    try {
+      if (_scriptProcessor != null) {
+        js_util.callMethod(_scriptProcessor, 'disconnect', []);
+      }
+      if (_micSource != null) {
+        js_util.callMethod(_micSource, 'disconnect', []);
+      }
+      final tracks = _micStream?.getAudioTracks() ?? [];
+      for (final track in tracks) {
+        track.stop();
+      }
+    } catch (_) {}
+    _scriptProcessor = null;
+    _micSource = null;
+    _micStream = null;
+    _onChunk = null;
+  }
+
+  @override
+  Future<void> playPcm16Base64Delta(String base64Delta) async {
+    try {
+      final bytes = base64Decode(base64Delta);
+      if (bytes.isEmpty) return;
+
+      _playbackContext ??= js_util.callConstructor(
+        js_util.getProperty(html.window, 'AudioContext'),
+        [js_util.jsify({'sampleRate': 24000})],
+      );
+
+      final sampleCount = bytes.length ~/ 2;
+      if (sampleCount == 0) return;
+
+      final audioBuffer = js_util.callMethod(
+        _playbackContext,
+        'createBuffer',
+        [1, sampleCount, 24000],
+      );
+      final channel = js_util.callMethod(audioBuffer, 'getChannelData', [0]);
+
+      final byteData = ByteData.sublistView(Uint8List.fromList(bytes));
+      for (var i = 0; i < sampleCount; i++) {
+        js_util.setProperty(
+          channel,
+          i,
+          byteData.getInt16(i * 2, Endian.little) / 32768,
+        );
+      }
+
+      final source = js_util.callMethod(
+        _playbackContext,
+        'createBufferSource',
+        [],
+      );
+      js_util.setProperty(source, 'buffer', audioBuffer);
+      js_util.callMethod(source, 'connect', [
+        js_util.getProperty(_playbackContext, 'destination'),
+      ]);
+
+      final now =
+          (js_util.getProperty(_playbackContext, 'currentTime') as num?)
+                  ?.toDouble() ??
+              0;
+      final startAt = math.max(now, _playbackTime);
+      js_util.callMethod(source, 'start', [startAt]);
+      _playbackTime = startAt + sampleCount / 24000;
+    } catch (e) {
+      if (kDebugMode) debugPrint('RoleplayRealtime playback: $e');
+    }
+  }
+
+  @override
+  Future<void> stopPlayback() async {
+    _playbackTime = 0;
+    try {
+      final ctx = _playbackContext;
+      if (ctx != null) {
+        js_util.callMethod(ctx, 'close', []);
+      }
+    } catch (_) {}
+    _playbackContext = null;
+  }
+
+  @override
+  Future<void> dispose() async {
+    await stopMicrophone();
+    await stopPlayback();
+  }
+}

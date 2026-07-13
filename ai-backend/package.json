@@ -1,0 +1,17 @@
+{
+  "name": "creditcore-realtime-proxy",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "smoke": "node scripts/smoke_test.mjs"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "firebase-admin": "^12.6.0",
+    "ws": "^8.21.0"
+  }
+}
