@@ -368,7 +368,6 @@ class _MyDataPageState extends State<MyDataPage> {
   @override
   Widget build(BuildContext context) {
     final isMobile = Dimensions.isPhone(context);
-    final contentWidth = MediaQuery.sizeOf(context).width;
 
     if (_loading || userType == null) {
       return const PersonalAreaShell(
@@ -383,140 +382,139 @@ class _MyDataPageState extends State<MyDataPage> {
 
     return PersonalAreaShell(
       pageTitle: 'I miei dati',
-      body: SingleChildScrollView(
+      body: ListView(
         padding: EdgeInsets.only(
           bottom: 24 + Dimensions.resolvedBottomInset(context),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Gestisci piano, dati personali e sicurezza dell\'account.',
-              style: TextStyle(
-                fontSize: 14,
-                height: 1.45,
-                color: Colors.grey.shade600,
-              ),
+        children: [
+          Text(
+            'Gestisci piano, dati personali e sicurezza dell\'account.',
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.45,
+              color: Colors.grey.shade600,
             ),
-            const SizedBox(height: 20),
-            _buildProfileSections(
+          ),
+          const SizedBox(height: 20),
+          LayoutBuilder(
+            builder: (context, constraints) => _buildProfileSections(
               context: context,
               isCompany: isCompany,
               isWork: isWork,
               isMobile: isMobile,
-              contentWidth: contentWidth,
+              contentWidth: constraints.maxWidth,
             ),
-            if (userType == 'public') ...[
-              const SizedBox(height: 28),
-              const _SectionHeading(
-                title: 'Coupon limiti',
-                subtitle:
-                    'Inserisci un coupon creato dal backoffice per azzerare '
-                    'i contatori mensili del tuo piano.',
-              ),
-              const SizedBox(height: 12),
-              const LimitsResetCouponSection(),
-            ],
+          ),
+          if (userType == 'public') ...[
             const SizedBox(height: 28),
             const _SectionHeading(
-              title: 'Sicurezza e account',
-              subtitle: 'Aggiorna i dati, la password o gestisci l\'account.',
+              title: 'Coupon limiti',
+              subtitle:
+                  'Inserisci un coupon creato dal backoffice per azzerare '
+                  'i contatori mensili del tuo piano.',
             ),
             const SizedBox(height: 12),
-            _ProfileDataCard(
-              isMobile: isMobile,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: isMobile
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          FilledButton.icon(
-                            onPressed: () => _openEditDialog(context),
-                            icon: const Icon(Icons.edit_outlined, size: 20),
-                            label: const Text('Modifica dati'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: ProjectColors.area,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          OutlinedButton.icon(
-                            onPressed: () => _openPasswordDialog(context),
-                            icon: const Icon(Icons.lock_reset, size: 20),
-                            label: const Text('Cambia password'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: ProjectColors.area,
-                              side: const BorderSide(color: ProjectColors.area),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextButton.icon(
-                            onPressed: () => _confirmDelete(context),
-                            icon: Icon(
-                              Icons.delete_outline,
-                              size: 20,
-                              color: Colors.red.shade700,
-                            ),
-                            label: Text(
-                              isCompany && !canDeleteCompany
-                                  ? 'Disattiva account (ci sono collegamenti)'
-                                  : 'Elimina account',
-                              style: TextStyle(color: Colors.red.shade700),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          FilledButton.icon(
-                            onPressed: () => _openEditDialog(context),
-                            icon: const Icon(Icons.edit_outlined, size: 20),
-                            label: const Text('Modifica dati'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: ProjectColors.area,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 14,
-                              ),
-                            ),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => _openPasswordDialog(context),
-                            icon: const Icon(Icons.lock_reset, size: 20),
-                            label: const Text('Cambia password'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: ProjectColors.area,
-                              side: const BorderSide(color: ProjectColors.area),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 14,
-                              ),
-                            ),
-                          ),
-                          TextButton.icon(
-                            onPressed: () => _confirmDelete(context),
-                            icon: Icon(
-                              Icons.delete_outline,
-                              size: 20,
-                              color: Colors.red.shade700,
-                            ),
-                            label: Text(
-                              isCompany && !canDeleteCompany
-                                  ? 'Disattiva account (ci sono collegamenti)'
-                                  : 'Elimina account',
-                              style: TextStyle(color: Colors.red.shade700),
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
+            const LimitsResetCouponSection(),
           ],
-        ),
+          const SizedBox(height: 28),
+          const _SectionHeading(
+            title: 'Sicurezza e account',
+            subtitle: 'Aggiorna i dati, la password o gestisci l\'account.',
+          ),
+          const SizedBox(height: 12),
+          _ProfileDataCard(
+            isMobile: isMobile,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: isMobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: () => _openEditDialog(context),
+                          icon: const Icon(Icons.edit_outlined, size: 20),
+                          label: const Text('Modifica dati'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: ProjectColors.area,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: () => _openPasswordDialog(context),
+                          icon: const Icon(Icons.lock_reset, size: 20),
+                          label: const Text('Cambia password'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: ProjectColors.area,
+                            side: const BorderSide(color: ProjectColors.area),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () => _confirmDelete(context),
+                          icon: Icon(
+                            Icons.delete_outline,
+                            size: 20,
+                            color: Colors.red.shade700,
+                          ),
+                          label: Text(
+                            isCompany && !canDeleteCompany
+                                ? 'Disattiva account (ci sono collegamenti)'
+                                : 'Elimina account',
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: () => _openEditDialog(context),
+                          icon: const Icon(Icons.edit_outlined, size: 20),
+                          label: const Text('Modifica dati'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: ProjectColors.area,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 14,
+                            ),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _openPasswordDialog(context),
+                          icon: const Icon(Icons.lock_reset, size: 20),
+                          label: const Text('Cambia password'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: ProjectColors.area,
+                            side: const BorderSide(color: ProjectColors.area),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 14,
+                            ),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => _confirmDelete(context),
+                          icon: Icon(
+                            Icons.delete_outline,
+                            size: 20,
+                            color: Colors.red.shade700,
+                          ),
+                          label: Text(
+                            isCompany && !canDeleteCompany
+                                ? 'Disattiva account (ci sono collegamenti)'
+                                : 'Elimina account',
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }

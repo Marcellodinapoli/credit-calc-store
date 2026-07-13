@@ -17,6 +17,7 @@ import '../../services/roleplay_session.dart';
 import '../../services/roleplay_session_factory.dart';
 import '../../services/roleplay_voice_status.dart';
 import 'personal_form_shell.dart';
+import 'personal_form_menu.dart';
 
 class RoleplayPage extends StatefulWidget {
   const RoleplayPage({super.key});
@@ -324,6 +325,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
     return PersonalFormShell(
       pageTitle: 'Role Play',
       showAccountMenu: true,
+      activeMenuItem: PersonalFormMenuItem.roleplay,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/form_theme.dart';
 import '../../core/maintenance_service.dart';
 import '../../session/credit_core_session_runtime.dart';
+import '../../pages/creditform/personal_form_menu.dart';
 import '../../services/account_menu_badge_controller.dart';
 import '../../shell/credit_core_account_menu_sheet.dart';
 import '../../ui/layout/page_shell.dart';
@@ -16,6 +17,7 @@ class PersonalFormShell extends StatefulWidget {
   final Widget? bottomBar;
   final bool padded;
   final bool showAccountMenu;
+  final PersonalFormMenuItem? activeMenuItem;
 
   const PersonalFormShell({
     super.key,
@@ -24,6 +26,7 @@ class PersonalFormShell extends StatefulWidget {
     this.bottomBar,
     this.padded = true,
     this.showAccountMenu = false,
+    this.activeMenuItem,
   });
 
   @override
@@ -69,6 +72,8 @@ class _PersonalFormShellState extends State<PersonalFormShell> {
       builder: (ctx) => CreditCoreAccountMenuSheet(
         onAnnouncements: _openAnnouncements,
         onLogout: _logout,
+        selectedFormItem:
+            widget.showAccountMenu ? widget.activeMenuItem : null,
       ),
     );
   }

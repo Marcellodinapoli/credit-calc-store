@@ -125,6 +125,7 @@ class PrimaryModuleScaffold extends StatelessWidget {
   final Widget? bottomBar;
   final List<Widget>? extraAppBarActions;
   final bool automaticallyImplyLeading;
+  final bool bodyScrolls;
 
   const PrimaryModuleScaffold({
     super.key,
@@ -134,6 +135,7 @@ class PrimaryModuleScaffold extends StatelessWidget {
     this.bottomBar,
     this.extraAppBarActions,
     this.automaticallyImplyLeading = true,
+    this.bodyScrolls = false,
   });
 
   @override
@@ -156,6 +158,7 @@ class PrimaryModuleScaffold extends StatelessWidget {
           Expanded(
             child: PageShellBody(
               pageTitle: pageTitle,
+              bodyScrolls: bodyScrolls,
               child: body,
             ),
           ),
@@ -284,6 +287,7 @@ class PageShellBody extends StatelessWidget {
   final BrandedPageProject? project;
   final Widget child;
   final bool showPageTitle;
+  final bool bodyScrolls;
 
   const PageShellBody({
     super.key,
@@ -291,6 +295,7 @@ class PageShellBody extends StatelessWidget {
     this.pageTitle,
     this.project,
     this.showPageTitle = true,
+    this.bodyScrolls = false,
   });
 
   @override
@@ -319,32 +324,49 @@ class PageShellBody extends StatelessWidget {
               SizedBox(height: spacing),
             ],
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final area = SizedBox(
-                    width: double.infinity,
-                    height: constraints.maxHeight,
-                    child: child,
-                  );
-
-                  if (isPhone) return area;
-
-                  return Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: Dimensions.shellContentMaxWidthFor(context),
-                        maxHeight: constraints.maxHeight,
-                      ),
-                      child: area,
-                    ),
-                  );
-                },
-              ),
+              child: _bodyArea(context, isPhone),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _bodyArea(BuildContext context, bool isPhone) {
+    if (bodyScrolls) {
+      if (isPhone) return child;
+      return Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: Dimensions.shellContentMaxWidthFor(context),
+          ),
+          child: child,
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final area = SizedBox(
+          width: double.infinity,
+          height: constraints.maxHeight,
+          child: child,
+        );
+
+        if (isPhone) return area;
+
+        return Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: Dimensions.shellContentMaxWidthFor(context),
+              maxHeight: constraints.maxHeight,
+            ),
+            child: area,
+          ),
+        );
+      },
     );
   }
 }

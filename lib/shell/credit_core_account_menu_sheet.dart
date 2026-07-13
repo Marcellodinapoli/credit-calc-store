@@ -27,11 +27,15 @@ enum _MenuSection { creditForm, creditJob }
 class CreditCoreAccountMenuSheet extends StatefulWidget {
   final VoidCallback onAnnouncements;
   final Future<void> Function() onLogout;
+  final PersonalFormMenuItem? selectedFormItem;
+  final PersonalJobMenuItem? selectedJobItem;
 
   const CreditCoreAccountMenuSheet({
     super.key,
     required this.onAnnouncements,
     required this.onLogout,
+    this.selectedFormItem,
+    this.selectedJobItem,
   });
 
   @override
@@ -57,6 +61,11 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
   @override
   void initState() {
     super.initState();
+    if (widget.selectedFormItem != null) {
+      _openSection = _MenuSection.creditForm;
+    } else if (widget.selectedJobItem != null) {
+      _openSection = _MenuSection.creditJob;
+    }
     _loadUserContext();
   }
 
@@ -132,10 +141,18 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
   }
 
   void _closeAndForm(PersonalFormMenuItem item) {
+    if (widget.selectedFormItem == item) {
+      Navigator.pop(context);
+      return;
+    }
     _closeAnd(() => item.open(context));
   }
 
   void _closeAndJob(PersonalJobMenuItem item) {
+    if (widget.selectedJobItem == item) {
+      Navigator.pop(context);
+      return;
+    }
     _closeAnd(() => item.open(context));
   }
 
@@ -196,6 +213,7 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
     Map<String, dynamic>? maintenanceData,
     String sectionName, {
     bool showBadge = false,
+    bool selected = false,
   }) {
     final blocked = MaintenanceService.isSectionBlocked(maintenanceData, sectionName);
 
@@ -203,10 +221,34 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       title: Text(
         '- $title',
-        style: TextStyle(color: blocked ? Colors.black38 : Colors.black87),
+        style: TextStyle(
+          color: blocked
+              ? Colors.black38
+              : selected
+                  ? accent
+                  : Colors.black87,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+        ),
       ),
-      trailing: accountMenuBadgeDot(visible: showBadge),
-      tileColor: accentLight.withValues(alpha: 0.35),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showBadge) ...[
+            accountMenuBadgeDot(visible: true),
+            const SizedBox(width: 8),
+          ],
+          if (selected)
+            Icon(Icons.check_circle, color: accent, size: 20),
+        ],
+      ),
+      tileColor: selected
+          ? accent.withValues(alpha: 0.18)
+          : accentLight.withValues(alpha: 0.35),
+      shape: selected
+          ? Border(
+              left: BorderSide(color: accent, width: 3),
+            )
+          : null,
       onTap: blocked ? _showMaintenanceSnackBar : onTap,
     );
   }
@@ -373,6 +415,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                       _formLight,
                       maintenanceData,
                       MaintenanceService.creditForm,
+                      selected: widget.selectedFormItem ==
+                          PersonalFormMenuItem.companyCollaborators,
                     ));
                   }
                   for (final item in [
@@ -390,6 +434,7 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                       maintenanceData,
                       MaintenanceService.creditForm,
                       showBadge: _formItemBadge(item, badges),
+                      selected: widget.selectedFormItem == item,
                     ));
                   }
                 }
@@ -414,6 +459,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                         _jobLight,
                         maintenanceData,
                         MaintenanceService.creditJob,
+                        selected: widget.selectedJobItem ==
+                            PersonalJobMenuItem.gestioneLavori,
                       ),
                       _buildSubMenuItem(
                         PersonalJobMenuItem.companyUsers.title,
@@ -422,6 +469,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                         _jobLight,
                         maintenanceData,
                         MaintenanceService.creditJob,
+                        selected: widget.selectedJobItem ==
+                            PersonalJobMenuItem.companyUsers,
                       ),
                     ]);
                   } else if (isPublic) {
@@ -437,6 +486,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                           PersonalJobMenuItem.jobOffers,
                           badges,
                         ),
+                        selected: widget.selectedJobItem ==
+                            PersonalJobMenuItem.jobOffers,
                       ),
                       _buildSubMenuItem(
                         PersonalJobMenuItem.savedJobs.title,
@@ -445,6 +496,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                         _jobLight,
                         maintenanceData,
                         MaintenanceService.creditJob,
+                        selected: widget.selectedJobItem ==
+                            PersonalJobMenuItem.savedJobs,
                       ),
                       _buildSubMenuItem(
                         PersonalJobMenuItem.myApplications.title,
@@ -453,6 +506,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                         _jobLight,
                         maintenanceData,
                         MaintenanceService.creditJob,
+                        selected: widget.selectedJobItem ==
+                            PersonalJobMenuItem.myApplications,
                       ),
                     ]);
                   }

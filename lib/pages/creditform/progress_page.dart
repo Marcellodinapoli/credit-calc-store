@@ -3,6 +3,7 @@
 // ================================================================
 import 'package:flutter/material.dart';
 import 'personal_form_shell.dart';
+import 'personal_form_menu.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/custom_tabbar_theme.dart';
@@ -344,6 +345,7 @@ class _CrediFormProgressPageState
     return PersonalFormShell(
       pageTitle: 'I miei progressi',
       showAccountMenu: true,
+      activeMenuItem: PersonalFormMenuItem.progress,
       body: Padding(
         padding: EdgeInsets.all(pad),
         child: Card(

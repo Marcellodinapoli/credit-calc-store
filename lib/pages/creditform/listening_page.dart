@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
 import 'personal_form_shell.dart';
+import 'personal_form_menu.dart';
 import '../../core/theme/custom_tabbar_theme.dart';
 import '../../core/dimensions.dart';
 import '../../ui/layout/page_shell.dart';
@@ -83,6 +84,7 @@ class _ListeningPageState extends State<ListeningPage>
     return PersonalFormShell(
       pageTitle: "Warm-up",
       showAccountMenu: true,
+      activeMenuItem: PersonalFormMenuItem.listening,
       body: Column(
         children: [
           const SizedBox(height: 8),

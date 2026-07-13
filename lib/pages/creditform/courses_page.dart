@@ -5,6 +5,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'personal_form_shell.dart';
+import 'personal_form_menu.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'training_page.dart';
 import '../../core/theme/custom_tabbar_theme.dart';
@@ -68,6 +69,7 @@ class _CoursesPageState extends State<CoursesPage>
     return PersonalFormShell(
       pageTitle: 'Corsi',
       showAccountMenu: true,
+      activeMenuItem: PersonalFormMenuItem.courses,
       body: Column(
         children: [
           const SizedBox(height: 8),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'personal_form_shell.dart';
+import 'personal_form_menu.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/dimensions.dart';
@@ -37,6 +38,7 @@ class _ReviewPageState extends State<ReviewPage> {
     return PersonalFormShell(
       pageTitle: 'Recensione',
       showAccountMenu: true,
+      activeMenuItem: PersonalFormMenuItem.review,
       body: Center(
         child: SingleChildScrollView(
           padding: EdgeInsets.all(Dimensions.pagePaddingFor(context)),

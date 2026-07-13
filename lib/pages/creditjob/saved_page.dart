@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'personal_job_shell.dart';
+import 'personal_job_menu.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -43,6 +44,7 @@ class SavedPage extends StatelessWidget {
       return PersonalJobShell(
       pageTitle: 'Salvati',
         showAccountMenu: true,
+        activeMenuItem: PersonalJobMenuItem.savedJobs,
         body: Center(
           child: Text("Utente non autenticato"),
         ),
@@ -52,6 +54,7 @@ class SavedPage extends StatelessWidget {
     return PersonalJobShell(
       pageTitle: 'Salvati',
       showAccountMenu: true,
+      activeMenuItem: PersonalJobMenuItem.savedJobs,
       body: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('users')

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'personal_job_shell.dart';
+import 'personal_job_menu.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../job/job_models.dart';
@@ -106,6 +107,7 @@ class _JobOffersPageState extends State<JobOffersPage> {
     return PersonalJobShell(
       pageTitle: 'Offerte di lavoro',
       showAccountMenu: true,
+      activeMenuItem: PersonalJobMenuItem.jobOffers,
       body: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

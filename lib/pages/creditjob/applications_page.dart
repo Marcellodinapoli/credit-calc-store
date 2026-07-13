@@ -1,6 +1,7 @@
 // ignore_for_file: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'personal_job_shell.dart';
+import 'personal_job_menu.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -50,6 +51,7 @@ class _ApplicationsPageState extends State<ApplicationsPage> {
     return PersonalJobShell(
       pageTitle: 'Le mie candidature',
       showAccountMenu: true,
+      activeMenuItem: PersonalJobMenuItem.myApplications,
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('job_applications')

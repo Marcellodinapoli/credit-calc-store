@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/job_theme.dart';
 import '../../core/maintenance_service.dart';
 import '../../session/credit_core_session_runtime.dart';
+import '../../pages/creditjob/personal_job_menu.dart';
 import '../../services/account_menu_badge_controller.dart';
 import '../../shell/credit_core_account_menu_sheet.dart';
 import '../../ui/layout/page_shell.dart';
@@ -17,6 +18,7 @@ class PersonalJobShell extends StatefulWidget {
   final Widget? bottomBar;
   final bool padded;
   final bool showAccountMenu;
+  final PersonalJobMenuItem? activeMenuItem;
 
   const PersonalJobShell({
     super.key,
@@ -25,6 +27,7 @@ class PersonalJobShell extends StatefulWidget {
     this.bottomBar,
     this.padded = true,
     this.showAccountMenu = false,
+    this.activeMenuItem,
   });
 
   @override
@@ -70,6 +73,7 @@ class _PersonalJobShellState extends State<PersonalJobShell> {
       builder: (ctx) => CreditCoreAccountMenuSheet(
         onAnnouncements: _openAnnouncements,
         onLogout: _logout,
+        selectedJobItem: widget.showAccountMenu ? widget.activeMenuItem : null,
       ),
     );
   }
