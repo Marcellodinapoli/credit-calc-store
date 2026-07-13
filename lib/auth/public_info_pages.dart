@@ -60,7 +60,7 @@ class PublicContactsPage extends StatelessWidget {
             children: [
               _InfoCardRow(
                 label: 'Email',
-                value: 'support@creditcore.it',
+                value: 'supporto@creditcore.it',
               ),
               SizedBox(height: 14),
               _InfoCardRow(
