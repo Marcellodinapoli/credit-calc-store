@@ -334,16 +334,7 @@ class PageShellBody extends StatelessWidget {
 
   Widget _bodyArea(BuildContext context, bool isPhone) {
     if (bodyScrolls) {
-      if (isPhone) return child;
-      return Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: Dimensions.shellContentMaxWidthFor(context),
-          ),
-          child: child,
-        ),
-      );
+      return child;
     }
 
     return LayoutBuilder(

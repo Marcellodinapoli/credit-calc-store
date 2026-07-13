@@ -368,6 +368,9 @@ class _MyDataPageState extends State<MyDataPage> {
   @override
   Widget build(BuildContext context) {
     final isMobile = Dimensions.isPhone(context);
+    final pagePadding = Dimensions.pagePaddingInsetsFor(context);
+    final contentWidth = (MediaQuery.sizeOf(context).width - pagePadding.horizontal)
+        .clamp(0.0, Dimensions.shellContentMaxWidthFor(context));
 
     if (_loading || userType == null) {
       return const PersonalAreaShell(
@@ -396,14 +399,12 @@ class _MyDataPageState extends State<MyDataPage> {
             ),
           ),
           const SizedBox(height: 20),
-          LayoutBuilder(
-            builder: (context, constraints) => _buildProfileSections(
-              context: context,
-              isCompany: isCompany,
-              isWork: isWork,
-              isMobile: isMobile,
-              contentWidth: constraints.maxWidth,
-            ),
+          _buildProfileSections(
+            context: context,
+            isCompany: isCompany,
+            isWork: isWork,
+            isMobile: isMobile,
+            contentWidth: contentWidth,
           ),
           if (userType == 'public') ...[
             const SizedBox(height: 28),
