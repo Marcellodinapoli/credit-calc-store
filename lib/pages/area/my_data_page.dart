@@ -367,7 +367,8 @@ class _MyDataPageState extends State<MyDataPage> {
 // -----------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    final isMobile = Dimensions.isTablet(context);
+    final isMobile = Dimensions.isPhone(context);
+    final contentWidth = MediaQuery.sizeOf(context).width;
 
     if (_loading || userType == null) {
       return const PersonalAreaShell(
@@ -383,107 +384,27 @@ class _MyDataPageState extends State<MyDataPage> {
     return PersonalAreaShell(
       pageTitle: 'I miei dati',
       body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          isMobile ? 16 : 28,
-          8,
-          isMobile ? 16 : 28,
-          32,
+        padding: EdgeInsets.only(
+          bottom: 24 + Dimensions.resolvedBottomInset(context),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _ProfilePageHeader(isCompany: isCompany),
+            Text(
+              'Gestisci piano, dati personali e sicurezza dell\'account.',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.45,
+                color: Colors.grey.shade600,
+              ),
+            ),
             const SizedBox(height: 20),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final sideBySide = constraints.maxWidth >= 640;
-                if (!sideBySide) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (!isWork) ...[
-                        const _PlanSummaryCard(),
-                        const SizedBox(height: 28),
-                      ],
-                      _SectionHeading(
-                        title: isCompany
-                            ? 'Anagrafica azienda'
-                            : 'Dati personali',
-                        subtitle: isCompany
-                            ? 'Informazioni registrate per il workspace aziendale.'
-                            : 'Informazioni del tuo account CreditCalc.',
-                      ),
-                      const SizedBox(height: 12),
-                      _buildPersonalDataCard(isCompany, isWork, isMobile),
-                    ],
-                  );
-                }
-                if (isWork) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const _SectionHeading(
-                        title: 'Dati personali',
-                        subtitle:
-                            'Informazioni del tuo account CreditCalc.',
-                      ),
-                      const SizedBox(height: 12),
-                      _buildPersonalDataCard(isCompany, isWork, isMobile),
-                    ],
-                  );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Expanded(
-                          child: _SectionHeading(
-                            title: 'Il tuo piano',
-                            subtitle:
-                                'Piano attivo, coupon e gestione abbonamento.',
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                        Expanded(
-                          child: _SectionHeading(
-                            title: isCompany
-                                ? 'Anagrafica azienda'
-                                : 'Dati personali',
-                            subtitle: isCompany
-                                ? 'Informazioni registrate per il workspace aziendale.'
-                                : 'Informazioni del tuo account CreditCalc.',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Expanded(
-                            child: _PlanSummaryCard(
-                              showHeader: false,
-                              stretch: true,
-                            ),
-                          ),
-                          const SizedBox(width: 20),
-                          Expanded(
-                            child: _buildPersonalDataCard(
-                              isCompany,
-                              isWork,
-                              isMobile,
-                              stretch: true,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
+            _buildProfileSections(
+              context: context,
+              isCompany: isCompany,
+              isWork: isWork,
+              isMobile: isMobile,
+              contentWidth: contentWidth,
             ),
             if (userType == 'public') ...[
               const SizedBox(height: 28),
@@ -604,15 +525,84 @@ class _MyDataPageState extends State<MyDataPage> {
 // -----------------------------------------------------------------------------
 // UI HELPERS
 // -----------------------------------------------------------------------------
+  Widget _buildProfileSections({
+    required BuildContext context,
+    required bool isCompany,
+    required bool isWork,
+    required bool isMobile,
+    required double contentWidth,
+  }) {
+    final personalHeading = _SectionHeading(
+      title: isCompany ? 'Anagrafica azienda' : 'Dati personali',
+      subtitle: isCompany
+          ? 'Informazioni registrate per il workspace aziendale.'
+          : 'Informazioni del tuo account CreditCalc.',
+    );
+    final personalCard = _buildPersonalDataCard(isCompany, isWork, isMobile);
+
+    if (isWork) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          personalHeading,
+          const SizedBox(height: 12),
+          personalCard,
+        ],
+      );
+    }
+
+    final sideBySide = contentWidth >= 900;
+    if (!sideBySide) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _PlanSummaryCard(),
+          const SizedBox(height: 28),
+          personalHeading,
+          const SizedBox(height: 12),
+          personalCard,
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Expanded(
+              child: _SectionHeading(
+                title: 'Il tuo piano',
+                subtitle: 'Piano attivo, coupon e gestione abbonamento.',
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(child: personalHeading),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Expanded(
+              child: _PlanSummaryCard(showHeader: false),
+            ),
+            const SizedBox(width: 20),
+            Expanded(child: personalCard),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildPersonalDataCard(
     bool isCompany,
     bool isWork,
-    bool isMobile, {
-    bool stretch = false,
-  }) {
+    bool isMobile,
+  ) {
     return _ProfileDataCard(
       isMobile: isMobile,
-      stretch: stretch,
       children: [
         if (!isCompany) ...[
           _profileRow(
@@ -1051,63 +1041,6 @@ class _MyDataPageState extends State<MyDataPage> {
   }
 }
 
-class _ProfilePageHeader extends StatelessWidget {
-  const _ProfilePageHeader({required this.isCompany});
-
-  final bool isCompany;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            color: ProjectColors.area.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: ProjectColors.area.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Icon(
-            isCompany ? Icons.business_outlined : Icons.person_outline,
-            color: ProjectColors.area,
-            size: 28,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isCompany ? 'Dati azienda' : 'Profilo',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF111827),
-                  letterSpacing: -0.3,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Gestisci piano, dati personali e sicurezza dell\'account.',
-                style: TextStyle(
-                  fontSize: 14,
-                  height: 1.45,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _SectionHeading extends StatelessWidget {
   const _SectionHeading({required this.title, required this.subtitle});
 
@@ -1142,13 +1075,11 @@ class _ProfileDataCard extends StatelessWidget {
     required this.isMobile,
     this.children,
     this.child,
-    this.stretch = false,
   });
 
   final bool isMobile;
   final List<Widget>? children;
   final Widget? child;
-  final bool stretch;
 
   @override
   Widget build(BuildContext context) {
@@ -1186,8 +1117,7 @@ class _ProfileDataCard extends StatelessWidget {
       ),
     );
 
-    if (!stretch) return card;
-    return SizedBox(width: double.infinity, height: double.infinity, child: card);
+    return card;
   }
 }
 
@@ -1202,11 +1132,9 @@ String _planTierLabel(String planId) {
 class _PlanSummaryCard extends StatelessWidget {
   const _PlanSummaryCard({
     this.showHeader = true,
-    this.stretch = false,
   });
 
   final bool showHeader;
-  final bool stretch;
 
   void _openPlanPage(BuildContext context) {
     PersonalAreaMenuItem.subscription.open(context);
@@ -1223,7 +1151,10 @@ class _PlanSummaryCard extends StatelessWidget {
       stream: UserSubscriptionService.watchCurrent(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const SizedBox.shrink();
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          );
         }
 
         final sub = snapshot.data!;
@@ -1274,8 +1205,6 @@ class _PlanSummaryCard extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize:
-                          stretch ? MainAxisSize.max : MainAxisSize.min,
                       children: [
                         if (showHeader)
                           Row(
@@ -1498,7 +1427,6 @@ class _PlanSummaryCard extends StatelessWidget {
                             ),
                           ),
                         ],
-                        if (stretch) const Spacer(),
                         const SizedBox(height: 16),
                         OutlinedButton.icon(
                           onPressed: () => _openPlanPage(context),
@@ -1523,12 +1451,7 @@ class _PlanSummaryCard extends StatelessWidget {
           ),
         );
 
-        if (!stretch) return cardBody;
-        return SizedBox(
-          width: double.infinity,
-          height: double.infinity,
-          child: cardBody,
-        );
+        return cardBody;
       },
     );
   }

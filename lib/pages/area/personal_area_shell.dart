@@ -77,19 +77,30 @@ class _PersonalAreaShellState extends State<PersonalAreaShell> {
 
   @override
   Widget build(BuildContext context) {
+    final themedBody = MaintenanceSectionGate(
+      sectionName: widget.maintenanceSection,
+      enabled: !widget.bypassMaintenance,
+      child: widget.body,
+    );
+
+    if (widget.showAccountMenu) {
+      return PrimaryModuleScaffold(
+        project: BrandedPageProject.area,
+        pageTitle: widget.pageTitle,
+        automaticallyImplyLeading: false,
+        bottomBar: widget.bottomBar,
+        extraAppBarActions: [
+          AccountMenuBadgeIconButton(onPressed: _showAccountMenu),
+        ],
+        body: themedBody,
+      );
+    }
+
     return SecondaryPageScaffold(
       pageTitle: widget.pageTitle,
       project: BrandedPageProject.area,
-      automaticallyImplyLeading: !widget.showAccountMenu,
-      extraAppBarActions: widget.showAccountMenu
-          ? [AccountMenuBadgeIconButton(onPressed: _showAccountMenu)]
-          : null,
       bottomBar: widget.bottomBar,
-      body: MaintenanceSectionGate(
-        sectionName: widget.maintenanceSection,
-        enabled: !widget.bypassMaintenance,
-        child: widget.body,
-      ),
+      body: themedBody,
     );
   }
 }
