@@ -159,7 +159,7 @@ class _SyncOnlyShell extends StatelessWidget {
         foregroundColor: Colors.white,
         actions: [
           TextButton(
-            onPressed: onLogout,
+            onPressed: () => unawaited(onLogout()),
             child: const Text(
               'Esci',
               style: TextStyle(color: Colors.white),

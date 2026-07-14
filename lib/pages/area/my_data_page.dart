@@ -3,6 +3,7 @@
 // CONFIG / IMPORT / WIDGET ROOT
 // -----------------------------------------------------------------------------
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -42,6 +43,8 @@ class _MyDataPageState extends State<MyDataPage> {
   final _storage = FirebaseStorage.instance;
 
   bool _loading = true;
+  String? _loadError;
+  StreamSubscription<User?>? _authSub;
 
 // DATI UTENTE
   String firstName = '';
@@ -83,7 +86,18 @@ class _MyDataPageState extends State<MyDataPage> {
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _authSub = _auth.authStateChanges().listen((user) {
+      if (!mounted || user == null) return;
+      if (_loading || userType != null) return;
+      unawaited(_loadUserData());
+    });
+    unawaited(_loadUserData());
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
 // -----------------------------------------------------------------------------
@@ -130,9 +144,19 @@ class _MyDataPageState extends State<MyDataPage> {
   }
 
   Future<void> _loadUserData() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+
     final user = _auth.currentUser;
     if (user == null) {
-      setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = 'Sessione non disponibile. Accedi di nuovo.';
+      });
       return;
     }
 
@@ -141,11 +165,18 @@ class _MyDataPageState extends State<MyDataPage> {
 
     try {
       // 🔹 STEP 1: leggo USERS
-      final userDoc =
-      await _firestore.collection('users').doc(user.uid).get();
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get()
+          .timeout(const Duration(seconds: 15));
 
       if (!userDoc.exists) {
-        setState(() => _loading = false);
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _loadError = 'Profilo utente non trovato.';
+        });
         return;
       }
 
@@ -231,6 +262,7 @@ class _MyDataPageState extends State<MyDataPage> {
       if (!mounted) return;
 
       setState(() {
+        userType = userData['type'] ?? 'public';
         // 🔹 UTENTE BASE
         firstName = (userData['name'] ?? '').toString().trim();
         lastName = (userData['surname'] ?? '').toString().trim();
@@ -275,6 +307,14 @@ class _MyDataPageState extends State<MyDataPage> {
             : '—';
 
         _loading = false;
+        _loadError = null;
+      });
+    } on TimeoutException {
+      debugPrint('❌ Timeout caricamento dati utente');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = 'Caricamento troppo lento. Riprova.';
       });
     } catch (e) {
       debugPrint('❌ Errore caricamento dati utente: $e');
@@ -283,6 +323,7 @@ class _MyDataPageState extends State<MyDataPage> {
 
       setState(() {
         _loading = false;
+        _loadError = 'Impossibile caricare i dati. Riprova.';
       });
     }
   }
@@ -372,10 +413,42 @@ class _MyDataPageState extends State<MyDataPage> {
     final contentWidth = (MediaQuery.sizeOf(context).width - pagePadding.horizontal)
         .clamp(0.0, Dimensions.shellContentMaxWidthFor(context));
 
-    if (_loading || userType == null) {
+    if (_loading) {
       return const PersonalAreaShell(
         pageTitle: 'I miei dati',
+        activeMenuItem: PersonalAreaMenuItem.myData,
+        backToCreditCalcHome: true,
         body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (userType == null) {
+      return PersonalAreaShell(
+        pageTitle: 'I miei dati',
+        activeMenuItem: PersonalAreaMenuItem.myData,
+        backToCreditCalcHome: true,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: Colors.grey.shade600),
+                const SizedBox(height: 16),
+                Text(
+                  _loadError ?? 'Impossibile caricare i dati.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _loadUserData,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Riprova'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
@@ -387,12 +460,13 @@ class _MyDataPageState extends State<MyDataPage> {
       pageTitle: 'I miei dati',
       activeMenuItem: PersonalAreaMenuItem.myData,
       backToCreditCalcHome: true,
-      bodyScrolls: true,
-      body: ListView(
+      body: SingleChildScrollView(
         padding: EdgeInsets.only(
           bottom: 24 + Dimensions.resolvedBottomInset(context),
         ),
-        children: [
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
             Text(
               'Gestisci piano, dati personali e sicurezza dell\'account.',
               style: TextStyle(
@@ -409,7 +483,7 @@ class _MyDataPageState extends State<MyDataPage> {
               isMobile: isMobile,
               contentWidth: contentWidth,
             ),
-          if (userType == 'public') ...[
+            if (userType == 'public') ...[
             const SizedBox(height: 28),
             const _SectionHeading(
               title: 'Coupon limiti',
@@ -518,7 +592,8 @@ class _MyDataPageState extends State<MyDataPage> {
                     ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -584,15 +659,24 @@ class _MyDataPageState extends State<MyDataPage> {
           ],
         ),
         const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Expanded(
-              child: _PlanSummaryCard(showHeader: false),
-            ),
-            const SizedBox(width: 20),
-            Expanded(child: personalCard),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Expanded(
+                child: _PlanSummaryCard(showHeader: false, stretch: true),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: _buildPersonalDataCard(
+                  isCompany,
+                  isWork,
+                  isMobile,
+                  stretch: true,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -601,10 +685,12 @@ class _MyDataPageState extends State<MyDataPage> {
   Widget _buildPersonalDataCard(
     bool isCompany,
     bool isWork,
-    bool isMobile,
-  ) {
+    bool isMobile, {
+    bool stretch = false,
+  }) {
     return _ProfileDataCard(
       isMobile: isMobile,
+      stretch: stretch,
       children: [
         if (!isCompany) ...[
           _profileRow(
@@ -1077,11 +1163,13 @@ class _ProfileDataCard extends StatelessWidget {
     required this.isMobile,
     this.children,
     this.child,
+    this.stretch = false,
   });
 
   final bool isMobile;
   final List<Widget>? children;
   final Widget? child;
+  final bool stretch;
 
   @override
   Widget build(BuildContext context) {
@@ -1119,7 +1207,8 @@ class _ProfileDataCard extends StatelessWidget {
       ),
     );
 
-    return card;
+    if (!stretch) return card;
+    return SizedBox(width: double.infinity, height: double.infinity, child: card);
   }
 }
 
@@ -1134,9 +1223,11 @@ String _planTierLabel(String planId) {
 class _PlanSummaryCard extends StatelessWidget {
   const _PlanSummaryCard({
     this.showHeader = true,
+    this.stretch = false,
   });
 
   final bool showHeader;
+  final bool stretch;
 
   void _openPlanPage(BuildContext context) {
     PersonalAreaMenuItem.subscription.open(context);
@@ -1153,10 +1244,7 @@ class _PlanSummaryCard extends StatelessWidget {
       stream: UserSubscriptionService.watchCurrent(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: CircularProgressIndicator()),
-          );
+          return const SizedBox.shrink();
         }
 
         final sub = snapshot.data!;
@@ -1196,7 +1284,7 @@ class _PlanSummaryCard extends StatelessWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   width: 5,
@@ -1207,6 +1295,8 @@ class _PlanSummaryCard extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize:
+                          stretch ? MainAxisSize.max : MainAxisSize.min,
                       children: [
                         if (showHeader)
                           Row(
@@ -1429,6 +1519,7 @@ class _PlanSummaryCard extends StatelessWidget {
                             ),
                           ),
                         ],
+                        if (stretch) const Spacer(),
                         const SizedBox(height: 16),
                         OutlinedButton.icon(
                           onPressed: () => _openPlanPage(context),
@@ -1453,7 +1544,12 @@ class _PlanSummaryCard extends StatelessWidget {
           ),
         );
 
-        return cardBody;
+        if (!stretch) return cardBody;
+        return SizedBox(
+          width: double.infinity,
+          height: double.infinity,
+          child: cardBody,
+        );
       },
     );
   }

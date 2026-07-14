@@ -1,0 +1,11 @@
+{
+  "data": {
+    "prompt": "Simulazione test",
+    "title": "Test",
+    "history": [
+      {"role": "user", "content": "Buongiorno"},
+      {"role": "assistant", "content": "Pronto, chi parla?"}
+    ],
+    "practiceText": "Debitore: Rossi"
+  }
+}

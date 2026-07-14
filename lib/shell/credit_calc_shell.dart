@@ -5,11 +5,9 @@ import 'package:credit_calc_core/credit_calc_core.dart'
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import '../auth/biometric_lock_gate.dart';
 import '../core/dimensions.dart';
 import '../offline/credit_calc_runtime.dart';
 import '../session/credit_core_session_runtime.dart';
-import '../offline/services/connectivity_service.dart';
 import '../pages/creditcalc/commissions_page.dart';
 import '../pages/creditcalc/credit_calc_settings_page.dart';
 import '../pages/creditcalc/creditors_page.dart';
@@ -92,62 +90,10 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     );
   }
 
-  Future<void> _logout() async {
-    final online = await ConnectivityService.isOnline();
-    final canSoftLock = await BiometricLockGate.canLockWithBiometric();
-    if (!mounted) return;
-
-    final action = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Esci'),
-        content: Text(
-          _logoutDialogMessage(softLock: canSoftLock, online: online),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annulla'),
-          ),
-          if (canSoftLock && online)
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 'signout'),
-              child: const Text('Esci dall\'account'),
-            ),
-          FilledButton(
-            onPressed: () => Navigator.pop(
-              ctx,
-              canSoftLock ? 'lock' : 'signout',
-            ),
-            child: Text(canSoftLock ? 'Blocca app' : 'Esci'),
-          ),
-        ],
-      ),
-    );
-    if (action == null) return;
-
-    if (action == 'lock') {
-      BiometricLockGate.lockAgain();
-      return;
-    }
-
+  Future<void> _signOutAccount() async {
     try {
       await CreditCoreSessionRuntime.signOutWithSessionRelease();
     } catch (_) {}
-
-    CreditCalcRuntime.clear();
-  }
-
-  String _logoutDialogMessage({
-    required bool softLock,
-    required bool online,
-  }) {
-    if (softLock) {
-      return 'L\'app verrà bloccata su questo dispositivo. '
-          'Potrai rientrare con la biometria, anche senza connessione.';
-    }
-
-    return 'Vuoi uscire dall\'account CreditCore?';
   }
 
   void _openAnnouncements() {
@@ -165,7 +111,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
       useSafeArea: true,
       builder: (ctx) => CreditCoreAccountMenuSheet(
         onAnnouncements: _openAnnouncements,
-        onLogout: _logout,
+        onLogout: _signOutAccount,
       ),
     );
   }
@@ -211,7 +157,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
       section: _section,
       onSectionChanged: _onSectionChanged,
       onAnnouncements: _openAnnouncements,
-      onLogout: _logout,
+      onLogout: _signOutAccount,
       onSettings: _openSettings,
       child: _sectionPage(_section),
     );

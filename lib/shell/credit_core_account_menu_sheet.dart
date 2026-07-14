@@ -740,9 +740,9 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
               ListTile(
                 leading: const Icon(Icons.logout),
                 title: const Text('Esci'),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  widget.onLogout();
+                  await widget.onLogout();
                 },
               ),
               SizedBox(height: MediaQuery.viewPaddingOf(context).bottom + 8),

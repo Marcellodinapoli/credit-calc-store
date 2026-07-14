@@ -32,6 +32,8 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
   _BootstrapStep _step = _BootstrapStep.loading;
   SessionService? _sessionService;
   Timer? _startupWatchdog;
+  StreamSubscription<AppSessionRole>? _sessionRoleSub;
+  Future<void>? _operationalDataInit;
 
   @override
   void initState() {
@@ -46,6 +48,7 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
   @override
   void dispose() {
     _startupWatchdog?.cancel();
+    _sessionRoleSub?.cancel();
     CommissionEntryDataAccess.instance = FirestoreCommissionEntryDataAccess();
     CommissionCreditorDataAccess.instance =
         FirestoreCommissionCreditorDataAccess();
@@ -97,6 +100,54 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     if (!mounted) return;
     _cancelStartupWatchdog();
     setState(() => _step = _BootstrapStep.ready);
+    _attachSessionRoleListener();
+    unawaited(_ensureOperationalData());
+  }
+
+  void _attachSessionRoleListener() {
+    _sessionRoleSub?.cancel();
+    final session = CreditCoreSessionRuntime.sessionService;
+    if (session == null) return;
+
+    _sessionRoleSub = session.roleStream.listen((role) {
+      if (role == AppSessionRole.primary) {
+        unawaited(_ensureOperationalData());
+      }
+    });
+  }
+
+  bool _isOperationalDataReady() {
+    try {
+      CreditCalcRepository.instance;
+      return CreditCalcRuntime.isReady;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _ensureOperationalData() {
+    if (_operationalDataInit != null) return _operationalDataInit!;
+
+    final future = _ensureOperationalDataImpl();
+    _operationalDataInit = future;
+    return future.whenComplete(() {
+      if (identical(_operationalDataInit, future)) {
+        _operationalDataInit = null;
+      }
+    });
+  }
+
+  Future<void> _ensureOperationalDataImpl() async {
+    if (_isOperationalDataReady()) return;
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final session = CreditCoreSessionRuntime.sessionService;
+    if (session?.role != AppSessionRole.primary) return;
+
+    await _continueAfterLogin(uid);
+    if (mounted) setState(() {});
   }
 
   void _cancelStartupWatchdog() {
@@ -221,9 +272,30 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
           fullScreen: true,
           child: AppSessionGate(
             key: ValueKey(FirebaseAuth.instance.currentUser?.uid ?? 'guest'),
-            child: const CreditCalcShell(),
+            child: _OperationalDataReadyGate(
+              isReady: _isOperationalDataReady(),
+              child: const CreditCalcShell(),
+            ),
           ),
         );
     }
+  }
+}
+
+class _OperationalDataReadyGate extends StatelessWidget {
+  const _OperationalDataReadyGate({
+    required this.isReady,
+    required this.child,
+  });
+
+  final bool isReady;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isReady) return child;
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
   }
 }

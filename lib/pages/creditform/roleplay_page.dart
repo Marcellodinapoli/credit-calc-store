@@ -5,11 +5,9 @@
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
-import '../../config/roleplay_ai_provider.dart';
 import '../../services/read_state_service.dart';
 import '../../services/roleplay_progress_service.dart';
 import '../../services/roleplay_conversation_service.dart';
@@ -37,16 +35,11 @@ class _RoleplayPageState extends State<RoleplayPage> {
   Map<String, dynamic>? _currentSimulation;
   String? _currentSimulationId;
   String? _currentSimulationCategory;
-  String? _currentAiProvider;
 
   @override
   void initState() {
     super.initState();
     _initReadState();
-  }
-
-  RoleplaySession _requireSession() {
-    return _session ??= _createSession(RoleplayAiProvider.gpt);
   }
 
   RoleplaySession _createSession(String engine) {
@@ -139,7 +132,6 @@ class _RoleplayPageState extends State<RoleplayPage> {
     final normalizedProvider =
         RoleplaySessionFactory.resolveProvider(simulationData);
     final engine = RoleplaySessionFactory.activeEngine(normalizedProvider);
-    _currentAiProvider = engine;
 
     await _ensureSession(engine);
 
@@ -176,7 +168,6 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _currentSimulation = null;
     _currentSimulationId = null;
     _currentSimulationCategory = null;
-    _currentAiProvider = null;
 
     await _session?.stop();
     if (mounted) setState(() {});

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../offline/credit_calc_runtime.dart';
 import '../offline/services/session_service.dart';
 
 /// Servizi condivisi CreditCore + sessione unica dispositivo.
@@ -69,8 +70,13 @@ abstract final class CreditCoreSessionRuntime {
 
   /// Libera la sessione Firestore e poi esce dall'account.
   static Future<void> signOutWithSessionRelease() async {
-    await releaseSession();
+    try {
+      await releaseSession().timeout(const Duration(seconds: 4));
+    } catch (_) {}
+
     clear();
+    CreditCalcRuntime.clear();
+
     try {
       await FirebaseAuth.instance.signOut();
     } catch (_) {}
