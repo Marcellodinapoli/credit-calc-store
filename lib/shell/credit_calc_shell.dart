@@ -19,6 +19,7 @@ import '../ui/layout/page_shell.dart';
 import '../widgets/account_menu_badge_icon_button.dart';
 import '../widgets/desktop_app_update_button.dart';
 import 'credit_core_account_menu_sheet.dart';
+import 'credit_core_module_navigation.dart';
 import 'credit_core_site_actions.dart';
 
 /// Badge monitoraggio rata sulla voce Itinerario (≈2× rispetto al default Material).
@@ -60,14 +61,23 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
   void initState() {
     super.initState();
     CreditCalcRuntime.writeBlockedMessage.addListener(_onWriteBlocked);
+    creditCalcReturnToCreditorsRequest.addListener(_onReturnToCreditorsRequest);
     _accountMenuBadgeController.start();
   }
 
   @override
   void dispose() {
     CreditCalcRuntime.writeBlockedMessage.removeListener(_onWriteBlocked);
+    creditCalcReturnToCreditorsRequest
+        .removeListener(_onReturnToCreditorsRequest);
     _accountMenuBadgeController.stop();
     super.dispose();
+  }
+
+  void _onReturnToCreditorsRequest() {
+    if (!creditCalcReturnToCreditorsRequest.value || !mounted) return;
+    setState(() => _section = CreditCalcNavItem.creditors);
+    creditCalcReturnToCreditorsRequest.value = false;
   }
 
   void _onWriteBlocked() {

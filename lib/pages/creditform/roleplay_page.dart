@@ -49,7 +49,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
         if (mounted) setState(() {});
       },
       onError: (message) {
-        if (!mounted) return;
+      if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message)),
         );
@@ -342,37 +342,37 @@ class _RoleplayPageState extends State<RoleplayPage> {
                     ),
                     const SizedBox(height: 10),
                     Container(
-                      height: 72,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
+                          height: 72,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
                         color: _isCallBusy
-                            ? Colors.grey.shade600
+                                    ? Colors.grey.shade600
                             : const Color(0xFF1B5E20),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
                             _isCallBusy
                                 ? Icons.phone_in_talk_outlined
                                 : Icons.phone_callback_outlined,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
                             _isThinking
                                 ? 'In attesa risposta'
                                 : _isSpeaking
                                     ? 'Linea occupata'
                                     : 'Linea aperta',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ],
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ],
                       ),
                     ),
                   ],

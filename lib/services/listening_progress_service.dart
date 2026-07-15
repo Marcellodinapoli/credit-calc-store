@@ -19,6 +19,9 @@ class ListeningProgressService {
   static DocumentReference<Map<String, dynamic>> get _doc =>
       _firestore.collection('listening_progress').doc(_docId);
 
+  /// Trascrizioni warm-up telefonata della sessione corrente (non persistite).
+  static final Map<String, String> _telefonataSessionResponses = {};
+
   // ---------------------------------------------------------------------------
   // INIT (SAFE)
   // ---------------------------------------------------------------------------
@@ -109,35 +112,18 @@ class ListeningProgressService {
   ) async {
     final trimmed = transcription.trim();
     if (trimmed.isEmpty) return;
-
-    try {
-      await _doc.set({
-        'telefonataResponses': {phase: trimmed},
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    } on FirebaseException catch (e) {
-      if (e.code == 'permission-denied') {
-        return;
-      }
-      rethrow;
-    }
+    _telefonataSessionResponses[phase] = trimmed;
   }
 
   static Future<String?> getTelefonataResponse(String phase) async {
-    try {
-      final snap = await _doc.get();
-      final data =
-          snap.data()?['telefonataResponses'] as Map<String, dynamic>? ?? {};
-      final value = data[phase];
-      if (value is! String) return null;
-      final trimmed = value.trim();
-      return trimmed.isEmpty ? null : trimmed;
-    } on FirebaseException catch (e) {
-      if (e.code == 'permission-denied') {
-        return null;
-      }
-      rethrow;
-    }
+    final value = _telefonataSessionResponses[phase];
+    if (value == null) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static void clearTelefonataSession() {
+    _telefonataSessionResponses.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -176,6 +162,7 @@ class ListeningProgressService {
   // RESET (FUTURO / ADMIN)
   // ---------------------------------------------------------------------------
   static Future<void> resetAll() async {
+    clearTelefonataSession();
     try {
       await _doc.set({
         'activeTab': 0,

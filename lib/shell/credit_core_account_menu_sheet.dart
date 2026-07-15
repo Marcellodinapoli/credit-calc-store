@@ -282,9 +282,9 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
       child: Row(
         children: [
           const Expanded(
-            child: Text(
-              'Area personale',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+      child: Text(
+        'Area personale',
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
           ),
           accountMenuBadgeDot(visible: showBadge),
@@ -342,8 +342,8 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
         ),
       ),
       trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+              mainAxisSize: MainAxisSize.min,
+              children: [
           if (showBadge) ...[
             accountMenuBadgeDot(visible: true),
             const SizedBox(width: 8),
@@ -418,169 +418,169 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
         return ValueListenableBuilder<AccountMenuBadges>(
           valueListenable: AccountMenuBadgeNotifier.instance.badges,
           builder: (context, badges, _) {
-            final children = <Widget>[
-              _menuHeader(),
-              const Divider(),
-              _item(
-                icon: Icons.notifications_outlined,
-                title: 'Notifiche',
-                onTap: () => _closeAnd(widget.onAnnouncements),
-              ),
-            ];
+        final children = <Widget>[
+          _menuHeader(),
+          const Divider(),
+          _item(
+            icon: Icons.notifications_outlined,
+            title: 'Notifiche',
+            onTap: () => _closeAnd(widget.onAnnouncements),
+          ),
+        ];
 
-            if (_blockedContext) {
-              children.addAll([
+        if (_blockedContext) {
+          children.addAll([
                 _areaHeader(showBadge: badges.hasArea),
-                _item(
-                  icon: Icons.support_agent_outlined,
-                  title: PersonalAreaMenuItem.directSupport.title,
-                  iconColor: _areaColor,
+            _item(
+              icon: Icons.support_agent_outlined,
+              title: PersonalAreaMenuItem.directSupport.title,
+              iconColor: _areaColor,
                   showBadge: badges.directSupport,
-                  onTap: () => _closeAndArea(PersonalAreaMenuItem.directSupport),
-                ),
-              ]);
-            } else {
-              final showForm = !isCompany;
-              final showJob = isPublic || isCompany;
+              onTap: () => _closeAndArea(PersonalAreaMenuItem.directSupport),
+            ),
+          ]);
+        } else {
+          final showForm = !isCompany;
+          final showJob = isPublic || isCompany;
 
-              if (showForm) {
-                children.add(
-                  _buildExpandableSectionTitle(
-                    BrandedPageProject.form,
-                    _MenuSection.creditForm,
-                    maintenanceData,
+          if (showForm) {
+            children.add(
+              _buildExpandableSectionTitle(
+                BrandedPageProject.form,
+                _MenuSection.creditForm,
+                maintenanceData,
                     showBadge: badges.hasCreditForm,
-                  ),
-                );
-                if (_openSection == _MenuSection.creditForm && !formBlocked) {
-                  if (isSupervisor) {
-                    children.add(_buildSubMenuItem(
-                      PersonalFormMenuItem.companyCollaborators.title,
-                      () => _closeAndForm(PersonalFormMenuItem.companyCollaborators),
-                      _formColor,
-                      _formLight,
-                      maintenanceData,
-                      MaintenanceService.creditForm,
+              ),
+            );
+            if (_openSection == _MenuSection.creditForm && !formBlocked) {
+              if (isSupervisor) {
+                children.add(_buildSubMenuItem(
+                  PersonalFormMenuItem.companyCollaborators.title,
+                  () => _closeAndForm(PersonalFormMenuItem.companyCollaborators),
+                  _formColor,
+                  _formLight,
+                  maintenanceData,
+                  MaintenanceService.creditForm,
                       selected: widget.selectedFormItem ==
                           PersonalFormMenuItem.companyCollaborators,
-                    ));
-                  }
-                  for (final item in [
-                    PersonalFormMenuItem.courses,
-                    PersonalFormMenuItem.listening,
-                    PersonalFormMenuItem.roleplay,
-                    PersonalFormMenuItem.progress,
-                    PersonalFormMenuItem.review,
-                  ]) {
-                    children.add(_buildSubMenuItem(
-                      item.title,
-                      () => _closeAndForm(item),
-                      _formColor,
-                      _formLight,
-                      maintenanceData,
-                      MaintenanceService.creditForm,
+                ));
+              }
+              for (final item in [
+                PersonalFormMenuItem.courses,
+                PersonalFormMenuItem.listening,
+                PersonalFormMenuItem.roleplay,
+                PersonalFormMenuItem.progress,
+                PersonalFormMenuItem.review,
+              ]) {
+                children.add(_buildSubMenuItem(
+                  item.title,
+                  () => _closeAndForm(item),
+                  _formColor,
+                  _formLight,
+                  maintenanceData,
+                  MaintenanceService.creditForm,
                       showBadge: _formItemBadge(item, badges),
                       selected: widget.selectedFormItem == item,
-                    ));
-                  }
-                }
+                ));
               }
+            }
+          }
 
-              if (showJob) {
-                children.add(
-                  _buildExpandableSectionTitle(
-                    BrandedPageProject.job,
-                    _MenuSection.creditJob,
-                    maintenanceData,
+          if (showJob) {
+            children.add(
+              _buildExpandableSectionTitle(
+                BrandedPageProject.job,
+                _MenuSection.creditJob,
+                maintenanceData,
                     showBadge: badges.hasCreditJob,
-                  ),
-                );
-                if (_openSection == _MenuSection.creditJob && !jobBlocked) {
-                  if (isCompany) {
-                    children.addAll([
-                      _buildSubMenuItem(
-                        PersonalJobMenuItem.gestioneLavori.title,
-                        () => _closeAndJob(PersonalJobMenuItem.gestioneLavori),
-                        _jobColor,
-                        _jobLight,
-                        maintenanceData,
-                        MaintenanceService.creditJob,
+              ),
+            );
+            if (_openSection == _MenuSection.creditJob && !jobBlocked) {
+              if (isCompany) {
+                children.addAll([
+                  _buildSubMenuItem(
+                    PersonalJobMenuItem.gestioneLavori.title,
+                    () => _closeAndJob(PersonalJobMenuItem.gestioneLavori),
+                    _jobColor,
+                    _jobLight,
+                    maintenanceData,
+                    MaintenanceService.creditJob,
                         selected: widget.selectedJobItem ==
                             PersonalJobMenuItem.gestioneLavori,
-                      ),
-                      _buildSubMenuItem(
-                        PersonalJobMenuItem.companyUsers.title,
-                        () => _closeAndJob(PersonalJobMenuItem.companyUsers),
-                        _jobColor,
-                        _jobLight,
-                        maintenanceData,
-                        MaintenanceService.creditJob,
+                  ),
+                  _buildSubMenuItem(
+                    PersonalJobMenuItem.companyUsers.title,
+                    () => _closeAndJob(PersonalJobMenuItem.companyUsers),
+                    _jobColor,
+                    _jobLight,
+                    maintenanceData,
+                    MaintenanceService.creditJob,
                         selected: widget.selectedJobItem ==
                             PersonalJobMenuItem.companyUsers,
-                      ),
-                    ]);
-                  } else if (isPublic) {
-                    children.addAll([
-                      _buildSubMenuItem(
-                        PersonalJobMenuItem.jobOffers.title,
-                        () => _closeAndJob(PersonalJobMenuItem.jobOffers),
-                        _jobColor,
-                        _jobLight,
-                        maintenanceData,
-                        MaintenanceService.creditJob,
+                  ),
+                ]);
+              } else if (isPublic) {
+                children.addAll([
+                  _buildSubMenuItem(
+                    PersonalJobMenuItem.jobOffers.title,
+                    () => _closeAndJob(PersonalJobMenuItem.jobOffers),
+                    _jobColor,
+                    _jobLight,
+                    maintenanceData,
+                    MaintenanceService.creditJob,
                         showBadge: _jobItemBadge(
                           PersonalJobMenuItem.jobOffers,
                           badges,
                         ),
                         selected: widget.selectedJobItem ==
                             PersonalJobMenuItem.jobOffers,
-                      ),
-                      _buildSubMenuItem(
-                        PersonalJobMenuItem.savedJobs.title,
-                        () => _closeAndJob(PersonalJobMenuItem.savedJobs),
-                        _jobColor,
-                        _jobLight,
-                        maintenanceData,
-                        MaintenanceService.creditJob,
+                  ),
+                  _buildSubMenuItem(
+                    PersonalJobMenuItem.savedJobs.title,
+                    () => _closeAndJob(PersonalJobMenuItem.savedJobs),
+                    _jobColor,
+                    _jobLight,
+                    maintenanceData,
+                    MaintenanceService.creditJob,
                         selected: widget.selectedJobItem ==
                             PersonalJobMenuItem.savedJobs,
-                      ),
-                      _buildSubMenuItem(
-                        PersonalJobMenuItem.myApplications.title,
-                        () => _closeAndJob(PersonalJobMenuItem.myApplications),
-                        _jobColor,
-                        _jobLight,
-                        maintenanceData,
-                        MaintenanceService.creditJob,
+                  ),
+                  _buildSubMenuItem(
+                    PersonalJobMenuItem.myApplications.title,
+                    () => _closeAndJob(PersonalJobMenuItem.myApplications),
+                    _jobColor,
+                    _jobLight,
+                    maintenanceData,
+                    MaintenanceService.creditJob,
                         selected: widget.selectedJobItem ==
                             PersonalJobMenuItem.myApplications,
-                      ),
-                    ]);
-                  }
-                }
+                  ),
+                ]);
               }
+            }
+          }
 
-              children.addAll([
-                const Divider(height: 24),
+          children.addAll([
+            const Divider(height: 24),
                 _areaHeader(showBadge: badges.hasArea),
-                if (!areaBlocked) ...[
-                  _item(
-                    icon: Icons.person_outline,
-                    title: PersonalAreaMenuItem.myData.title,
-                    iconColor: _areaColor,
+            if (!areaBlocked) ...[
+              _item(
+                icon: Icons.person_outline,
+                title: PersonalAreaMenuItem.myData.title,
+                iconColor: _areaColor,
                     selected:
                         widget.selectedAreaItem == PersonalAreaMenuItem.myData,
-                    onTap: () => _closeAndArea(PersonalAreaMenuItem.myData),
-                  ),
-                  if (!isWork)
-                    _item(
-                      icon: Icons.card_membership_outlined,
-                      title: PersonalAreaMenuItem.subscription.title,
-                      iconColor: _areaColor,
+                onTap: () => _closeAndArea(PersonalAreaMenuItem.myData),
+              ),
+              if (!isWork)
+                _item(
+                  icon: Icons.card_membership_outlined,
+                  title: PersonalAreaMenuItem.subscription.title,
+                  iconColor: _areaColor,
                       selected: widget.selectedAreaItem ==
                           PersonalAreaMenuItem.subscription,
-                      onTap: () =>
-                          _closeAndArea(PersonalAreaMenuItem.subscription),
+                  onTap: () =>
+                      _closeAndArea(PersonalAreaMenuItem.subscription),
                     ),
                   _item(
                     icon: Icons.sync_alt,
@@ -588,16 +588,16 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                     iconColor: _areaColor,
                     selected: widget.selectedSync,
                     onTap: _closeAndSync,
-                  ),
-                  _item(
-                    icon: Icons.groups_outlined,
-                    title: PersonalAreaMenuItem.community.title,
-                    iconColor: _areaColor,
+                ),
+              _item(
+                icon: Icons.groups_outlined,
+                title: PersonalAreaMenuItem.community.title,
+                iconColor: _areaColor,
                     showBadge: badges.community,
                     selected: widget.selectedAreaItem ==
                         PersonalAreaMenuItem.community,
-                    onTap: () => _closeAndArea(PersonalAreaMenuItem.community),
-                  ),
+                onTap: () => _closeAndArea(PersonalAreaMenuItem.community),
+              ),
                   _item(
                     icon: Icons.support_agent_outlined,
                     title: PersonalAreaMenuItem.directSupport.title,
@@ -607,54 +607,54 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                         PersonalAreaMenuItem.directSupport,
                     onTap: () => _closeAndArea(PersonalAreaMenuItem.directSupport),
                   ),
-                  _item(
-                    icon: Icons.menu_book_outlined,
-                    title: PersonalAreaMenuItem.guide.title,
-                    iconColor: _areaColor,
+              _item(
+                icon: Icons.menu_book_outlined,
+                title: PersonalAreaMenuItem.guide.title,
+                iconColor: _areaColor,
                     selected:
                         widget.selectedAreaItem == PersonalAreaMenuItem.guide,
-                    onTap: () => _closeAndArea(PersonalAreaMenuItem.guide),
-                  ),
-                  _item(
-                    icon: Icons.tune_outlined,
-                    title: PersonalAreaMenuItem.notificationPreferences.title,
-                    iconColor: _areaColor,
+                onTap: () => _closeAndArea(PersonalAreaMenuItem.guide),
+              ),
+              _item(
+                icon: Icons.tune_outlined,
+                title: PersonalAreaMenuItem.notificationPreferences.title,
+                iconColor: _areaColor,
                     selected: widget.selectedAreaItem ==
                         PersonalAreaMenuItem.notificationPreferences,
                     onTap: () => _closeAndArea(
                       PersonalAreaMenuItem.notificationPreferences,
                     ),
-                  ),
-                  _item(
-                    icon: Icons.privacy_tip_outlined,
-                    title: PersonalAreaMenuItem.privacyConsents.title,
-                    iconColor: _areaColor,
+              ),
+              _item(
+                icon: Icons.privacy_tip_outlined,
+                title: PersonalAreaMenuItem.privacyConsents.title,
+                iconColor: _areaColor,
                     selected: widget.selectedAreaItem ==
                         PersonalAreaMenuItem.privacyConsents,
                     onTap: () =>
                         _closeAndArea(PersonalAreaMenuItem.privacyConsents),
-                  ),
-                ],
-                if (_isBkAdmin) ...[
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                    child: Text(
-                      'Backoffice',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
+            if (_isBkAdmin) ...[
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: Text(
+                  'Backoffice',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              _item(
+                icon: Icons.confirmation_number_outlined,
+                title: 'Coupon registrazione',
+                iconColor: _areaColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BkCouponsPage(),
                     ),
-                  ),
-                  _item(
-                    icon: Icons.confirmation_number_outlined,
-                    title: 'Coupon registrazione',
-                    iconColor: _areaColor,
-                    onTap: () => _closeAnd(() {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const BkCouponsPage(),
-                        ),
-                      );
-                    }),
-                  ),
+                  );
+                }),
+              ),
                   _item(
                     icon: Icons.speed_outlined,
                     title: 'Piani FREE / PLUS / ENTERPRISE',
@@ -691,69 +691,69 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
                       );
                     }),
                   ),
-                  _item(
-                    icon: Icons.record_voice_over_outlined,
+              _item(
+                icon: Icons.record_voice_over_outlined,
                     title: 'Moderazione contestazioni utenti',
-                    iconColor: _areaColor,
-                    onTap: () => _closeAnd(() {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const BkWarmupContestationsPage(),
-                        ),
-                      );
-                    }),
-                  ),
-                  _item(
+                iconColor: _areaColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BkWarmupContestationsPage(),
+                    ),
+                  );
+                }),
+              ),
+              _item(
                     icon: Icons.search_outlined,
-                    title: 'Prompt ricerca normativa',
-                    iconColor: _areaColor,
-                    onTap: () => _closeAnd(() {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const BkNormativeSearchPage(),
-                        ),
-                      );
-                    }),
-                  ),
-                  _item(
-                    icon: Icons.call_outlined,
-                    title: 'Prompt analisi telefonata',
-                    iconColor: _areaColor,
-                    onTap: () => _closeAnd(() {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const BkCallAnalysisPage(),
-                        ),
-                      );
-                    }),
-                  ),
-                ],
-              ]);
-            }
-
-            children.addAll([
-              const Divider(height: 16),
-              _CreditCoreSiteListTileInline(
-                userType: _userType,
-                onBeforeOpen: () => Navigator.pop(context),
+                title: 'Prompt ricerca normativa',
+                iconColor: _areaColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BkNormativeSearchPage(),
+                    ),
+                  );
+                }),
               ),
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text('Esci'),
+              _item(
+                icon: Icons.call_outlined,
+                title: 'Prompt analisi telefonata',
+                iconColor: _areaColor,
+                onTap: () => _closeAnd(() {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BkCallAnalysisPage(),
+                    ),
+                  );
+                }),
+              ),
+            ],
+          ]);
+        }
+
+        children.addAll([
+          const Divider(height: 16),
+          _CreditCoreSiteListTileInline(
+            userType: _userType,
+            onBeforeOpen: () => Navigator.pop(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Esci'),
                 onTap: () async {
-                  Navigator.pop(context);
+              Navigator.pop(context);
                   await widget.onLogout();
-                },
-              ),
-              SizedBox(height: MediaQuery.viewPaddingOf(context).bottom + 8),
-            ]);
+            },
+          ),
+          SizedBox(height: MediaQuery.viewPaddingOf(context).bottom + 8),
+        ]);
 
-            return SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: children,
-              ),
+        return SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
             );
           },
         );
