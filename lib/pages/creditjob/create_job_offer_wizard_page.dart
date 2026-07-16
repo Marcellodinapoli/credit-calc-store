@@ -4,8 +4,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../../core/theme/app_form_fields.dart';
 import '../../core/dimensions.dart';
+import '../../core/theme/app_card_theme.dart';
+import '../../core/theme/app_surface_theme.dart';
+import '../../core/theme/app_form_fields.dart';
 
 // -----------------------------------------------------------------------------
 // PAGE ROOT
@@ -222,9 +224,9 @@ class _CreateJobOfferWizardPageState
         : 900.0;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppSurfaceTheme.page,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppSurfaceTheme.page,
         elevation: 1,
         foregroundColor: Colors.black,
         title: const Text("Nuova offerta di lavoro"),
@@ -656,7 +658,7 @@ class _CreateJobOfferWizardPageState
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppCardTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade300),
       ),

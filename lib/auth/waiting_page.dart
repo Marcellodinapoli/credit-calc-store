@@ -5,6 +5,7 @@ import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_card_theme.dart';
 import '../offline/services/connectivity_service.dart';
 import '../pages/area/direct_support_page.dart';
 
@@ -275,7 +276,7 @@ class _WaitingPageState extends State<WaitingPage> {
               constraints: const BoxConstraints(maxWidth: 420),
               child: Card(
                 elevation: 4,
-                color: Colors.white,
+                color: AppCardTheme.surface,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                   side: const BorderSide(color: Color(0xFFE0E0E0)),

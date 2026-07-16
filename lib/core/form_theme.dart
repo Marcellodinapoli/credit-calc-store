@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme/app_card_theme.dart';
+import 'theme/app_surface_theme.dart';
 import 'theme/project_colors.dart';
 
 ThemeData buildFormTheme() {
@@ -11,9 +12,13 @@ ThemeData buildFormTheme() {
       seedColor: ProjectColors.form,
       primary: ProjectColors.form,
       secondary: const Color(0xFFF57C00),
-      surface: Colors.white,
+      surface: AppSurfaceTheme.page,
       brightness: Brightness.light,
     ),
+    scaffoldBackgroundColor: AppSurfaceTheme.page,
+    dialogTheme: AppSurfaceTheme.dialogTheme(),
+    bottomSheetTheme: AppSurfaceTheme.bottomSheetTheme,
+    popupMenuTheme: AppSurfaceTheme.popupMenuTheme,
     appBarTheme: const AppBarTheme(
       backgroundColor: ProjectColors.form,
       foregroundColor: Colors.white,

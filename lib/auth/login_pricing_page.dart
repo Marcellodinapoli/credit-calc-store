@@ -1,6 +1,7 @@
 import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_card_theme.dart';
 import '../widgets/public_page_shell.dart';
 import '../widgets/public_top_menu.dart';
 import 'plan_description_list.dart';
@@ -176,7 +177,7 @@ class _PlanCard extends StatelessWidget {
     final intro = planDescriptionIntro(description);
 
     return Material(
-      color: Colors.white,
+      color: AppCardTheme.surface,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,

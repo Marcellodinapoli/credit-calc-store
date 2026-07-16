@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_surface_theme.dart';
 import '../offline/models/session_info.dart';
 import '../pages/creditcalc/device_sync_page.dart';
 import '../session/credit_core_session_runtime.dart';
@@ -151,7 +152,7 @@ class _SyncOnlyShell extends StatelessWidget {
     final deviceLine = conflict?.conflictSummary ?? 'un altro dispositivo';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE8E8E8),
+      backgroundColor: AppSurfaceTheme.pageMuted,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: const Text('Account già in uso'),

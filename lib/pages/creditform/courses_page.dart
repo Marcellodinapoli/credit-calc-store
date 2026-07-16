@@ -537,7 +537,7 @@ class _StatusPill extends StatelessWidget {
             width: 2),
         borderRadius:
         BorderRadius.circular(16),
-        color: Colors.white,
+        color: AppCardTheme.surface,
       ),
       child: Text(
         text,

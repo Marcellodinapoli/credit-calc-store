@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_card_theme.dart';
+import '../core/theme/app_surface_theme.dart';
 import 'plan_description_list.dart';
 import 'public_detail_cards.dart';
 import 'registration_coupon_field.dart';
@@ -9,7 +11,7 @@ import 'registration_plan_selection_result.dart';
 
 abstract final class _PlanPageTheme {
   static const accent = Color(0xFF0A66C2);
-  static const body = Color(0xFFE8E8E8);
+  static const body = AppSurfaceTheme.pageMuted;
 }
 
 class RegistrationPlanSelectionPage extends StatefulWidget {
@@ -285,7 +287,7 @@ class _CouponSection extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppCardTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade300),
       ),
@@ -395,7 +397,7 @@ class _PlanCard extends StatelessWidget {
         : 'Seleziona piano';
 
     return Material(
-      color: Colors.white,
+      color: AppCardTheme.surface,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,

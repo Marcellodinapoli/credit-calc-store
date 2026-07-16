@@ -350,7 +350,7 @@ class _CrediFormProgressPageState
         padding: EdgeInsets.all(pad),
         child: Card(
           elevation: AppCardTheme.elevation,
-          color: Colors.white,
+          color: AppCardTheme.surface,
           shape: AppCardTheme.shape,
           child: Padding(
             padding: EdgeInsets.all(pad),

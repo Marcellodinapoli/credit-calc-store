@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/theme/app_card_theme.dart';
 import '../../services/read_state_service.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
 import 'personal_area_menu.dart';
@@ -575,7 +576,7 @@ class _DirectSupportPageState extends State<DirectSupportPage> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppCardTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.grey.shade300),
       ),

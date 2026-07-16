@@ -21,6 +21,7 @@ import 'package:credit_calc_core/credit_calc_core.dart'
         appFormFieldDecoration;
 import '../../session/credit_core_session_runtime.dart';
 import '../../core/dimensions.dart';
+import '../../core/theme/app_card_theme.dart';
 import '../../core/theme/project_colors.dart';
 import '../../core/work_code_helpers.dart';
 import 'personal_area_menu.dart';
@@ -1175,7 +1176,7 @@ class _ProfileDataCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final card = DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppCardTheme.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [

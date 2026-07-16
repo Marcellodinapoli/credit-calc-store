@@ -1,6 +1,8 @@
 import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_card_theme.dart';
+import '../core/theme/app_surface_theme.dart';
 import '../widgets/public_page_shell.dart';
 import 'plan_description_list.dart';
 
@@ -132,7 +134,7 @@ class EcosystemSectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: AppCardTheme.surface,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -219,7 +221,7 @@ class _DetailCardShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: AppSurfaceTheme.popup,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: SingleChildScrollView(

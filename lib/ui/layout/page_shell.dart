@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../shell/credit_module_shell_actions.dart';
 import '../../core/dimensions.dart';
+import '../../core/theme/app_surface_theme.dart';
 import '../../core/theme/project_colors.dart';
 
 enum BrandedPageProject { calc, form, job, area }
@@ -111,9 +112,9 @@ class BrandedPageTitleRow extends StatelessWidget {
 }
 
 abstract final class PageShellTheme {
-  static const Color appBarBackground = Color(0xFFECEFF1);
-  static const Color scaffoldBackground = Colors.white;
-  static const Color drawerBackground = Color(0xFFECEFF1);
+  static const Color appBarBackground = AppSurfaceTheme.appBar;
+  static const Color scaffoldBackground = AppSurfaceTheme.page;
+  static const Color drawerBackground = AppSurfaceTheme.appBar;
   static const double sidebarWidth = 260;
 }
 
@@ -174,7 +175,7 @@ class PrimaryModuleScaffold extends StatelessWidget {
           ),
           if (bottomBar != null)
             Material(
-              color: Colors.white,
+              color: AppSurfaceTheme.page,
               elevation: 12,
               shadowColor: Colors.black26,
               child: Padding(
@@ -276,7 +277,7 @@ class SecondaryPageScaffold extends StatelessWidget {
           ),
           if (bottomBar != null)
             Material(
-              color: Colors.white,
+              color: AppSurfaceTheme.page,
               elevation: 12,
               shadowColor: Colors.black26,
               child: Padding(

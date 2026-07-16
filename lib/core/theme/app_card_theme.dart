@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Stile card condiviso (come le card in "I miei progressi").
 abstract final class AppCardTheme {
-  /// Grigio chiaro (ex. contenitore in I miei progressi / card Home).
+  /// Grigio chiaro (card Home, progressi, moduli CreditCalc Store).
   static const Color surface = Color(0xFFF7F7FA);
   static const double elevation = 2;
   static const double radius = 12;

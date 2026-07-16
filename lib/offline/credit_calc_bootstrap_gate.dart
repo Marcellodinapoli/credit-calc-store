@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../core/maintenance_service.dart';
+import '../core/theme/app_surface_theme.dart';
 import '../session/credit_core_session_runtime.dart';
 import '../session/app_session_gate.dart';
 import '../shell/credit_calc_shell.dart';
@@ -202,7 +203,7 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
         );
       case _BootstrapStep.startupSlow:
         return Scaffold(
-          backgroundColor: const Color(0xFFE8E8E8),
+          backgroundColor: AppSurfaceTheme.pageMuted,
           body: SafeArea(
             child: Center(
               child: Padding(

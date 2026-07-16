@@ -1,6 +1,7 @@
 import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_card_theme.dart';
 import '../widgets/public_page_shell.dart';
 import '../widgets/public_top_menu.dart';
 import 'login_pricing_page.dart';
@@ -134,7 +135,7 @@ class _HighlightTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: AppCardTheme.surface,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () => showCreditCoreEcosystemSectionDetail(context, section),

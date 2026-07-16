@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme/app_card_theme.dart';
+import 'theme/app_surface_theme.dart';
 
 const Color kJobBrand = Color(0xFF00C2A8);
 const Color kJobBrandLight = Color(0xFFE3F7F4);
@@ -16,9 +17,13 @@ ThemeData buildJobTheme() {
       seedColor: kJobBrand,
       primary: kJobBrand,
       secondary: kJobBrandDark,
-      surface: Colors.white,
+      surface: AppSurfaceTheme.page,
       brightness: Brightness.light,
     ),
+    scaffoldBackgroundColor: AppSurfaceTheme.page,
+    dialogTheme: AppSurfaceTheme.dialogTheme(),
+    bottomSheetTheme: AppSurfaceTheme.bottomSheetTheme,
+    popupMenuTheme: AppSurfaceTheme.popupMenuTheme,
     appBarTheme: const AppBarTheme(
       backgroundColor: kJobBrand,
       foregroundColor: kJobTextOnBrand,

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_surface_theme.dart';
 import 'registration_consents_service.dart';
 
 abstract final class _RegistrationLegalTheme {
   static const accent = Color(0xFF0A66C2);
-  static const body = Color(0xFFE8E8E8);
+  static const body = AppSurfaceTheme.pageMuted;
 }
 
 class RegistrationPrivacyConsentsPage extends StatefulWidget {
@@ -120,7 +121,7 @@ class _RegistrationPrivacyConsentsPageState
                 ? 'Privacy e consensi'
                 : 'Privacy e consensi (v$_version)',
           ),
-          backgroundColor: Colors.white,
+          backgroundColor: AppSurfaceTheme.page,
           foregroundColor: const Color(0xFF111111),
           elevation: 0,
           surfaceTintColor: Colors.transparent,
@@ -200,7 +201,7 @@ class _RegistrationPrivacyConsentsPageState
                   ),
                   Material(
                     elevation: 8,
-                    color: Colors.white,
+                    color: AppSurfaceTheme.page,
                     child: SafeArea(
                       top: false,
                       child: Padding(

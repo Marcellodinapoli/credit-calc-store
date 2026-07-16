@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:credit_calc_core/credit_calc_core.dart';
+import '../../core/theme/app_card_theme.dart';
 import '../../services/read_state_service.dart';
 import '../../services/roleplay_progress_service.dart';
 import '../../services/roleplay_conversation_service.dart';
@@ -379,7 +380,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppCardTheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.grey.shade300),
         ),
@@ -546,7 +547,7 @@ class _RoleplaySimulationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppCardTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade300),
       ),
