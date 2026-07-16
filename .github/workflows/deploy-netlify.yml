@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 concurrency:
-  group: netlify-web-${{ github.ref }}
+  group: netlify-web
   cancel-in-progress: true
 
 jobs:
