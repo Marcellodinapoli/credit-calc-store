@@ -137,6 +137,8 @@ export const roleplayStep = onCall(
       },
     ];
 
+    const startedAt = Date.now();
+    try {
     const result = await callOpenAiChat(messages, {
       maxTokens: 60,
       model: OPENAI_MODEL_GPT_55_REALTIME,
@@ -145,8 +147,13 @@ export const roleplayStep = onCall(
 
     trackAiUsage({
       feature: "roleplayStep",
+      userId: request.auth.uid,
+      userEmail: request.auth.token.email,
+      model: OPENAI_MODEL_GPT_55_REALTIME,
       inputTokens: result.usage.promptTokens,
       outputTokens: result.usage.completionTokens,
+      totalTokens: result.usage.totalTokens,
+      responseTimeMs: Date.now() - startedAt,
     });
 
     return {
@@ -154,5 +161,16 @@ export const roleplayStep = onCall(
       role,
       familyRelation: role === "TERZO" ? familyRelation || "moglie" : null,
     };
+    } catch (error) {
+      trackAiUsage({
+        feature: "roleplayStep",
+        userId: request.auth.uid,
+        userEmail: request.auth.token.email,
+        model: OPENAI_MODEL_GPT_55_REALTIME,
+        responseTimeMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : "roleplayStep failed",
+      });
+      throw error;
+    }
   },
 );

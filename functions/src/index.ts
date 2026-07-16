@@ -273,3 +273,4 @@ export const onFieldReminderRescheduled = onDocumentUpdated(
 
 // Esportato per test/manutenzione: invio singolo a utente con preferenze attive.
 export { sendPushToUser, normativeSearch, callAnalysis, roleplayStep, roleplaySuggestion, warmupEvaluate, contestationGenerate };
+export { getAiUsageStats } from "./ai_usage_stats";

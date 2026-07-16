@@ -681,6 +681,15 @@ match /settings/registration_consents {
 }
 
  // ------------------------------------------------------------------
+// AI USAGE — log consumi OpenAI (Roleplay / Valutazione)
+// ------------------------------------------------------------------
+match /ai_usage/{docId} {
+  allow read: if request.auth != null
+    && request.auth.token.admin == true;
+  allow create, update, delete: if false;
+}
+
+ // ------------------------------------------------------------------
 // SETTINGS (esclusi i documenti pubblici definiti sopra)
  // ------------------------------------------------------------------
 match /settings/{docId} {

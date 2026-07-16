@@ -14,6 +14,7 @@ import '../../services/roleplay_conversation_service.dart';
 import '../../services/roleplay_session.dart';
 import '../../services/roleplay_session_factory.dart';
 import '../../services/roleplay_voice_status.dart';
+import '../../widgets/roleplay_call_overlay.dart';
 import 'personal_form_shell.dart';
 import 'personal_form_menu.dart';
 
@@ -78,10 +79,6 @@ class _RoleplayPageState extends State<RoleplayPage> {
       _session?.history ?? const [];
   RoleplayVoiceStatus get _voiceStatus =>
       _session?.voiceStatus ?? RoleplayVoiceStatus.idle;
-
-  bool get _isThinking => _voiceStatus == RoleplayVoiceStatus.thinking;
-  bool get _isSpeaking => _voiceStatus == RoleplayVoiceStatus.speaking;
-  bool get _isCallBusy => _isThinking || _isSpeaking;
 
   Future<void> _initReadState() async {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -317,70 +314,11 @@ class _RoleplayPageState extends State<RoleplayPage> {
       pageTitle: 'Role Play',
       showAccountMenu: true,
       activeMenuItem: PersonalFormMenuItem.roleplay,
-      body: Column(
+      body: Stack(
+        children: [
+          Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_isSimulationActive) ...[
-            Material(
-              color: const Color(0xFF1B5E20),
-              borderRadius: BorderRadius.circular(10),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      _isThinking
-                          ? 'Il debitore sta pensando...'
-                          : _isSpeaking
-                              ? 'Il debitore parla...'
-                              : 'Chiamata attiva — parla liberamente',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                          height: 72,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                        color: _isCallBusy
-                                    ? Colors.grey.shade600
-                            : const Color(0xFF1B5E20),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                            _isCallBusy
-                                ? Icons.phone_in_talk_outlined
-                                : Icons.phone_callback_outlined,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                            _isThinking
-                                ? 'In attesa risposta'
-                                : _isSpeaking
-                                    ? 'Linea occupata'
-                                    : 'Linea aperta',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
-                                ),
-                              ),
-                            ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
           Row(
             children: [
               Expanded(child: _tabButton('Sollecito', 0)),
@@ -390,6 +328,17 @@ class _RoleplayPageState extends State<RoleplayPage> {
           ),
           const SizedBox(height: 12),
           Expanded(child: _buildSimulations(category)),
+        ],
+      ),
+          if (_isSimulationActive && _currentSimulation != null)
+            RoleplayCallOverlay(
+              title: (_currentSimulation!['title'] ?? 'Simulazione').toString(),
+              practiceData:
+                  _currentSimulation!['practiceData'] as List<dynamic>? ?? [],
+              voiceStatus: _voiceStatus,
+              chatHistory: _chatHistory,
+              onHangUp: _stopSimulation,
+            ),
         ],
       ),
     );

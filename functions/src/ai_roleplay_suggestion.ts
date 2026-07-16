@@ -107,19 +107,37 @@ export const roleplaySuggestion = onCall(
       },
     ];
 
-    const result = await callOpenAiChat(messages, {
-      maxTokens: 1400,
-      temperature: 0.45,
-      model: OPENAI_MODEL_GPT_55_REALTIME,
-      reasoningEffort: "low",
-    });
+    const startedAt = Date.now();
+    try {
+      const result = await callOpenAiChat(messages, {
+        maxTokens: 1400,
+        temperature: 0.45,
+        model: OPENAI_MODEL_GPT_55_REALTIME,
+        reasoningEffort: "low",
+      });
 
-    trackAiUsage({
-      feature: "roleplayStep",
-      inputTokens: result.usage.promptTokens,
-      outputTokens: result.usage.completionTokens,
-    });
+      trackAiUsage({
+        feature: "roleplaySuggestion",
+        userId: request.auth.uid,
+        userEmail: request.auth.token.email,
+        model: OPENAI_MODEL_GPT_55_REALTIME,
+        inputTokens: result.usage.promptTokens,
+        outputTokens: result.usage.completionTokens,
+        totalTokens: result.usage.totalTokens,
+        responseTimeMs: Date.now() - startedAt,
+      });
 
-    return { suggestion: result.content };
+      return { suggestion: result.content };
+    } catch (error) {
+      trackAiUsage({
+        feature: "roleplaySuggestion",
+        userId: request.auth.uid,
+        userEmail: request.auth.token.email,
+        model: OPENAI_MODEL_GPT_55_REALTIME,
+        responseTimeMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : "roleplaySuggestion failed",
+      });
+      throw error;
+    }
   },
 );

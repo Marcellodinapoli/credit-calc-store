@@ -236,7 +236,17 @@ export const warmupEvaluate = onCall(
       throw new HttpsError("invalid-argument", "Riferimento risposta mancante.");
     }
 
+    const whisperStartedAt = Date.now();
     const transcription = await transcribeAudio(audioBase64, mimeType);
+    trackAiUsage({
+      feature: "warmupEvaluate",
+      userId: request.auth.uid,
+      userEmail: request.auth.token.email,
+      model: "whisper-1",
+      whisperSeconds: transcription.whisperSeconds,
+      responseTimeMs: Date.now() - whisperStartedAt,
+    });
+
     if (!transcription.text) {
       throw new HttpsError(
         "invalid-argument",
@@ -244,30 +254,48 @@ export const warmupEvaluate = onCall(
       );
     }
 
-    const evaluation = await evaluateTranscript({
-      transcript: transcription.text,
-      phase,
-      expectedText,
-      phaseExplanation,
-      customerLine,
-      kind,
-      systemPrompt,
-      phaseInstruction,
-    });
+    const evalStartedAt = Date.now();
+    try {
+      const evaluation = await evaluateTranscript({
+        transcript: transcription.text,
+        phase,
+        expectedText,
+        phaseExplanation,
+        customerLine,
+        kind,
+        systemPrompt,
+        phaseInstruction,
+      });
 
-    trackAiUsage({
-      feature: "warmupEvaluate",
-      inputTokens: evaluation.usage.promptTokens,
-      outputTokens: evaluation.usage.completionTokens,
-      whisperSeconds: transcription.whisperSeconds,
-    });
+      trackAiUsage({
+        feature: "warmupEvaluate",
+        userId: request.auth.uid,
+        userEmail: request.auth.token.email,
+        model: OPENAI_MODEL_GPT_55,
+        inputTokens: evaluation.usage.promptTokens,
+        outputTokens: evaluation.usage.completionTokens,
+        totalTokens:
+          evaluation.usage.promptTokens + evaluation.usage.completionTokens,
+        responseTimeMs: Date.now() - evalStartedAt,
+      });
 
-    return {
-      trascrizione: transcription.text,
-      score: evaluation.score,
-      puo_proseguire: evaluation.puoProseguire,
-      commento: evaluation.commento,
-      versione_migliorata: evaluation.versione_migliorata,
-    };
+      return {
+        trascrizione: transcription.text,
+        score: evaluation.score,
+        puo_proseguire: evaluation.puoProseguire,
+        commento: evaluation.commento,
+        versione_migliorata: evaluation.versione_migliorata,
+      };
+    } catch (error) {
+      trackAiUsage({
+        feature: "warmupEvaluate",
+        userId: request.auth.uid,
+        userEmail: request.auth.token.email,
+        model: OPENAI_MODEL_GPT_55,
+        responseTimeMs: Date.now() - evalStartedAt,
+        error: error instanceof Error ? error.message : "warmupEvaluate failed",
+      });
+      throw error;
+    }
   },
 );
