@@ -12,7 +12,6 @@ import '../offline/services/connectivity_service.dart';
 import '../services/biometric_service.dart';
 import 'biometric_lock_gate.dart';
 import 'auth_form_validation.dart';
-import 'auth_gate.dart';
 import 'auth_redirect_feedback.dart';
 import '../widgets/public_page_shell.dart';
 import '../widgets/public_top_menu.dart';
@@ -565,18 +564,12 @@ class _LoginPageState extends State<LoginPage> {
     BiometricLockGate.markUnlocked();
     await Future<void>.delayed(Duration.zero);
     if (!mounted) return;
-    if (context.findAncestorWidgetOfExactType<AuthGate>() != null) {
-      final navigator = Navigator.of(context);
-      if (navigator.canPop()) {
-        navigator.pop();
-      }
-      return;
-    }
 
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const AuthGate()),
-      (route) => false,
-    );
+    // AuthGate (route sotto) si aggiorna già via authStateChanges: basta chiudere login.
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
   }
 
   Future<void> _signIn() async {
