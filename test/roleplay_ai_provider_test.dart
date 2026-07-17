@@ -6,10 +6,10 @@ import 'package:credit_calc/services/roleplay_session_factory.dart';
 
 void main() {
   group('RoleplayAiProvider', () {
-    test('aiProvider assente → gpt', () {
-      expect(RoleplayAiProvider.normalize(null), RoleplayAiProvider.gpt);
-      expect(RoleplayAiProvider.normalize(''), RoleplayAiProvider.gpt);
-      expect(RoleplayAiProvider.usesGpt({}), isTrue);
+    test('aiProvider assente → realtime (default CreditCore)', () {
+      expect(RoleplayAiProvider.normalize(null), RoleplayAiProvider.realtime);
+      expect(RoleplayAiProvider.normalize(''), RoleplayAiProvider.realtime);
+      expect(RoleplayAiProvider.usesRealtime({}), isTrue);
     });
 
     test('aiProvider gpt → gpt', () {
@@ -34,8 +34,8 @@ void main() {
       expect(RoleplayAiProvider.isGpt('realtime'), isFalse);
     });
 
-    test('valore sconosciuto → gpt', () {
-      expect(RoleplayAiProvider.normalize('ollama'), RoleplayAiProvider.gpt);
+    test('valore sconosciuto → realtime', () {
+      expect(RoleplayAiProvider.normalize('ollama'), RoleplayAiProvider.realtime);
     });
   });
 
@@ -46,14 +46,14 @@ void main() {
           'title': 'Test',
         };
 
-    test('simulazione senza aiProvider → motore GPT', () {
+    test('simulazione senza aiProvider → motore Realtime', () {
       final resolved = RoleplaySessionFactory.resolveProvider(simulation());
-      expect(resolved, RoleplayAiProvider.gpt);
+      expect(resolved, RoleplayAiProvider.realtime);
       expect(
         RoleplaySessionFactory.activeEngine(resolved),
-        RoleplayAiProvider.gpt,
+        RoleplayAiProvider.realtime,
       );
-      expect(RoleplaySessionFactory.willUseRealtimeLater(resolved), isFalse);
+      expect(RoleplaySessionFactory.willUseRealtimeLater(resolved), isTrue);
     });
 
     test('simulazione gpt → motore GPT', () {

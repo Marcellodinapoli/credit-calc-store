@@ -5,16 +5,22 @@ abstract final class RoleplayAiProvider {
   static const gpt = RoleplayConfigService.openAiProvider;
   static const realtime = 'realtime';
 
+  /// Default CreditCore: simulazioni vocali Realtime se il campo manca.
+  static const defaultProvider = realtime;
+
   /// Alias legacy Firestore (normalizzato a GPT).
   static const _legacyGptAlias = 'hetzner';
 
   static String normalize(dynamic raw) {
-    final value = (raw ?? gpt).toString().toLowerCase().trim();
+    if (raw == null || raw.toString().trim().isEmpty) {
+      return defaultProvider;
+    }
+    final value = raw.toString().toLowerCase().trim();
     return switch (value) {
       realtime => realtime,
       _legacyGptAlias => gpt,
       gpt => gpt,
-      _ => gpt,
+      _ => defaultProvider,
     };
   }
 

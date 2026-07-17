@@ -502,6 +502,8 @@ class _RoleplayPageState extends State<RoleplayPage> {
                   'prompt': data['prompt'] ?? '',
                   'gptPrompt': data['gptPrompt'] ?? '',
                   'practiceData': practiceData,
+                  'scenarioWeights':
+                      data['scenarioWeights'] as Map<String, dynamic>?,
                   'difficulty': data['difficulty'] ?? '',
                   'personality': data['personality'] ?? '',
                 },
@@ -649,7 +651,7 @@ class _RoleplaySimulationCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _actionButton(
-            label: simulationActive ? 'Termina simulazione' : 'Avvia simulazione',
+            label: simulationActive ? 'Termina chiamata' : 'Avvia chiamata',
             enabled: true,
             filled: true,
             onPressed: simulationActive ? onStopSimulation : onOpenSimulation,

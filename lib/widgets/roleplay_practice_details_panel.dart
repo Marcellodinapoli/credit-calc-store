@@ -29,6 +29,16 @@ class RoleplayPracticeDetailsPanel extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
+              'Pratica da gestire',
+              style: TextStyle(
+                fontSize: compact ? 13 : 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black54,
+                letterSpacing: 0.2,
+              ),
+            ),
+            SizedBox(height: compact ? 6 : 8),
+            Text(
               title,
               style: TextStyle(
                 fontSize: compact ? 15 : 16,
