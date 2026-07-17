@@ -1,12 +1,22 @@
+# CreditPlanet / CreditCalc — Flutter Web su Netlify
+#
+# Netlify UI (Site configuration → Build & deploy):
+#   Repository: Marcellodinapoli/credit-calc-store
+#   Branch: main
+#   Build command: (vuoto — usa questo file)
+#   Publish directory: build/web
+#
+# Build locale Windows:
+#   powershell -ExecutionPolicy Bypass -File .\scripts\netlify_build.ps1
+
 [build]
   command = "bash scripts/netlify_build.sh"
   publish = "build/web"
 
-[[plugins]]
-  package = "netlify-plugin-flutter"
-
-  [plugins.inputs]
-    channel = "stable"
+[build.environment]
+  FLUTTER_CHANNEL = "stable"
+  CI = "true"
+  NETLIFY_SKIP_DEPENDENCIES_INSTALL = "true"
 
 [[redirects]]
   from = "/*"

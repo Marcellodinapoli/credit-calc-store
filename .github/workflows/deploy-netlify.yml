@@ -1,9 +1,21 @@
+# Pubblica su creditplanet.netlify.app ad ogni push su main.
+#
+# Configura almeno UN metodo in GitHub → Settings → Secrets → Actions:
+#
+# Metodo A (1 secret, consigliato): NETLIFY_BUILD_HOOK
+#   Netlify → sito creditplanet → Build & deploy → Build hooks → Add (branch main)
+#
+# Metodo B (2 secrets): NETLIFY_AUTH_TOKEN + NETLIFY_SITE_ID
+#   Token: Netlify → User settings → Applications
+#   Site ID: creditplanet → Site details → API ID
+#
+# Se Netlify è già collegato al repo con build automatica, il metodo A avvia il build remoto.
 name: Deploy Web to Netlify
 
 on:
-  workflow_dispatch:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: netlify-web
@@ -19,27 +31,75 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verifica configurazione Netlify
+        id: cfg
+        env:
+          HAS_HOOK: ${{ secrets.NETLIFY_BUILD_HOOK != '' }}
+          HAS_CLI: ${{ secrets.NETLIFY_AUTH_TOKEN != '' && secrets.NETLIFY_SITE_ID != '' }}
+        run: |
+          if [ "$HAS_CLI" = "true" ]; then
+            echo "method=cli" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_HOOK" = "true" ]; then
+            echo "method=hook" >> "$GITHUB_OUTPUT"
+          else
+            echo "method=none" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Secrets Netlify mancanti
+        if: steps.cfg.outputs.method == 'none'
+        run: |
+          echo "::error::Configura almeno un secret su GitHub (Settings → Secrets → Actions):"
+          echo "  NETLIFY_BUILD_HOOK  — da Netlify → Build hooks (1 secret, consigliato)"
+          echo "  oppure NETLIFY_AUTH_TOKEN + NETLIFY_SITE_ID"
+          echo ""
+          echo "Verifica anche che Netlify sia collegato a Marcellodinapoli/credit-calc-store (branch main)."
+          exit 1
+
       - name: Setup Flutter
+        if: steps.cfg.outputs.method == 'cli'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
       - name: Build web release
+        if: steps.cfg.outputs.method == 'cli'
         run: bash scripts/netlify_build.sh
 
-      - name: Deploy to Netlify
-        uses: nwtgck/actions-netlify@v3.0
-        with:
-          publish-dir: ./build/web
-          production-branch: main
-          production-deploy: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message: "Deploy ${{ github.sha }}"
-          enable-pull-request-comment: false
-          enable-commit-comment: true
-          netlify-config-path: ./netlify.toml
+      - name: Deploy to Netlify (API zip)
+        if: steps.cfg.outputs.method == 'cli'
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          echo "==> Verifica token e site ID..."
+          HTTP_CODE=$(curl -sS -o /tmp/netlify-site.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
+            "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Netlify API HTTP ${HTTP_CODE}. Rigenera NETLIFY_AUTH_TOKEN."
+            cat /tmp/netlify-site.json || true
+            exit 1
+          fi
+          echo "==> Crea zip da build/web..."
+          (cd build/web && zip -r9q ../../site.zip .)
+          echo "==> Upload produzione..."
+          HTTP_CODE=$(curl -sS -o /tmp/netlify-deploy.json -w "%{http_code}" \
+            -H "Content-Type: application/zip" \
+            -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
+            --data-binary "@site.zip" \
+            "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}/deploys")
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+            echo "::error::Deploy Netlify fallito HTTP ${HTTP_CODE}"
+            cat /tmp/netlify-deploy.json || true
+            exit 1
+          fi
+          echo "==> Deploy OK"
+          cat /tmp/netlify-deploy.json
+
+      - name: Trigger build su Netlify
+        if: steps.cfg.outputs.method == 'hook'
+        run: |
+          curl -fsSL -X POST -d '{}' "${{ secrets.NETLIFY_BUILD_HOOK }}"
+          echo "Build avviato su Netlify (creditplanet.netlify.app)"
