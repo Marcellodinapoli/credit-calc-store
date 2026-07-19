@@ -76,7 +76,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
 
   void _onReturnToCreditorsRequest() {
     if (!creditCalcReturnToCreditorsRequest.value || !mounted) return;
-    setState(() => _section = CreditCalcNavItem.creditors);
+    creditCalcGoToCreditors();
     creditCalcReturnToCreditorsRequest.value = false;
   }
 

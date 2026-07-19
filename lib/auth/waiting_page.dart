@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:credit_calc_core/credit_calc_core.dart';
+import 'package:credit_calc_core/credit_calc_core.dart' hide AppCardTheme;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 

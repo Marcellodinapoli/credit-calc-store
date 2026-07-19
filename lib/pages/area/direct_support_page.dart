@@ -6,7 +6,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_card_theme.dart';
 import '../../services/read_state_service.dart';
-import 'package:credit_calc_core/credit_calc_core.dart';
 import 'personal_area_menu.dart';
 import 'personal_area_shell.dart';
 

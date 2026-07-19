@@ -1,4 +1,4 @@
-import 'package:credit_calc_core/credit_calc_core.dart';
+import 'package:credit_calc_core/credit_calc_core.dart' hide AppCardTheme;
 import 'package:flutter/material.dart';
 
 import 'auth/auth_gate.dart';
