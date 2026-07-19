@@ -457,7 +457,8 @@ match /companies/{companyId}/registration_consents_history/{docId} {
     }
 
     // ------------------------------------------------------------------
-    // CREDITFORM — ultima simulazione roleplay (un record per utente)
+    // CREDITFORM — progresso roleplay (ultima sim + map simulations.*)
+    // Stesso account: PC e cell leggono/scrivono il proprio doc.
     // ------------------------------------------------------------------
     match /roleplay_progress/{userId} {
       allow read: if request.auth != null && (
@@ -466,6 +467,8 @@ match /companies/{companyId}/registration_consents_history/{docId} {
         || supervisorCanReadCollaborator(userId)
       );
 
+      // create/update: solo titolare; userId obbligatorio nel payload risultante
+      // (include merge di history/suggestion sotto simulations/{simId}).
       allow create, update: if request.auth != null
         && request.auth.uid == userId
         && request.resource.data.userId == request.auth.uid;

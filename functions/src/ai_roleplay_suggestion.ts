@@ -40,7 +40,7 @@ function buildPracticeText(practiceData: unknown): string {
 }
 
 export const roleplaySuggestion = onCall(
-  { region, secrets: [openAiApiKey] },
+  { region, secrets: [openAiApiKey], invoker: "public" },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError(

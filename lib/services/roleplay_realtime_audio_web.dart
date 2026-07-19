@@ -22,7 +22,14 @@ class RoleplayRealtimeAudioWeb implements RoleplayRealtimeAudio {
   dynamic _scriptProcessor;
   dynamic _playbackContext;
   double _playbackTime = 0;
+  DateTime? _outputActiveUntil;
   void Function(List<int> pcmChunk)? _onChunk;
+
+  @override
+  bool get isOutputActive {
+    final until = _outputActiveUntil;
+    return until != null && DateTime.now().isBefore(until);
+  }
 
   @override
   Future<void> startMicrophone(void Function(List<int> pcmChunk) onChunk) async {
@@ -149,14 +156,26 @@ class RoleplayRealtimeAudioWeb implements RoleplayRealtimeAudio {
       final startAt = math.max(now, _playbackTime);
       js_util.callMethod(source, 'start', [startAt]);
       _playbackTime = startAt + sampleCount / 24000;
+      final endsAt = DateTime.now().add(
+        Duration(milliseconds: (sampleCount / 24000 * 1000).ceil() + 200),
+      );
+      if (_outputActiveUntil == null || endsAt.isAfter(_outputActiveUntil!)) {
+        _outputActiveUntil = endsAt;
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('RoleplayRealtime playback: $e');
     }
   }
 
   @override
+  Future<void> flushPlayback() async {
+    // Su web i buffer sono già schedulati in continuo su AudioContext.
+  }
+
+  @override
   Future<void> stopPlayback() async {
     _playbackTime = 0;
+    _outputActiveUntil = null;
     try {
       final ctx = _playbackContext;
       if (ctx != null) {

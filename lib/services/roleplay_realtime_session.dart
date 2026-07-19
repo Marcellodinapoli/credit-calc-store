@@ -5,16 +5,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-import '../config/roleplay_ai_provider.dart';
-import '../config/roleplay_backend_config.dart';
+import 'callable_function_client.dart';
 import 'roleplay_event.dart';
 import 'roleplay_realtime_audio.dart';
 import 'roleplay_realtime_audio_platform.dart';
 import 'roleplay_realtime_session_config.dart';
+import 'roleplay_realtime_ws.dart';
 import 'roleplay_session.dart';
 import 'roleplay_voice_status.dart';
 
-/// Motore roleplay OpenAI Realtime: audio bidirezionale via proxy backend.
+/// Motore roleplay OpenAI Realtime via Firebase (token ephemeral) + WS diretto.
 class RoleplayRealtimeSession implements RoleplaySession {
   RoleplayRealtimeSession({
     required this.onStateChanged,
@@ -38,6 +38,9 @@ class RoleplayRealtimeSession implements RoleplaySession {
   bool _connected = false;
   bool _bootstrapped = false;
   bool _speaking = false;
+  bool _micMutedForOutput = false;
+  bool _greetingRequested = false;
+  Timer? _micUnmuteTimer;
   RoleplayVoiceStatus _status = RoleplayVoiceStatus.idle;
 
   String _sessionId = 'default';
@@ -46,7 +49,6 @@ class RoleplayRealtimeSession implements RoleplaySession {
   final List<Map<String, String>> _history = [];
   String _assistantBuffer = '';
 
-  // Metriche collaudo (solo debug).
   DateTime? _qaStartedAt;
   DateTime? _qaUserSpeechStoppedAt;
   bool _qaLoggedFirstAudio = false;
@@ -96,17 +98,42 @@ class RoleplayRealtimeSession implements RoleplaySession {
     if (isContextActive()) onStateChanged();
   }
 
+  Future<Map<String, dynamic>> _mintFirebaseRealtimeToken() async {
+    final data = await CallableFunctionClient.call(
+      'roleplayRealtimeToken',
+      const <String, dynamic>{},
+    );
+    if (data is! Map) {
+      throw StateError('Token Realtime non valido.');
+    }
+    final map = Map<String, dynamic>.from(data);
+    final token = (map['token'] ?? '').toString().trim();
+    final wsUrl = (map['wsUrl'] ?? '').toString().trim();
+    if (token.isEmpty || wsUrl.isEmpty) {
+      throw StateError('Token o URL Realtime assenti.');
+    }
+    return map;
+  }
+
   Future<void> _connect() async {
     if (_connected) return;
     _setStatus(RoleplayVoiceStatus.connecting);
 
     final completer = Completer<void>();
     try {
-      _channel = WebSocketChannel.connect(
-        Uri.parse(RoleplayBackendConfig.realtimeWebSocketUrl),
+      final minted = await _mintFirebaseRealtimeToken();
+      final token = minted['token'].toString();
+      final wsUrl = minted['wsUrl'].toString();
+      _channel = connectOpenAiRealtimeWs(
+        uri: Uri.parse(wsUrl),
+        ephemeralToken: token,
       );
-    } catch (_) {
-      _emitError('Impossibile aprire la connessione Realtime.');
+    } catch (e) {
+      _emitError(
+        e.toString().contains('UnsupportedError')
+            ? e.toString()
+            : 'Servizio Realtime non disponibile. Verifica la connessione e riprova.',
+      );
       return;
     }
 
@@ -160,25 +187,19 @@ class RoleplayRealtimeSession implements RoleplaySession {
       return;
     }
 
-    final idToken = await user.getIdToken();
-    if (idToken == null || idToken.isEmpty) {
-      _emitError('Token di autenticazione non disponibile.');
-      return;
-    }
-
     final sessionUpdate = RoleplayRealtimeSessionConfig.buildSessionUpdate(
       simulationData: _currentSimulation ?? const {},
       sessionId: _sessionId,
       responderRole: _responderRole,
     );
 
-    _sendJson({
-      'type': 'session.bootstrap',
-      'sessionId': _sessionId,
-      'idToken': idToken,
-      'provider': RoleplayAiProvider.realtime,
-      'sessionUpdate': sessionUpdate,
-    });
+    _sendJson(sessionUpdate);
+    _bootstrapped = true;
+    _setStatus(RoleplayVoiceStatus.listening);
+    _qaLog(
+      'session.update inviato (Firebase + OpenAI diretto)',
+      since: _qaStartedAt,
+    );
   }
 
   @override
@@ -195,6 +216,7 @@ class RoleplayRealtimeSession implements RoleplaySession {
     _assistantBuffer = '';
     _simulationActive = true;
     _bootstrapped = false;
+    _greetingRequested = false;
     _qaStartedAt = kDebugMode ? DateTime.now() : null;
     _qaUserSpeechStoppedAt = null;
     _qaLoggedFirstAudio = false;
@@ -210,6 +232,9 @@ class RoleplayRealtimeSession implements RoleplaySession {
 
     try {
       await _audio.startMicrophone(_sendMicChunk);
+      // Resta muto finché non arriva (e finisce) il "Pronto?" iniziale.
+      _micMutedForOutput = true;
+      _micUnmuteTimer?.cancel();
       _setStatus(RoleplayVoiceStatus.listening);
     } catch (e) {
       _emitError(
@@ -220,11 +245,52 @@ class RoleplayRealtimeSession implements RoleplaySession {
     }
   }
 
+  void _requestOpeningGreeting() {
+    if (!_simulationActive || _greetingRequested) return;
+    _greetingRequested = true;
+    _muteMicForAssistantOutput();
+    _sendJson({
+      'type': 'response.create',
+      'response': {
+        'instructions':
+            'Rispondi al telefono con un solo breve "Pronto?" naturale, '
+            'poi taci. Non dire altro. Non interpretare il consulente.',
+      },
+    });
+    _qaLog('response.create Pronto?', since: _qaStartedAt);
+  }
+
   void _sendMicChunk(List<int> pcmChunk) {
     if (!_simulationActive || !_bootstrapped || pcmChunk.isEmpty) return;
+    // Evita eco: mentre l'AI parla (o coda altoparlante) non inviare mic a OpenAI,
+    // altrimenti sente se stessa e finge anche il consulente.
+    if (_speaking || _micMutedForOutput || _audio.isOutputActive) return;
     _sendJson({
       'type': 'input_audio_buffer.append',
       'audio': base64Encode(pcmChunk),
+    });
+  }
+
+  void _muteMicForAssistantOutput() {
+    if (!_micMutedForOutput) {
+      _micMutedForOutput = true;
+      _sendJson({'type': 'input_audio_buffer.clear'});
+    }
+    _micUnmuteTimer?.cancel();
+  }
+
+  void _scheduleMicUnmute() {
+    _micUnmuteTimer?.cancel();
+    _micUnmuteTimer = Timer.periodic(const Duration(milliseconds: 120), (t) {
+      if (!_simulationActive) {
+        t.cancel();
+        return;
+      }
+      if (_speaking || _audio.isOutputActive) return;
+      t.cancel();
+      _micMutedForOutput = false;
+      _sendJson({'type': 'input_audio_buffer.clear'});
+      _setStatus(RoleplayVoiceStatus.listening);
     });
   }
 
@@ -232,15 +298,23 @@ class RoleplayRealtimeSession implements RoleplaySession {
   Future<void> stop() async {
     _simulationActive = false;
     _speaking = false;
+    _micMutedForOutput = false;
+    _greetingRequested = false;
+    _micUnmuteTimer?.cancel();
+    _micUnmuteTimer = null;
     _bootstrapped = false;
     _connectTimeoutTimer?.cancel();
 
     await _audio.stopMicrophone();
     await _audio.stopPlayback();
 
-    if (_connected) {
-      _sendJson({'type': 'session.stop', 'sessionId': _sessionId});
-    }
+    _socketSubscription?.cancel();
+    _socketSubscription = null;
+    try {
+      await _channel?.sink.close();
+    } catch (_) {}
+    _channel = null;
+    _connected = false;
 
     _currentSimulation = null;
     _setStatus(RoleplayVoiceStatus.idle);
@@ -249,13 +323,6 @@ class RoleplayRealtimeSession implements RoleplaySession {
   @override
   void dispose() {
     unawaited(stop());
-    _socketSubscription?.cancel();
-    _socketSubscription = null;
-    try {
-      _channel?.sink.close();
-    } catch (_) {}
-    _channel = null;
-    _connected = false;
     unawaited(_audio.dispose());
     unawaited(_events.close());
   }
@@ -286,23 +353,12 @@ class RoleplayRealtimeSession implements RoleplaySession {
     final type = event['type']?.toString() ?? '';
 
     switch (type) {
-      case 'proxy.ping':
-        _sendJson({'type': 'proxy.pong'});
-        return;
-      case 'proxy.ready':
+      case 'session.created':
+      case 'session.updated':
         _bootstrapped = true;
         _setStatus(RoleplayVoiceStatus.listening);
-        _qaLog('proxy.ready (sessione aperta)', since: _qaStartedAt);
-        return;
-      case 'proxy.reconnecting':
-        _setStatus(RoleplayVoiceStatus.connecting);
-        return;
-      case 'proxy.disconnected':
-        _bootstrapped = false;
-        _emitError('Connessione Realtime interrotta dal server.');
-        return;
-      case 'proxy.error':
-        _emitError(event['message']?.toString() ?? 'Errore Realtime.');
+        _qaLog(type, since: _qaStartedAt);
+        _requestOpeningGreeting();
         return;
       case 'input_audio_buffer.speech_started':
         if (_speaking) _interruptAssistant();
@@ -318,14 +374,12 @@ class RoleplayRealtimeSession implements RoleplaySession {
         _setStatus(RoleplayVoiceStatus.thinking);
         return;
       case 'response.audio.delta':
+      case 'response.output_audio.delta':
         final delta = event['delta']?.toString();
         if (delta != null && delta.isNotEmpty) {
           if (kDebugMode && !_qaLoggedFirstAudio) {
             _qaLoggedFirstAudio = true;
-            _qaLog(
-              'prima risposta audio',
-              since: _qaStartedAt,
-            );
+            _qaLog('prima risposta audio', since: _qaStartedAt);
           }
           if (kDebugMode && _qaUserSpeechStoppedAt != null) {
             _qaLog(
@@ -335,11 +389,13 @@ class RoleplayRealtimeSession implements RoleplaySession {
             _qaUserSpeechStoppedAt = null;
           }
           _speaking = true;
+          _muteMicForAssistantOutput();
           _setStatus(RoleplayVoiceStatus.speaking);
           unawaited(_audio.playPcm16Base64Delta(delta));
         }
         return;
       case 'response.audio_transcript.delta':
+      case 'response.output_audio_transcript.delta':
         final delta = event['delta']?.toString() ?? '';
         if (delta.isNotEmpty) {
           _assistantBuffer += delta;
@@ -347,6 +403,7 @@ class RoleplayRealtimeSession implements RoleplaySession {
         }
         return;
       case 'response.audio_transcript.done':
+      case 'response.output_audio_transcript.done':
         final transcript = event['transcript']?.toString() ?? _assistantBuffer;
         if (transcript.trim().isNotEmpty) {
           _history.add({'role': 'assistant', 'content': transcript.trim()});
@@ -363,7 +420,8 @@ class RoleplayRealtimeSession implements RoleplaySession {
         return;
       case 'response.done':
         _speaking = false;
-        _setStatus(RoleplayVoiceStatus.listening);
+        unawaited(_audio.flushPlayback());
+        _scheduleMicUnmute();
         return;
       case 'error':
         _emitError(
@@ -380,8 +438,11 @@ class RoleplayRealtimeSession implements RoleplaySession {
 
   void _interruptAssistant() {
     _speaking = false;
+    _micUnmuteTimer?.cancel();
+    _micMutedForOutput = false;
     unawaited(_audio.stopPlayback());
     _sendJson({'type': 'response.cancel'});
+    _sendJson({'type': 'input_audio_buffer.clear'});
     if (_history.isNotEmpty && _history.last['role'] == 'assistant') {
       _history.removeLast();
     }

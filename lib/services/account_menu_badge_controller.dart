@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'account_menu_badge_notifier.dart';
 
@@ -51,7 +52,10 @@ final class AccountMenuBadgeController {
     unawaited(_authSub?.cancel());
     _authSub = null;
     _stopDataListeners();
-    _notifier.badges.value = const AccountMenuBadges();
+    // Evita notify durante unmount dei listener ValueListenableBuilder.
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _notifier.badges.value = const AccountMenuBadges();
+    });
   }
 
   void _stopDataListeners() {

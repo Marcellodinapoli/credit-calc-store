@@ -29,8 +29,8 @@ abstract final class RoleplayAiProvider {
   static bool isGpt(String provider) => normalize(provider) == gpt;
 
   static bool usesGpt(Map<String, dynamic> data) =>
-      isGpt(data[RoleplayConfigService.aiProviderField]);
+      isGpt(normalize(data[RoleplayConfigService.aiProviderField]));
 
   static bool usesRealtime(Map<String, dynamic> data) =>
-      isRealtime(data[RoleplayConfigService.aiProviderField]);
+      isRealtime(normalize(data[RoleplayConfigService.aiProviderField]));
 }

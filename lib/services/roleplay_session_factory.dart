@@ -1,29 +1,26 @@
 import 'package:flutter/foundation.dart';
 
 import '../config/roleplay_ai_provider.dart';
-import 'roleplay_gpt_session.dart';
 import 'roleplay_realtime_session.dart';
 import 'roleplay_session.dart';
 
-/// Factory per istanziare il motore vocale corretto.
+/// Factory motore vocale roleplay.
+///
+/// CreditCalc usa **solo Realtime** — nessuna alternativa GPT/STT.
 abstract final class RoleplaySessionFactory {
-  /// Legge e normalizza `aiProvider` dalla mappa simulazione Firestore.
+  /// Legge e normalizza `aiProvider` (solo per log/compatibilità dati).
   static String resolveProvider(Map<String, dynamic> simulationData) {
     return RoleplayAiProvider.normalize(
       simulationData['aiProvider'],
     );
   }
 
-  /// Motore eseguibile per il provider normalizzato.
+  /// Motore attivo: sempre Realtime.
   static String activeEngine(String normalizedProvider) {
-    if (RoleplayAiProvider.isRealtime(normalizedProvider)) {
-      return RoleplayAiProvider.realtime;
-    }
-    return RoleplayAiProvider.gpt;
+    return RoleplayAiProvider.realtime;
   }
 
-  static bool willUseRealtimeLater(String normalizedProvider) =>
-      RoleplayAiProvider.isRealtime(normalizedProvider);
+  static bool willUseRealtimeLater(String normalizedProvider) => true;
 
   static RoleplaySession create({
     required String aiProvider,
@@ -31,14 +28,7 @@ abstract final class RoleplaySessionFactory {
     required void Function(String message) onError,
     required bool Function() isContextActive,
   }) {
-    if (RoleplayAiProvider.isRealtime(aiProvider)) {
-      return RoleplayRealtimeSession(
-        onStateChanged: onStateChanged,
-        onError: onError,
-        isContextActive: isContextActive,
-      );
-    }
-    return RoleplayGptSession(
+    return RoleplayRealtimeSession(
       onStateChanged: onStateChanged,
       onError: onError,
       isContextActive: isContextActive,

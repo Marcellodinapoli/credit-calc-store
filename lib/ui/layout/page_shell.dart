@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../shell/credit_calc_shell_nav.dart';
 import '../../shell/credit_module_shell_actions.dart';
 import '../../core/dimensions.dart';
 import '../../core/theme/app_surface_theme.dart';
@@ -239,7 +240,13 @@ class SecondaryPageScaffold extends StatelessWidget {
                     if (automaticallyImplyLeading)
                       IconButton(
                         tooltip: 'Indietro',
-                        onPressed: () => Navigator.maybePop(context),
+                        onPressed: () {
+                          if (project == BrandedPageProject.calc) {
+                            popCreditCalcSecondaryToCreditors(context);
+                          } else {
+                            Navigator.maybePop(context);
+                          }
+                        },
                         icon: const Icon(Icons.arrow_back, color: Colors.black),
                       )
                     else

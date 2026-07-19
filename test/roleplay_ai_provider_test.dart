@@ -39,54 +39,29 @@ void main() {
     });
   });
 
-  group('RoleplaySessionFactory — Fase 1', () {
+  group('RoleplaySessionFactory — solo Realtime', () {
     Map<String, dynamic> simulation({String? aiProvider}) => {
           if (aiProvider != null)
             RoleplayConfigService.aiProviderField: aiProvider,
           'title': 'Test',
         };
 
-    test('simulazione senza aiProvider → motore Realtime', () {
-      final resolved = RoleplaySessionFactory.resolveProvider(simulation());
-      expect(resolved, RoleplayAiProvider.realtime);
+    test('qualsiasi aiProvider → motore Realtime', () {
+      for (final raw in ['gpt', 'hetzner', 'realtime', 'ollama']) {
+        final resolved = RoleplaySessionFactory.resolveProvider(
+          simulation(aiProvider: raw),
+        );
+        expect(
+          RoleplaySessionFactory.activeEngine(resolved),
+          RoleplayAiProvider.realtime,
+        );
+        expect(RoleplaySessionFactory.willUseRealtimeLater(resolved), isTrue);
+      }
+      final missing = RoleplaySessionFactory.resolveProvider(simulation());
       expect(
-        RoleplaySessionFactory.activeEngine(resolved),
+        RoleplaySessionFactory.activeEngine(missing),
         RoleplayAiProvider.realtime,
       );
-      expect(RoleplaySessionFactory.willUseRealtimeLater(resolved), isTrue);
-    });
-
-    test('simulazione gpt → motore GPT', () {
-      final resolved =
-          RoleplaySessionFactory.resolveProvider(simulation(aiProvider: 'gpt'));
-      expect(resolved, RoleplayAiProvider.gpt);
-      expect(
-        RoleplaySessionFactory.activeEngine(resolved),
-        RoleplayAiProvider.gpt,
-      );
-    });
-
-    test('simulazione hetzner → normalizzata e motore GPT', () {
-      final resolved = RoleplaySessionFactory.resolveProvider(
-        simulation(aiProvider: 'hetzner'),
-      );
-      expect(resolved, RoleplayAiProvider.gpt);
-      expect(
-        RoleplaySessionFactory.activeEngine(resolved),
-        RoleplayAiProvider.gpt,
-      );
-    });
-
-    test('simulazione realtime → motore Realtime', () {
-      final resolved = RoleplaySessionFactory.resolveProvider(
-        simulation(aiProvider: 'realtime'),
-      );
-      expect(resolved, RoleplayAiProvider.realtime);
-      expect(
-        RoleplaySessionFactory.activeEngine(resolved),
-        RoleplayAiProvider.realtime,
-      );
-      expect(RoleplaySessionFactory.willUseRealtimeLater(resolved), isTrue);
     });
   });
 }

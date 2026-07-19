@@ -6,6 +6,12 @@ abstract class RoleplayRealtimeAudio {
 
   Future<void> playPcm16Base64Delta(String base64Delta);
 
+  /// Svuota il buffer di riproduzione (fine risposta assistente).
+  Future<void> flushPlayback();
+
+  /// True se l'altoparlante sta ancora riproducendo (o ha coda in uscita).
+  bool get isOutputActive;
+
   Future<void> stopPlayback();
 
   Future<void> dispose();

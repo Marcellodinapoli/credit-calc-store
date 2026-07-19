@@ -28,7 +28,10 @@ class CreditCalcDefaultLayout extends StatelessWidget {
         leading: showBack
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => Navigator.maybePop(context),
+                onPressed: () {
+                  // Host Planet/default: solo pop; store usa SecondaryPageScaffold.
+                  Navigator.maybePop(context);
+                },
               )
             : null,
         title: Row(

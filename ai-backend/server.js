@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import http from "http";
 import { WebSocketServer } from "ws";
 
 import { initFirebaseAuth } from "./auth.js";
@@ -21,16 +22,34 @@ app.get("/health", (_req, res) => {
     ok: true,
     service: "realtime-proxy",
     realtimeWsPort: config.realtimeWsPort,
+    mode: config.realtimeAttachHttp ? "http+ws" : "split-ports",
   });
 });
 
-app.listen(config.port, "0.0.0.0", () => {
+const httpServer = http.createServer(app);
+
+httpServer.listen(config.port, "0.0.0.0", () => {
   console.log(`HTTP health attivo sulla porta ${config.port}`);
 });
 
-const realtimeWss = new WebSocketServer({ port: config.realtimeWsPort });
-attachRealtimeProxy(realtimeWss);
+/** Su Fly/Cloud un solo porto: WebSocket su /realtime-ws dello stesso server HTTP. */
+const attachToHttp =
+  config.realtimeAttachHttp || config.realtimeWsPort === config.port;
 
-console.log(
-  `WebSocket Realtime proxy attivo sulla porta ${config.realtimeWsPort}`,
-);
+let realtimeWss;
+if (attachToHttp) {
+  realtimeWss = new WebSocketServer({
+    server: httpServer,
+    path: "/realtime-ws",
+  });
+  console.log(
+    `WebSocket Realtime proxy attivo su http://0.0.0.0:${config.port}/realtime-ws`,
+  );
+} else {
+  realtimeWss = new WebSocketServer({ port: config.realtimeWsPort });
+  console.log(
+    `WebSocket Realtime proxy attivo sulla porta ${config.realtimeWsPort}`,
+  );
+}
+
+attachRealtimeProxy(realtimeWss);

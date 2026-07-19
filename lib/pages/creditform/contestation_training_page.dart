@@ -1,9 +1,13 @@
 // ignore_for_file: deprecated_member_use
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/platform/native_audio_helper.dart';
+import '../../services/listening_progress_service.dart';
 import '../../services/warmup_evaluation_service.dart';
 import 'personal_form_shell.dart';
 
@@ -63,8 +67,13 @@ class _ContestationTrainingPageState
   bool _isProcessing = false;
   Map<String, dynamic>? _aiResult;
   bool _evaluationPending = false;
+  DateTime? _evaluationAt;
+  String? _savedTranscription;
 
-  bool get _canCompleteSimulation => _hasRecording;
+  String get _storageKey => widget.item.title;
+
+  bool get _canCompleteSimulation =>
+      _hasRecording || (_savedTranscription ?? '').trim().isNotEmpty;
 
   // ---------------------------------------------------------------------------
   // LIFECYCLE
@@ -73,6 +82,25 @@ class _ContestationTrainingPageState
   void initState() {
     super.initState();
     _restoreProgress();
+    unawaited(_loadSavedEvaluation());
+  }
+
+  Future<void> _loadSavedEvaluation() async {
+    final response =
+        await ListeningProgressService.getContestationResponse(_storageKey);
+    final saved =
+        await ListeningProgressService.getContestationEvaluation(_storageKey);
+    if (!mounted) return;
+    setState(() {
+      _savedTranscription = response;
+      if (saved != null) {
+        _aiResult = saved.result;
+        _evaluationAt = saved.evaluatedAt;
+        _hasRecording = true;
+      } else if ((response ?? '').trim().isNotEmpty) {
+        _hasRecording = true;
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -181,16 +209,32 @@ class _ContestationTrainingPageState
           _hasRecording = true;
           _isProcessing = true;
           _aiResult = null;
+          _evaluationAt = null;
           _evaluationPending = false;
         });
 
         try {
           final result = await _sendToAI(bytes);
           if (!mounted) return;
+          final evaluatedAt = DateTime.now();
           setState(() {
             _aiResult = result;
+            _evaluationAt = evaluatedAt;
             _isProcessing = false;
           });
+          final transcription =
+              (result['trascrizione'] ?? '').toString().trim();
+          if (transcription.isNotEmpty) {
+            _savedTranscription = transcription;
+            await ListeningProgressService.setContestationResponse(
+              _storageKey,
+              transcription,
+            );
+          }
+          await ListeningProgressService.setContestationEvaluation(
+            _storageKey,
+            result,
+          );
         } catch (_) {
           if (!mounted) return;
           setState(() {
@@ -227,12 +271,22 @@ class _ContestationTrainingPageState
       customerLine: widget.item.declared,
       kind: 'contestation',
       systemPrompt: widget.item.systemPrompt,
+      mimeType: kIsWeb ? 'audio/webm' : 'audio/m4a',
     );
   }
 
   void _playRecording() {
     if (!_hasRecording) return;
     NativeAudioHelper.playRecording();
+  }
+
+  String _formatEvaluationAt(DateTime value) {
+    final dd = value.day.toString().padLeft(2, '0');
+    final mm = value.month.toString().padLeft(2, '0');
+    final yy = value.year.toString();
+    final hh = value.hour.toString().padLeft(2, '0');
+    final min = value.minute.toString().padLeft(2, '0');
+    return '$dd/$mm/$yy $hh:$min';
   }
 
   // ---------------------------------------------------------------------------
@@ -382,14 +436,34 @@ class _ContestationTrainingPageState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Suggerimento atteso',
+                  'Suggerimento AI',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: Colors.grey.shade700,
                   ),
                 ),
+                if (_evaluationAt != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Valutazione del ${_formatEvaluationAt(_evaluationAt!)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
+                if ((_aiResult!['trascrizione'] ?? '')
+                    .toString()
+                    .trim()
+                    .isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Trascrizione: ${_aiResult!['trascrizione']}',
+                    ),
+                  ),
                 if ((_aiResult!['commento'] ?? '').toString().isNotEmpty)
                   Text(_aiResult!['commento'].toString()),
                 if ((_aiResult!['versione_migliorata'] ?? '')
@@ -403,6 +477,15 @@ class _ContestationTrainingPageState
                   ),
                 ],
               ],
+            ),
+          ),
+        if (_aiResult == null &&
+            (_savedTranscription ?? '').trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Text(
+              'La tua ultima risposta: «${_savedTranscription!.trim()}»',
+              style: const TextStyle(height: 1.45),
             ),
           ),
       ],

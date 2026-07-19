@@ -56,7 +56,9 @@ function pickRole(sessionId: string, scenarioWeights?: Record<string, number>): 
 }
 
 export const roleplayStep = onCall(
-  { region, secrets: [openAiApiKey] },
+  // invoker public: Gen2/Cloud Run raggiungibile da qualsiasi PC/cell
+  // con Firebase Auth (il check auth resta sotto).
+  { region, secrets: [openAiApiKey], invoker: "public" },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError(

@@ -5,6 +5,10 @@ dotenv.config();
 export const config = {
   port: Number(process.env.PORT || 3000),
   realtimeWsPort: Number(process.env.REALTIME_WS_PORT || 3002),
+  /** true = WS sullo stesso HTTP (Fly/Cloud). false = porta dedicata (Nginx locale). */
+  realtimeAttachHttp:
+    process.env.REALTIME_ATTACH_HTTP === "true" ||
+    String(process.env.REALTIME_WS_PORT || "") === String(process.env.PORT || ""),
   corsOrigin: process.env.CORS_ORIGIN || "*",
 
   openAiApiKey: process.env.OPENAI_API_KEY || "",

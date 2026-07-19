@@ -126,6 +126,45 @@ class ListeningProgressService {
     _telefonataSessionResponses.clear();
   }
 
+  /// Salva (sovrascrivendo) la valutazione AI della fase telefonata.
+  static Future<void> setTelefonataEvaluation(
+    String phase,
+    Map<String, dynamic> result,
+  ) async {
+    try {
+      await _doc.set({
+        'telefonataEvaluations': {
+          phase: {
+            'result': result,
+            'evaluatedAtMs': DateTime.now().millisecondsSinceEpoch,
+          },
+        },
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  static Future<WarmupSavedEvaluation?> getTelefonataEvaluation(
+    String phase,
+  ) async {
+    try {
+      final snap = await _doc.get();
+      final data =
+          snap.data()?['telefonataEvaluations'] as Map<String, dynamic>? ?? {};
+      return WarmupSavedEvaluation.fromRaw(data[phase]);
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // CONTESTAZIONI
   // ---------------------------------------------------------------------------
@@ -158,6 +197,83 @@ class ListeningProgressService {
     }
   }
 
+  static Future<void> setContestationResponse(
+    String contestationKey,
+    String transcription,
+  ) async {
+    final trimmed = transcription.trim();
+    if (trimmed.isEmpty) return;
+
+    try {
+      await _doc.set({
+        'contestazioneResponses': {contestationKey: trimmed},
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  static Future<String?> getContestationResponse(String contestationKey) async {
+    try {
+      final snap = await _doc.get();
+      final data =
+          snap.data()?['contestazioneResponses'] as Map<String, dynamic>? ??
+              {};
+      final value = data[contestationKey];
+      if (value is! String) return null;
+      final trimmed = value.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  static Future<void> setContestationEvaluation(
+    String contestationKey,
+    Map<String, dynamic> result,
+  ) async {
+    try {
+      await _doc.set({
+        'contestazioneEvaluations': {
+          contestationKey: {
+            'result': result,
+            'evaluatedAtMs': DateTime.now().millisecondsSinceEpoch,
+          },
+        },
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  static Future<WarmupSavedEvaluation?> getContestationEvaluation(
+    String contestationKey,
+  ) async {
+    try {
+      final snap = await _doc.get();
+      final data =
+          snap.data()?['contestazioneEvaluations'] as Map<String, dynamic>? ??
+              {};
+      return WarmupSavedEvaluation.fromRaw(data[contestationKey]);
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // RESET (FUTURO / ADMIN)
   // ---------------------------------------------------------------------------
@@ -168,6 +284,10 @@ class ListeningProgressService {
         'activeTab': 0,
         'telefonata': {},
         'contestazioni': {},
+        'telefonataResponses': {},
+        'telefonataEvaluations': {},
+        'contestazioneResponses': {},
+        'contestazioneEvaluations': {},
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } on FirebaseException catch (e) {
@@ -176,5 +296,41 @@ class ListeningProgressService {
       }
       rethrow;
     }
+  }
+}
+
+/// Valutazione AI salvata (telefonata / contestazione).
+class WarmupSavedEvaluation {
+  const WarmupSavedEvaluation({
+    required this.result,
+    required this.evaluatedAt,
+  });
+
+  final Map<String, dynamic> result;
+  final DateTime evaluatedAt;
+
+  static WarmupSavedEvaluation? fromRaw(dynamic raw) {
+    if (raw is! Map) return null;
+    final map = Map<String, dynamic>.from(raw);
+    final resultRaw = map['result'];
+    if (resultRaw is! Map) return null;
+    final ms = map['evaluatedAtMs'];
+    final evaluatedAt = ms is int
+        ? DateTime.fromMillisecondsSinceEpoch(ms)
+        : DateTime.tryParse(ms?.toString() ?? '') ?? DateTime.now();
+    return WarmupSavedEvaluation(
+      result: Map<String, dynamic>.from(resultRaw),
+      evaluatedAt: evaluatedAt,
+    );
+  }
+
+  String get formattedDateTime {
+    final d = evaluatedAt;
+    final dd = d.day.toString().padLeft(2, '0');
+    final mm = d.month.toString().padLeft(2, '0');
+    final yy = d.year.toString();
+    final hh = d.hour.toString().padLeft(2, '0');
+    final min = d.minute.toString().padLeft(2, '0');
+    return '$dd/$mm/$yy $hh:$min';
   }
 }

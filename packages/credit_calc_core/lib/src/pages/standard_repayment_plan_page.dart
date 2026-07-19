@@ -1733,17 +1733,23 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   String? _modulatedMonthsError(int phaseIndex) {
     if (!_modulatedValidationVisible) return null;
-    final raw = _allModulatedPhaseControllers[phaseIndex].months.text.trim();
-    if (raw.isEmpty) return requiredFieldBorderOnly;
-    final months = int.tryParse(raw);
+    final pair = _allModulatedPhaseControllers[phaseIndex];
+    final mRaw = pair.months.text.trim();
+    final aRaw = pair.amount.text.trim();
+    if (mRaw.isEmpty && aRaw.isEmpty) return requiredFieldBorderOnly;
+    if (mRaw.isEmpty) return null; // importo solo: i mesi si calcolano
+    final months = int.tryParse(mRaw);
     return requiredFieldError(months == null || months < 1);
   }
 
   String? _modulatedAmountError(int phaseIndex) {
     if (!_modulatedValidationVisible) return null;
-    final raw = _allModulatedPhaseControllers[phaseIndex].amount.text.trim();
-    if (raw.isEmpty) return requiredFieldBorderOnly;
-    final amount = EuroFormat.parse(raw);
+    final pair = _allModulatedPhaseControllers[phaseIndex];
+    final mRaw = pair.months.text.trim();
+    final aRaw = pair.amount.text.trim();
+    if (mRaw.isEmpty && aRaw.isEmpty) return requiredFieldBorderOnly;
+    if (aRaw.isEmpty) return null; // mesi soli: l'importo si calcola
+    final amount = EuroFormat.parse(aRaw);
     return requiredFieldError(amount == null || amount <= 0);
   }
 
@@ -1823,25 +1829,148 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
 
   int get _modulatedTabAfterPhases => 6 + _modulatedVisiblePhaseCount * 2;
 
-  bool _isModulatedPhaseComplete(
-    ({TextEditingController months, TextEditingController amount}) pair,
-  ) {
-    final months = int.tryParse(pair.months.text.trim());
-    final amount = EuroFormat.parse(pair.amount.text);
-    return months != null &&
-        months >= 1 &&
-        amount != null &&
-        amount > 0;
-  }
-
   bool get _canAddModulatedPhase {
     if (_modulatedVisiblePhaseCount >= _maxModulatedPhases) return false;
-    final last = _allModulatedPhaseControllers[_modulatedVisiblePhaseCount - 1];
-    return _isModulatedPhaseComplete(last);
+    final snapshot = _modulatedPhasesSnapshot();
+    if (snapshot == null) return false;
+    // Solo mesi/importo = dilazione del residuo: non si aggiungono altre fasi dopo.
+    if (snapshot.residualDilazioneMonths != null ||
+        snapshot.residualDilazioneAmount != null) {
+      return false;
+    }
+    if (snapshot.phases.isEmpty) return false;
+    if (snapshot.phases.length < _modulatedVisiblePhaseCount) return false;
+    return snapshot.residualDebt > 0.009 && snapshot.monthsLeftInBand > 1;
+  }
+
+  int? _dilazioneCountForDesiredAmount({
+    required double residual,
+    required double desired,
+    required double minInstallment,
+  }) {
+    if (residual <= 0.009 || desired <= 0) return null;
+    if (_modalitaRate == _RepaymentSplitMode.lastAdjustment) {
+      return _RepaymentInstallmentPlan.installmentCountForDesiredLastAdjustment(
+        netAmount: residual,
+        desiredInstallment: desired,
+        minInstallment: minInstallment,
+      );
+    }
+    return _RepaymentInstallmentPlan.installmentCountForDesiredAmount(
+      netAmount: residual,
+      desiredInstallment: desired,
+    );
+  }
+
+  /// Contesto cumulativo: fasi a rata fissa e/o dilazione residuo (solo mesi o solo importo).
+  ({
+    List<_ModulatedPhase> phases,
+    int? residualDilazioneMonths,
+    double? residualDilazioneAmount,
+    double residualDebt,
+    int monthsUsed,
+    int monthsLeftInBand,
+    int maxTotal,
+  })? _modulatedPhasesSnapshot({int? throughIndexInclusive}) {
+    final netto = _netDebt();
+    final creditor = _creditor;
+    if (netto <= 0 || creditor == null) return null;
+    final band = creditor.bandForAmount(netto);
+    if (band == null || band.installments <= 0) return null;
+    final maxTotal = _effectiveMaxInstallments(band);
+
+    final limit = throughIndexInclusive == null
+        ? _modulatedVisiblePhaseCount - 1
+        : throughIndexInclusive.clamp(0, _modulatedVisiblePhaseCount - 1);
+
+    final phases = <_ModulatedPhase>[];
+    int? residualDilazioneMonths;
+    double? residualDilazioneAmount;
+    var remainingDebt = netto;
+    var monthsUsed = 0;
+
+    for (var i = 0; i <= limit; i++) {
+      final pair = _allModulatedPhaseControllers[i];
+      final mRaw = pair.months.text.trim();
+      final aRaw = pair.amount.text.trim();
+      final hasMonths = mRaw.isNotEmpty;
+      final hasAmount = aRaw.isNotEmpty;
+      if (!hasMonths && !hasAmount) {
+        if (i == 0) return null;
+        break;
+      }
+
+      // Solo mesi: dilazione residuo in N rate (conguaglio / uguali).
+      if (hasMonths && !hasAmount) {
+        final months =
+            int.tryParse(mRaw.replaceAll(RegExp(r'[^0-9]'), ''));
+        if (months == null || months < 1) {
+          if (i == 0 && phases.isEmpty) return null;
+          break;
+        }
+        residualDilazioneMonths = months;
+        break;
+      }
+
+      // Solo importo: N rate dal residuo/importo (stessa logica sizing manuale).
+      if (hasAmount && !hasMonths) {
+        final amount = EuroFormat.parse(aRaw);
+        if (amount == null || amount <= 0) {
+          if (i == 0 && phases.isEmpty) return null;
+          break;
+        }
+        residualDilazioneAmount = amount;
+        break;
+      }
+
+      final phase = _resolveModulatedPhase(
+        monthsRaw: mRaw,
+        amountRaw: aRaw,
+      );
+      if (phase == null) {
+        if (i == 0) return null;
+        break;
+      }
+      phases.add(phase);
+      monthsUsed += phase.months;
+      remainingDebt -= phase.totalRecovered;
+    }
+
+    if (phases.isEmpty &&
+        residualDilazioneMonths == null &&
+        residualDilazioneAmount == null) {
+      return null;
+    }
+    final monthsLeft = (maxTotal - monthsUsed).clamp(0, maxTotal);
+    return (
+      phases: phases,
+      residualDilazioneMonths: residualDilazioneMonths,
+      residualDilazioneAmount: residualDilazioneAmount,
+      residualDebt: remainingDebt,
+      monthsUsed: monthsUsed,
+      monthsLeftInBand: monthsLeft,
+      maxTotal: maxTotal,
+    );
+  }
+
+  /// Fase a rata fissa: solo con mesi e importo entrambi compilati.
+  _ModulatedPhase? _resolveModulatedPhase({
+    required String monthsRaw,
+    required String amountRaw,
+  }) {
+    final monthsParsed =
+        int.tryParse(monthsRaw.replaceAll(RegExp(r'[^0-9]'), ''));
+    final amountParsed = EuroFormat.parse(amountRaw);
+    if (monthsParsed == null || monthsParsed < 1) return null;
+    if (amountParsed == null || amountParsed <= 0) return null;
+    return _ModulatedPhase(
+      months: monthsParsed,
+      monthlyAmount: amountParsed,
+    );
   }
 
   void _addModulatedPhase() {
-    if (_modulatedVisiblePhaseCount >= _maxModulatedPhases) return;
+    if (!_canAddModulatedPhase) return;
     setState(() {
       _modulatedVisiblePhaseCount++;
       _resetCalcolo();
@@ -1867,22 +1996,55 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     _refreshModulatedValidation();
   }
 
-  List<_ModulatedPhase>? _parsedModulatedPhases({bool requirePhase1 = true}) {
-    final phases = <_ModulatedPhase>[];
-    for (var i = 0; i < _modulatedVisiblePhaseCount; i++) {
-      final pair = _allModulatedPhaseControllers[i];
-      final mRaw = pair.months.text.trim();
-      final aRaw = pair.amount.text.trim();
-      if (mRaw.isEmpty || aRaw.isEmpty) return null;
-      final months = int.tryParse(mRaw);
-      final amount = EuroFormat.parse(aRaw);
-      if (months == null || months < 1 || amount == null || amount <= 0) {
-        return null;
+  /// Piano modulato risolto: fasi a rata fissa + eventuale dilazione residuo.
+  ({
+    List<_ModulatedPhase> phases,
+    int? residualDilazioneMonths,
+    double? residualDilazioneAmount,
+    double residualDebt,
+    int maxTotal,
+  })? _parsedModulatedPlanInput({bool requireComplete = true}) {
+    final snapshot = _modulatedPhasesSnapshot();
+    if (snapshot == null) return null;
+
+    if (requireComplete) {
+      for (var i = 0; i < _modulatedVisiblePhaseCount; i++) {
+        final pair = _allModulatedPhaseControllers[i];
+        final mRaw = pair.months.text.trim();
+        final aRaw = pair.amount.text.trim();
+        if (mRaw.isEmpty && aRaw.isEmpty) return null;
       }
-      phases.add(_ModulatedPhase(months: months, monthlyAmount: amount));
+      final flatCount = snapshot.phases.length;
+      final hasDilazione = snapshot.residualDilazioneMonths != null ||
+          snapshot.residualDilazioneAmount != null;
+      final resolvedCount = flatCount + (hasDilazione ? 1 : 0);
+      if (resolvedCount != _modulatedVisiblePhaseCount) return null;
+
+      // Solo mesi o solo importo: devono essere sull'ultima fase visibile.
+      if (hasDilazione) {
+        final last =
+            _allModulatedPhaseControllers[_modulatedVisiblePhaseCount - 1];
+        final lastM = last.months.text.trim();
+        final lastA = last.amount.text.trim();
+        final onlyMonths = lastM.isNotEmpty && lastA.isEmpty;
+        final onlyAmount = lastA.isNotEmpty && lastM.isEmpty;
+        if (!onlyMonths && !onlyAmount) return null;
+      }
     }
-    if (phases.isEmpty) return null;
-    return phases;
+
+    if (snapshot.phases.isEmpty &&
+        snapshot.residualDilazioneMonths == null &&
+        snapshot.residualDilazioneAmount == null) {
+      return null;
+    }
+
+    return (
+      phases: snapshot.phases,
+      residualDilazioneMonths: snapshot.residualDilazioneMonths,
+      residualDilazioneAmount: snapshot.residualDilazioneAmount,
+      residualDebt: snapshot.residualDebt,
+      maxTotal: snapshot.maxTotal,
+    );
   }
 
   _ManualSizingValidation _validateModulatedPlan({
@@ -1914,8 +2076,8 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       );
     }
 
-    final phases = _parsedModulatedPhases(requirePhase1: showEmptyAsInvalid);
-    if (phases == null) {
+    final input = _parsedModulatedPlanInput(requireComplete: showEmptyAsInvalid);
+    if (input == null) {
       if (!showEmptyAsInvalid &&
           _modPhase1MonthsCtrl.text.trim().isEmpty &&
           _modPhase1AmountCtrl.text.trim().isEmpty) {
@@ -1924,8 +2086,10 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       return _ManualSizingValidation(
         isValid: false,
         message: _modulatedVisiblePhaseCount > 1
-            ? 'Compila numero di mesi e importo rata per ogni fase.'
-            : 'Compila numero di mesi e importo rata mensile.',
+            ? 'Per ogni fase compila almeno mesi o importo rata '
+                '(oppure entrambi). Con soli mesi o solo importo il residuo '
+                'si dilaziona con la modalità scelta (conguaglio / rate uguali).'
+            : 'Compila almeno il numero di mesi o l\'importo rata mensile.',
         showError: showError,
       );
     }
@@ -1934,6 +2098,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         ? creditor.minInstallmentAmount
         : 0.01;
 
+    final phases = input.phases;
     for (var i = 0; i < phases.length; i++) {
       final phase = phases[i];
       if (phase.monthlyAmount + 1e-9 < minRata) {
@@ -1956,11 +2121,147 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       );
     }
 
-    final maxTotal = _effectiveMaxInstallments(band);
+    final maxTotal = input.maxTotal;
     final modulatedMonths =
         phases.fold<int>(0, (total, p) => total + p.months);
     final modulatedRecovered =
         phases.fold<double>(0, (total, p) => total + p.totalRecovered);
+    final residual = input.residualDebt;
+    final dilazioneMonths = input.residualDilazioneMonths;
+    final dilazioneAmount = input.residualDilazioneAmount;
+
+    // Solo mesi: dilazione residuo in N rate.
+    if (dilazioneMonths != null) {
+      if (residual <= 0.009) {
+        return _ManualSizingValidation(
+          isValid: false,
+          message: 'Non c\'è residuo da dilazionare con i mesi indicati.',
+          showError: showError,
+        );
+      }
+      if (modulatedMonths + dilazioneMonths > maxTotal) {
+        return _ManualSizingValidation(
+          isValid: false,
+          message:
+              'Il piano dura ${modulatedMonths + dilazioneMonths} mesi: '
+              'la fascia PDR ne consente al massimo $maxTotal.',
+          showError: showError,
+        );
+      }
+      final mesiDisp = _availablePlanMonths();
+      if (mesiDisp != null &&
+          modulatedMonths + dilazioneMonths > mesiDisp) {
+        return _ManualSizingValidation(
+          isValid: false,
+          message:
+              'Il piano dura ${modulatedMonths + dilazioneMonths} mesi, oltre i '
+              '$mesiDisp mesi disponibili per età del debitore.',
+          showError: showError,
+        );
+      }
+      final probe = _RepaymentInstallmentPlan.build(
+        netAmount: residual,
+        maxInstallments: dilazioneMonths,
+        minInstallment: creditor.minInstallmentAmount,
+        mode: _modalitaRate,
+        fixedInstallmentCount: dilazioneMonths,
+      );
+      if (probe == null) {
+        return _ManualSizingValidation(
+          isValid: false,
+          message:
+              'Con $dilazioneMonths dilazioni sul residuo di '
+              '${EuroFormat.format(residual)} non si rispetta il minimo rata '
+              '(${EuroFormat.format(minRata)}).',
+          showError: showError,
+        );
+      }
+      return _ManualSizingValidation.ok;
+    }
+
+    // Solo importo: N rate da residuo/importo (conguaglio o rate uguali).
+    if (dilazioneAmount != null) {
+      if (residual <= 0.009) {
+        return _ManualSizingValidation(
+          isValid: false,
+          message: 'Non c\'è residuo da dilazionare con l\'importo indicato.',
+          showError: showError,
+        );
+      }
+      if (dilazioneAmount + 1e-9 < minRata) {
+        return _ManualSizingValidation(
+          isValid: false,
+          message:
+              'L\'importo ${EuroFormat.format(dilazioneAmount)} è inferiore '
+              'alla rata minima (${EuroFormat.format(minRata)}).',
+          showError: showError,
+        );
+      }
+      if (dilazioneAmount - residual > 0.009) {
+        return _ManualSizingValidation(
+          isValid: false,
+          message:
+              'L\'importo ${EuroFormat.format(dilazioneAmount)} supera il '
+              'residuo di ${EuroFormat.format(residual)}.',
+          showError: showError,
+        );
+      }
+      final n = _dilazioneCountForDesiredAmount(
+        residual: residual,
+        desired: dilazioneAmount,
+        minInstallment: creditor.minInstallmentAmount,
+      );
+      if (n == null || n < 1) {
+        return _ManualSizingValidation(
+          isValid: false,
+          message:
+              'Con rata ${EuroFormat.format(dilazioneAmount)} non è possibile '
+              'dilazionare il residuo di ${EuroFormat.format(residual)}.',
+          showError: showError,
+        );
+      }
+      if (modulatedMonths + n > maxTotal) {
+        return _ManualSizingValidation(
+          isValid: false,
+          message:
+              'Servono $n dilazioni sul residuo: il piano totale '
+              '(${modulatedMonths + n} mesi) supera il massimo di fascia ($maxTotal).',
+          showError: showError,
+        );
+      }
+      final mesiDisp = _availablePlanMonths();
+      if (mesiDisp != null && modulatedMonths + n > mesiDisp) {
+        return _ManualSizingValidation(
+          isValid: false,
+          message:
+              'Il piano dura ${modulatedMonths + n} mesi, oltre i '
+              '$mesiDisp mesi disponibili per età del debitore.',
+          showError: showError,
+        );
+      }
+      final probe = _RepaymentInstallmentPlan.build(
+        netAmount: residual,
+        maxInstallments: n,
+        minInstallment: creditor.minInstallmentAmount,
+        mode: _modalitaRate,
+        fixedInstallmentCount: n,
+        chosenInstallmentAmount:
+            _modalitaRate == _RepaymentSplitMode.lastAdjustment
+                ? dilazioneAmount
+                : null,
+      );
+      if (probe == null) {
+        return _ManualSizingValidation(
+          isValid: false,
+          message:
+              'Impossibile dilazionare il residuo di '
+              '${EuroFormat.format(residual)} con rata '
+              '${EuroFormat.format(dilazioneAmount)}.',
+          showError: showError,
+        );
+      }
+      return _ManualSizingValidation.ok;
+    }
 
     if (modulatedMonths >= maxTotal) {
       final mesiDisp = _availablePlanMonths();
@@ -1979,7 +2280,6 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     }
 
     final remainingN = maxTotal - modulatedMonths;
-    final residual = netto - modulatedRecovered;
 
     if (residual <= 0.009) {
       return _ManualSizingValidation(
@@ -2877,18 +3177,34 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       return;
     }
 
-    final phases = _parsedModulatedPhases(requirePhase1: true)!;
+    final input = _parsedModulatedPlanInput(requireComplete: true)!;
+    final phases = input.phases;
     final modulatedMonths =
         phases.fold<int>(0, (total, p) => total + p.months);
     final modulatedRecovered =
         phases.fold<double>(0, (total, p) => total + p.totalRecovered);
-    final residual = _netto - modulatedRecovered;
+    final residual = input.residualDebt;
 
     _matchedPdrBand = _creditor!.bandForAmount(_netto);
     if (_matchedPdrBand == null) return;
 
     final effectiveMax = _effectiveMaxInstallments(_matchedPdrBand!);
-    final remainingN = effectiveMax - modulatedMonths;
+    final dilazioneAmount = input.residualDilazioneAmount;
+    late final int remainingN;
+    double? chosenRata;
+    if (dilazioneAmount != null) {
+      chosenRata = dilazioneAmount;
+      final n = _dilazioneCountForDesiredAmount(
+        residual: residual,
+        desired: dilazioneAmount,
+        minInstallment: _creditor!.minInstallmentAmount,
+      );
+      if (n == null) return;
+      remainingN = n;
+    } else {
+      remainingN = input.residualDilazioneMonths ??
+          (effectiveMax - modulatedMonths);
+    }
     _cappedToAvailableMonths = effectiveMax < _matchedPdrBand!.installments;
 
     final finalPlan = _RepaymentInstallmentPlan.build(
@@ -2897,6 +3213,10 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       minInstallment: _creditor!.minInstallmentAmount,
       mode: _modalitaRate,
       fixedInstallmentCount: remainingN,
+      chosenInstallmentAmount:
+          _modalitaRate == _RepaymentSplitMode.lastAdjustment
+              ? chosenRata
+              : null,
     );
 
     if (finalPlan == null) {
@@ -5758,9 +6078,10 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Text(
-            'Rate personalizzate (max $_maxModulatedPhases fasi). Con una sola fase '
-            'usa Sviluppa piano; aggiungi altre fasi solo se servono ulteriori '
-            'mensilità a importo ridotto.',
+            'Rate personalizzate (max $_maxModulatedPhases fasi). '
+            'Solo mesi o solo importo: dilazione del residuo con '
+            'conguaglio / rate uguali (N rate calcolato a Sviluppa piano). '
+            'Entrambi: fase a rata fissa; poi eventuale altra fase o residuo.',
             style: TextStyle(
               fontSize: 12,
               height: 1.45,
@@ -5871,55 +6192,125 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     required int tabAmount,
   }) {
     final pair = _allModulatedPhaseControllers[phaseIndex];
+    final remainder = _modulatedPhasesSnapshot(throughIndexInclusive: phaseIndex);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: _tabOrder(
-              tabMonths,
-              _modulatedMonthsField(
-                pair.months,
-                'Numero di mesi',
-                wrapPadding: false,
-                errorText: _modulatedMonthsError(phaseIndex),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _tabOrder(
-              tabAmount,
-              _modulatedAmountField(
-                pair.amount,
-                'Importo rata mensile',
-                wrapPadding: false,
-                errorText: _modulatedAmountError(phaseIndex),
-              ),
-            ),
-          ),
-          if (phaseIndex > 0) ...[
-            const SizedBox(width: 12),
-            _skipFocus(
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: IconButton(
-                  onPressed: () => _removeModulatedPhaseAt(phaseIndex),
-                  icon: const Icon(Icons.remove),
-                  tooltip: 'Rimuovi questa fase',
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.red.shade50,
-                    foregroundColor: Colors.red.shade700,
-                    padding: const EdgeInsets.all(12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(color: Colors.red.shade200),
-                    ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _tabOrder(
+                  tabMonths,
+                  _modulatedMonthsField(
+                    pair.months,
+                    'Numero di mesi',
+                    wrapPadding: false,
+                    errorText: _modulatedMonthsError(phaseIndex),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _tabOrder(
+                  tabAmount,
+                  _modulatedAmountField(
+                    pair.amount,
+                    'Importo rata mensile',
+                    wrapPadding: false,
+                    errorText: _modulatedAmountError(phaseIndex),
+                  ),
+                ),
+              ),
+              if (phaseIndex > 0) ...[
+                const SizedBox(width: 12),
+                _skipFocus(
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: IconButton(
+                      onPressed: () => _removeModulatedPhaseAt(phaseIndex),
+                      icon: const Icon(Icons.remove),
+                      tooltip: 'Rimuovi questa fase',
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.red.shade50,
+                        foregroundColor: Colors.red.shade700,
+                        padding: const EdgeInsets.all(12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: Colors.red.shade200),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (remainder != null) ...[
+            if ((remainder.residualDilazioneMonths != null ||
+                    remainder.residualDilazioneAmount != null) &&
+                remainder.phases.length == phaseIndex) ...[
+              const SizedBox(height: 6),
+              _skipFocus(
+                Builder(
+                  builder: (context) {
+                    final residual = remainder.residualDebt;
+                    final amount = remainder.residualDilazioneAmount;
+                    final months = remainder.residualDilazioneMonths;
+                    if (amount != null) {
+                      final n = _dilazioneCountForDesiredAmount(
+                        residual: residual,
+                        desired: amount,
+                        minInstallment: _creditor?.minInstallmentAmount ?? 0.01,
+                      );
+                      return Text(
+                        'Residuo ${EuroFormat.format(residual)} con rata '
+                        '${EuroFormat.format(amount)}'
+                        '${n != null ? ' → $n rate' : ''} '
+                        '(${_modalitaRateLabels[_modalitaRate]}). '
+                        'Dettaglio al clic su Sviluppa piano.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          height: 1.4,
+                          color: Colors.grey.shade700,
+                        ),
+                      );
+                    }
+                    return Text(
+                      'Residuo ${EuroFormat.format(residual)} '
+                      'dilazionato in $months rate '
+                      '(${_modalitaRateLabels[_modalitaRate]}). '
+                      'Dettaglio al clic su Sviluppa piano.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.4,
+                        color: Colors.grey.shade700,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ] else if (remainder.phases.length > phaseIndex) ...[
+              const SizedBox(height: 6),
+              _skipFocus(
+                Text(
+                  'Dopo questa fase: residuo '
+                  '${EuroFormat.format(remainder.residualDebt)} · '
+                  'rate ancora disponibili in fascia: '
+                  '${remainder.monthsLeftInBand}'
+                  '${remainder.monthsLeftInBand <= 1 ? ' (ne serve almeno 1 per il residuo dilazionato)' : ''}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: remainder.monthsLeftInBand <= 1
+                        ? Colors.orange.shade800
+                        : Colors.grey.shade700,
+                  ),
+                ),
+              ),
+            ],
           ],
         ],
       ),

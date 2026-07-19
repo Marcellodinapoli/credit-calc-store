@@ -47,6 +47,14 @@ abstract final class RoleplayRealtimeSessionConfig {
       'Rispondi sempre in italiano, massimo 1-2 frasi brevi, tono telefonico '
           'realistico e umano (esitazioni, obiezioni, interruzioni naturali).',
       'Non dire mai di essere un\'intelligenza artificiale.',
+      '',
+      'REGOLE TURNO (OBBLIGATORIE):',
+      'L\'utente è SEMPRE il consulente. Tu sei SOLO il personaggio '
+          '(debitore/garante/familiare): non interpretare mai il consulente.',
+      'Non inventare dialoghi a due voci. Non fingere battute del consulente.',
+      'All\'apertura della chiamata dì solo un breve "Pronto?" tipico al '
+          'telefono, poi taci e aspetta il consulente.',
+      'Dopo ogni tua battuta taci e attendi la risposta dell\'utente.',
       if (practiceText.isNotEmpty)
         'DATI PRATICA (usa solo questi dati, non inventare altro): $practiceText'
       else
@@ -56,17 +64,36 @@ abstract final class RoleplayRealtimeSessionConfig {
     return {
       'type': 'session.update',
       'session': {
-        'modalities': ['text', 'audio'],
+        'type': 'realtime',
+        'model': 'gpt-realtime',
+        'output_modalities': ['audio'],
         'instructions': instructions,
-        'voice': role == 'TERZO' ? 'shimmer' : 'alloy',
-        'input_audio_format': 'pcm16',
-        'output_audio_format': 'pcm16',
-        'input_audio_transcription': {'model': 'whisper-1'},
-        'turn_detection': {
-          'type': 'server_vad',
-          'threshold': 0.5,
-          'prefix_padding_ms': 300,
-          'silence_duration_ms': 500,
+        'audio': {
+          'input': {
+            'format': {
+              'type': 'audio/pcm',
+              'rate': 24000,
+            },
+            'transcription': {
+              'model': 'whisper-1',
+              'language': 'it',
+            },
+            'turn_detection': {
+              'type': 'server_vad',
+              'threshold': 0.65,
+              'prefix_padding_ms': 300,
+              'silence_duration_ms': 700,
+              'create_response': true,
+              'interrupt_response': true,
+            },
+          },
+          'output': {
+            'format': {
+              'type': 'audio/pcm',
+              'rate': 24000,
+            },
+            'voice': role == 'TERZO' ? 'shimmer' : 'alloy',
+          },
         },
       },
     };

@@ -21,6 +21,7 @@ import '../widgets/desktop_app_update_button.dart';
 import 'credit_core_account_menu_sheet.dart';
 import 'credit_core_module_navigation.dart';
 import 'credit_core_site_actions.dart';
+import 'credit_calc_shell_nav.dart';
 
 /// Badge monitoraggio rata sulla voce Itinerario (≈2× rispetto al default Material).
 const double _kItineraryNavBadgeSmallSize = 12;
@@ -54,7 +55,6 @@ const creditCalcBottomNavItems = <CreditCalcNavItem>[
 ];
 
 class _CreditCalcShellState extends State<CreditCalcShell> {
-  CreditCalcNavItem _section = CreditCalcNavItem.creditors;
   final _accountMenuBadgeController = AccountMenuBadgeController();
 
   @override
@@ -145,31 +145,36 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     if (item == CreditCalcNavItem.tools) {
       ItineraryNavBadgeNotifier.instance.clear();
     }
-    setState(() => _section = item);
+    creditCalcActiveSection.value = item;
   }
 
   @override
   Widget build(BuildContext context) {
     final compact = Dimensions.useCompactShell(context);
 
-    if (compact) {
-      return _MobileShell(
-        section: _section,
-        onSectionChanged: _onSectionChanged,
-        onAnnouncements: _openAnnouncements,
-        onSettings: _openSettings,
-        onMenu: _showAccountMenu,
-        child: _sectionPage(_section),
-      );
-    }
+    return ValueListenableBuilder<CreditCalcNavItem>(
+      valueListenable: creditCalcActiveSection,
+      builder: (context, section, _) {
+        if (compact) {
+          return _MobileShell(
+            section: section,
+            onSectionChanged: _onSectionChanged,
+            onAnnouncements: _openAnnouncements,
+            onSettings: _openSettings,
+            onMenu: _showAccountMenu,
+            child: _sectionPage(section),
+          );
+        }
 
-    return _DesktopShell(
-      section: _section,
-      onSectionChanged: _onSectionChanged,
-      onAnnouncements: _openAnnouncements,
-      onLogout: _signOutAccount,
-      onSettings: _openSettings,
-      child: _sectionPage(_section),
+        return _DesktopShell(
+          section: section,
+          onSectionChanged: _onSectionChanged,
+          onAnnouncements: _openAnnouncements,
+          onLogout: _signOutAccount,
+          onSettings: _openSettings,
+          child: _sectionPage(section),
+        );
+      },
     );
   }
 }

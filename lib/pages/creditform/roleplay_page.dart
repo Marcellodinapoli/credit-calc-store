@@ -16,6 +16,7 @@ import '../../services/roleplay_session.dart';
 import '../../services/roleplay_session_factory.dart';
 import '../../services/roleplay_voice_status.dart';
 import '../../widgets/roleplay_call_overlay.dart';
+import '../../utils/roleplay_practice_data.dart';
 import 'personal_form_shell.dart';
 import 'personal_form_menu.dart';
 
@@ -38,10 +39,17 @@ class _RoleplayPageState extends State<RoleplayPage> {
   String? _currentSimulationId;
   String? _currentSimulationCategory;
 
+  Map<String, RoleplaySimulationDetail> _simulationDetails = {};
+  StreamSubscription<Map<String, RoleplaySimulationDetail>>? _detailsSub;
+
   @override
   void initState() {
     super.initState();
     _initReadState();
+    _detailsSub = RoleplayProgressService.watchSimulationDetails().listen((map) {
+      if (!mounted) return;
+      setState(() => _simulationDetails = map);
+    });
   }
 
   RoleplaySession _createSession(String engine) {
@@ -105,6 +113,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
 
   @override
   void dispose() {
+    _detailsSub?.cancel();
     if (_session != null) {
       unawaited(_session!.stop());
       _session!.dispose();
@@ -159,6 +168,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
               _currentSimulation!['practiceData'] as List<dynamic>? ?? [],
           userExchanges: userExchanges,
           totalMessages: _chatHistory.length,
+          history: List<Map<String, String>>.from(_chatHistory),
         );
       }
     }
@@ -174,8 +184,14 @@ class _RoleplayPageState extends State<RoleplayPage> {
   Future<void> _showAiSuggestion({
     required Map<String, dynamic> simulationData,
     required String title,
+    required String simulationId,
   }) async {
-    if (_chatHistory.isEmpty) {
+    final saved = _simulationDetails[simulationId];
+    final history = _chatHistory.isNotEmpty
+        ? _chatHistory
+        : (saved?.history ?? const <Map<String, String>>[]);
+
+    if (history.isEmpty) {
       if (!mounted) return;
       await showDialog<void>(
         context: context,
@@ -222,11 +238,16 @@ class _RoleplayPageState extends State<RoleplayPage> {
       final suggestion = await RoleplayConversationService.suggestion(
         prompt: RoleplayConfigService.resolveSimulationPrompt(simulationData),
         title: title,
-        history: _chatHistory,
+        history: history,
         practiceData: practiceData,
         practiceText: practiceText,
         difficulty: RoleplayConfigService.resolveDifficulty(simulationData),
         personality: RoleplayConfigService.resolvePersonality(simulationData),
+      );
+
+      await RoleplayProgressService.saveSimulationSuggestion(
+        simulationId: simulationId,
+        suggestion: suggestion,
       );
 
       if (!mounted) return;
@@ -255,16 +276,22 @@ class _RoleplayPageState extends State<RoleplayPage> {
     }
   }
 
-  Future<void> _showRecordingReplay() async {
-    if (_chatHistory.isEmpty) {
+  Future<void> _showRecordingReplay({String? simulationId}) async {
+    final saved =
+        simulationId == null ? null : _simulationDetails[simulationId];
+    final history = _chatHistory.isNotEmpty
+        ? _chatHistory
+        : (saved?.history ?? const <Map<String, String>>[]);
+
+    if (history.isEmpty) {
       if (!mounted) return;
       await showDialog<void>(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('Riascolta registrazione'),
+          title: const Text('Conversazione telefonata'),
           content: const Text(
-            'Avvia e termina una simulazione prima di riascoltare '
-            'la registrazione.',
+            'Avvia e termina una simulazione prima di leggere '
+            'la conversazione.',
           ),
           actions: [
             TextButton(
@@ -281,10 +308,10 @@ class _RoleplayPageState extends State<RoleplayPage> {
     await showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Riascolta registrazione'),
+        title: const Text('Conversazione telefonata'),
         content: SingleChildScrollView(
           child: Text(
-            _chatHistory
+            history
                 .map((message) {
                   final who =
                       message['role'] == 'user' ? 'Consulente' : 'Debitore';
@@ -454,8 +481,9 @@ class _RoleplayPageState extends State<RoleplayPage> {
             final doc = docs[index];
             final data = doc.data() as Map<String, dynamic>;
             final title = (data['title'] ?? 'Simulazione').toString();
-            final practiceData =
-                (data['practiceData'] as List<dynamic>? ?? []);
+            final practiceData = RoleplayPracticeData.normalize(
+              data['practiceData'] as List<dynamic>? ?? [],
+            );
             final difficulty =
                 RoleplayConfigService.resolveDifficulty(data);
             final personality =
@@ -480,6 +508,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
               isNew: isNew,
               completed: completed,
               simulationActive: _isSimulationActive,
+              detail: _simulationDetails[doc.id],
               onOpenSimulation: () => _startSimulation(
                 {
                   'title': title,
@@ -508,8 +537,9 @@ class _RoleplayPageState extends State<RoleplayPage> {
                   'personality': data['personality'] ?? '',
                 },
                 title: title,
+                simulationId: doc.id,
               ),
-              onReplay: _showRecordingReplay,
+              onReplay: () => _showRecordingReplay(simulationId: doc.id),
             );
           },
         );
@@ -526,6 +556,7 @@ class _RoleplaySimulationCard extends StatelessWidget {
   final bool isNew;
   final bool completed;
   final bool simulationActive;
+  final RoleplaySimulationDetail? detail;
   final VoidCallback onOpenSimulation;
   final VoidCallback onStopSimulation;
   final VoidCallback onShowHint;
@@ -539,6 +570,7 @@ class _RoleplaySimulationCard extends StatelessWidget {
     required this.isNew,
     required this.completed,
     required this.simulationActive,
+    required this.detail,
     required this.onOpenSimulation,
     required this.onStopSimulation,
     required this.onShowHint,
@@ -547,6 +579,9 @@ class _RoleplaySimulationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canOpenSuggestion = detail?.hasConversation == true;
+    final canReplay = detail?.hasConversation == true;
+
     return Container(
       decoration: BoxDecoration(
         color: AppCardTheme.surface,
@@ -635,18 +670,48 @@ class _RoleplaySimulationCard extends StatelessWidget {
             'a scopo formativo.',
             style: TextStyle(fontSize: 12, color: Colors.black54),
           ),
+          if (detail != null &&
+              (detail!.hasConversation || detail!.hasSuggestion)) ...[
+            const SizedBox(height: 12),
+            if (detail!.hasConversation)
+              _expandablePreviewCard(
+                context: context,
+                title: detail!.conversationAt == null
+                    ? 'Ultima conversazione'
+                    : 'Ultima conversazione · ${RoleplaySimulationDetail.formatDateTime(detail!.conversationAt!)}',
+                preview: detail!.formatHistoryPreview(),
+                fullText: detail!.history
+                    .map((m) {
+                      final who =
+                          m['role'] == 'user' ? 'Consulente' : 'Debitore';
+                      return '$who: ${m['content'] ?? ''}';
+                    })
+                    .join('\n\n'),
+              ),
+            if (detail!.hasSuggestion) ...[
+              if (detail!.hasConversation) const SizedBox(height: 8),
+              _expandablePreviewCard(
+                context: context,
+                title: detail!.evaluatedAt == null
+                    ? 'Ultima valutazione AI'
+                    : 'Ultima valutazione AI · ${RoleplaySimulationDetail.formatDateTime(detail!.evaluatedAt!)}',
+                preview: detail!.formatSuggestionPreview(),
+                fullText: detail!.suggestion ?? '',
+              ),
+            ],
+          ],
           const SizedBox(height: 16),
           const Divider(height: 1),
           const SizedBox(height: 12),
           _actionButton(
             label: 'Vedi suggerimento AI',
-            enabled: true,
+            enabled: canOpenSuggestion,
             onPressed: onShowHint,
           ),
           const SizedBox(height: 8),
           _actionButton(
-            label: 'Riascolta registrazione',
-            enabled: true,
+            label: 'Conversazione / Leggi',
+            enabled: canReplay,
             onPressed: onReplay,
           ),
           const SizedBox(height: 8),
@@ -657,6 +722,60 @@ class _RoleplaySimulationCard extends StatelessWidget {
             onPressed: simulationActive ? onStopSimulation : onOpenSimulation,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _expandablePreviewCard({
+    required BuildContext context,
+    required String title,
+    required String preview,
+    required String fullText,
+  }) {
+    final needsExpand = fullText.trim().length > preview.trim().length;
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              preview,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                color: Colors.grey.shade800,
+              ),
+            ),
+          ),
+          trailing: needsExpand ? null : const SizedBox.shrink(),
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                fullText,
+                style: const TextStyle(fontSize: 13, height: 1.45),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -693,7 +812,9 @@ class _RoleplaySimulationCard extends StatelessWidget {
         onPressed: enabled ? onPressed : null,
         child: Text(
           label,
-          style: const TextStyle(color: Colors.black87),
+          style: TextStyle(
+            color: enabled ? Colors.black87 : Colors.black38,
+          ),
         ),
       ),
     );

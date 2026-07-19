@@ -29,9 +29,16 @@ void main() {
       expect(instructions, contains('Debitore: Rossi'));
       expect(instructions, contains('PARAMETRI SIMULAZIONE'));
       expect(instructions, contains('DEBITORE'));
-      expect(session['modalities'], ['text', 'audio']);
-      expect(session['input_audio_format'], 'pcm16');
-      expect(session['output_audio_format'], 'pcm16');
+      expect(session['type'], 'realtime');
+      expect(session['output_modalities'], ['audio']);
+      final audio = session['audio'] as Map<String, dynamic>;
+      final input = audio['input'] as Map<String, dynamic>;
+      expect((input['format'] as Map)['type'], 'audio/pcm');
+      expect((input['format'] as Map)['rate'], 24000);
+      expect(
+        ((audio['output'] as Map)['format'] as Map)['type'],
+        'audio/pcm',
+      );
     });
 
     test('pickRole deterministico da sessionId', () {

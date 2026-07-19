@@ -9,8 +9,10 @@ import { normativeSearch } from "./ai_normative_search";
 import { callAnalysis } from "./ai_call_analysis";
 import { roleplayStep } from "./ai_roleplay_step";
 import { roleplaySuggestion } from "./ai_roleplay_suggestion";
+import { roleplayRealtimeToken } from "./ai_roleplay_realtime_token";
 import { warmupEvaluate } from "./ai_warmup_evaluate";
 import { contestationGenerate } from "./ai_contestation_generate";
+import { getAiUsageStats } from "./ai_get_usage_stats";
 import {
   db,
   formatDateTime,
@@ -272,5 +274,14 @@ export const onFieldReminderRescheduled = onDocumentUpdated(
 );
 
 // Esportato per test/manutenzione: invio singolo a utente con preferenze attive.
-export { sendPushToUser, normativeSearch, callAnalysis, roleplayStep, roleplaySuggestion, warmupEvaluate, contestationGenerate };
-export { getAiUsageStats } from "./ai_usage_stats";
+export {
+  sendPushToUser,
+  normativeSearch,
+  callAnalysis,
+  roleplayStep,
+  roleplaySuggestion,
+  roleplayRealtimeToken,
+  warmupEvaluate,
+  contestationGenerate,
+  getAiUsageStats,
+};

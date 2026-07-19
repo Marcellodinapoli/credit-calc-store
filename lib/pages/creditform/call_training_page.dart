@@ -213,6 +213,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   bool _isProcessing = false;
   Map<String, dynamic>? _aiResult;
   bool _evaluationPending = false;
+  DateTime? _evaluationAt;
 
   int _attemptCount = 0;
   static const int _minScoreToPass = 70;
@@ -237,6 +238,19 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       _loadingConfig = false;
     });
     await _loadConversationHistory();
+    await _loadSavedEvaluation();
+  }
+
+  Future<void> _loadSavedEvaluation() async {
+    final saved = await ListeningProgressService.getTelefonataEvaluation(
+      widget.phaseKey,
+    );
+    if (!mounted || saved == null) return;
+    setState(() {
+      _aiResult = saved.result;
+      _evaluationAt = saved.evaluatedAt;
+      _hasRecorded = true;
+    });
   }
 
   List<String> get _historyPhaseKeys {
@@ -266,6 +280,8 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
       final config = callTrainingConfigFromPhase(phase);
       final response =
           await ListeningProgressService.getTelefonataResponse(key);
+      // Mostra la battuta precedente solo se la risposta è stata compilata.
+      if ((response ?? '').trim().isEmpty) continue;
       turns.add(
         _ConversationTurn(
           phaseKey: key,
@@ -302,6 +318,15 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
     if (score is String) return int.tryParse(score) ?? 0;
 
     return 0;
+  }
+
+  String _formatEvaluationAt(DateTime value) {
+    final dd = value.day.toString().padLeft(2, '0');
+    final mm = value.month.toString().padLeft(2, '0');
+    final yy = value.year.toString();
+    final hh = value.hour.toString().padLeft(2, '0');
+    final min = value.minute.toString().padLeft(2, '0');
+    return '$dd/$mm/$yy $hh:$min';
   }
 
   bool get _phasePassed {
@@ -353,6 +378,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
           _hasRecorded = true;
           _isProcessing = true;
           _aiResult = null;
+          _evaluationAt = null;
           _evaluationPending = false;
         });
 
@@ -360,13 +386,27 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
           final result = await _sendToAI(bytes);
           if (!mounted) return;
           final score = _extractScore(result);
+          final evaluatedAt = DateTime.now();
           setState(() {
             _aiResult = result;
+            _evaluationAt = evaluatedAt;
             _isProcessing = false;
             if (score < _minScoreToPass && _attemptCount < _maxAttempts) {
               _attemptCount++;
             }
           });
+          final transcription =
+              (result['trascrizione'] ?? '').toString().trim();
+          if (transcription.isNotEmpty) {
+            await ListeningProgressService.setTelefonataResponse(
+              widget.phaseKey,
+              transcription,
+            );
+          }
+          await ListeningProgressService.setTelefonataEvaluation(
+            widget.phaseKey,
+            result,
+          );
         } catch (e) {
           if (!mounted) return;
           setState(() {
@@ -584,6 +624,16 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
                 'Suggerimento AI',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               ),
+              if (_evaluationAt != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Valutazione del ${_formatEvaluationAt(_evaluationAt!)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blue.shade800,
+                  ),
+                ),
+              ],
               if (commento.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(commento, style: const TextStyle(height: 1.45)),
@@ -876,6 +926,18 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (_evaluationAt != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'Valutazione del ${_formatEvaluationAt(_evaluationAt!)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
                     Text(
                       'Trascrizione: ${_aiResult!['trascrizione'] ?? '-'}',
                     ),
