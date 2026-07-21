@@ -201,7 +201,7 @@ class _SyncOnlyShell extends StatelessWidget {
               ),
             ),
           ),
-          const Expanded(child: DeviceSyncPage()),
+          const Expanded(child: DeviceSyncPage(hideNavigation: true)),
         ],
       ),
     );

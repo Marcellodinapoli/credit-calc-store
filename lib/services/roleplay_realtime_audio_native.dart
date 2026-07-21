@@ -19,21 +19,31 @@ class RoleplayRealtimeAudioNative implements RoleplayRealtimeAudio {
   SoundHandle? _handle;
   Future<void>? _streamReady;
   final List<AudioSource> _endedStreams = <AudioSource>[];
+  /// Fine stimata della coda PCM (senza margine).
+  DateTime? _outputQueueEnd;
   DateTime? _outputActiveUntil;
 
   @override
   bool get isOutputActive {
-    if (_stream != null || _endedStreams.isNotEmpty) return true;
+    // Durante i delta lo stream è attivo.
+    if (_stream != null) return true;
+    // Dopo flush NON usare `_endedStreams` (restano 8s e bloccano il mic).
+    // Solo la durata reale della coda + piccolo margine anti-eco.
     final until = _outputActiveUntil;
     return until != null && DateTime.now().isBefore(until);
   }
 
   void _noteOutputDuration(int pcmBytes) {
-    final ms = ((pcmBytes / 2) / 24000 * 1000).ceil() + 200;
-    final until = DateTime.now().add(Duration(milliseconds: ms));
-    if (_outputActiveUntil == null || until.isAfter(_outputActiveUntil!)) {
-      _outputActiveUntil = until;
-    }
+    // Somma i chunk in coda (non ripartire da now a ogni delta).
+    final chunkMs = ((pcmBytes / 2) / 24000 * 1000).ceil();
+    const echoPadMs = 150;
+    final now = DateTime.now();
+    final base = (_outputQueueEnd != null && _outputQueueEnd!.isAfter(now))
+        ? _outputQueueEnd!
+        : now;
+    _outputQueueEnd = base.add(Duration(milliseconds: chunkMs));
+    _outputActiveUntil =
+        _outputQueueEnd!.add(const Duration(milliseconds: echoPadMs));
   }
 
   Future<void> _ensureEngine() async {
@@ -160,6 +170,7 @@ class RoleplayRealtimeAudioNative implements RoleplayRealtimeAudio {
     _handle = null;
     _stream = null;
     _streamReady = null;
+    _outputQueueEnd = null;
     _outputActiveUntil = null;
 
     try {

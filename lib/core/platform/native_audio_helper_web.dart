@@ -93,7 +93,7 @@ class NativeAudioHelper {
 
   static Future<void> playRecording({String? path}) async {
     if (_audioUrl == null) return;
-    html.AudioElement(_audioUrl!)..play();
+    html.AudioElement(_audioUrl!).play();
   }
 
   static Future<void> disposePlayer() async {}

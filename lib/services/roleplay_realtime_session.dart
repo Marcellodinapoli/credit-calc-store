@@ -281,7 +281,7 @@ class RoleplayRealtimeSession implements RoleplaySession {
 
   void _scheduleMicUnmute() {
     _micUnmuteTimer?.cancel();
-    _micUnmuteTimer = Timer.periodic(const Duration(milliseconds: 120), (t) {
+    _micUnmuteTimer = Timer.periodic(const Duration(milliseconds: 80), (t) {
       if (!_simulationActive) {
         t.cancel();
         return;
@@ -424,12 +424,16 @@ class RoleplayRealtimeSession implements RoleplaySession {
         _scheduleMicUnmute();
         return;
       case 'error':
-        _emitError(
-          event['error'] is Map
-              ? (event['error'] as Map)['message']?.toString() ??
-                  'Errore Realtime.'
-              : 'Errore Realtime.',
-        );
+        final message = event['error'] is Map
+            ? (event['error'] as Map)['message']?.toString() ??
+                'Errore Realtime.'
+            : 'Errore Realtime.';
+        final lower = message.toLowerCase();
+        if (lower.contains('no active response') ||
+            lower.contains('cancellation failed')) {
+          return;
+        }
+        _emitError(message);
         return;
       default:
         return;

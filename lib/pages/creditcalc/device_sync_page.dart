@@ -17,7 +17,13 @@ import '../../ui/layout/page_shell.dart';
 import '../../widgets/account_menu_badge_icon_button.dart';
 
 class DeviceSyncPage extends StatefulWidget {
-  const DeviceSyncPage({super.key});
+  /// Se true (secondo device in attesa sessione), nasconde AppBar/menu.
+  final bool hideNavigation;
+
+  const DeviceSyncPage({
+    super.key,
+    this.hideNavigation = false,
+  });
 
   @override
   State<DeviceSyncPage> createState() => _DeviceSyncPageState();
@@ -48,7 +54,9 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
   @override
   void initState() {
     super.initState();
-    _accountMenuBadgeController.start();
+    if (!widget.hideNavigation) {
+      _accountMenuBadgeController.start();
+    }
     WidgetsBinding.instance.addObserver(this);
     _refresh();
   }
@@ -129,7 +137,9 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
 
   @override
   void dispose() {
-    _accountMenuBadgeController.stop();
+    if (!widget.hideNavigation) {
+      _accountMenuBadgeController.stop();
+    }
     WidgetsBinding.instance.removeObserver(this);
     _receiverSub?.cancel();
     _peerSub?.cancel();
@@ -494,24 +504,9 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leading: IconButton(
-          tooltip: 'Torna a CreditCalc',
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => popToCreditCalcHome(context),
-        ),
-        title: const BrandedProjectName(project: BrandedPageProject.calc),
-        backgroundColor: PageShellTheme.appBarBackground,
-        actions: [
-          ...CreditModuleShellActions.appBarActions(context),
-          AccountMenuBadgeIconButton(onPressed: _showAccountMenu),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : ListView(
               padding: EdgeInsets.fromLTRB(
                 16,
                 16,
@@ -519,11 +514,13 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
                 24 + MediaQuery.paddingOf(context).bottom,
               ),
               children: [
-                const Text(
-                  'Sincronizza',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
+                if (!widget.hideNavigation) ...[
+                  const Text(
+                    'Sincronizza',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Text(
                   'Scambio manuale tra dispositivi: ogni app invia in un colpo '
                   'solo i record che mancano sull\'altro. I dati si integrano '
@@ -750,7 +747,26 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
                   const Center(child: CircularProgressIndicator()),
                 ],
               ],
-            ),
+            );
+
+    if (widget.hideNavigation) return body;
+
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          tooltip: 'Torna a CreditCalc',
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => popToCreditCalcHome(context),
+        ),
+        title: const BrandedProjectName(project: BrandedPageProject.calc),
+        backgroundColor: PageShellTheme.appBarBackground,
+        actions: [
+          ...CreditModuleShellActions.appBarActions(context),
+          AccountMenuBadgeIconButton(onPressed: _showAccountMenu),
+        ],
+      ),
+      body: body,
     );
   }
 }
