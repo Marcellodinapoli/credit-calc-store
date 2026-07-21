@@ -4,9 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/maintenance_service.dart';
 import '../../models/building_resident_entry.dart';
 import '../../services/building_residents_lookup_service.dart';
-import '../../services/directory/pagine_gialle_directory_service.dart';
-import '../../services/directory/telextra_directory_service.dart';
 import '../../ui/layout/page_shell.dart';
+import '../../utils/address_search_engines_prefs.dart';
 import '../../widgets/address_field_with_scan.dart';
 import '../../widgets/maintenance_section_gate.dart';
 
@@ -21,13 +20,28 @@ class BuildingResidentsLookupPage extends StatefulWidget {
 
 class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPage> {
   final _addressCtrl = TextEditingController();
+  final _domainCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
   BuildingResidentsLookupResult? _result;
+  List<AddressSearchEngine> _engines = List.of(AddressSearchEnginesPrefs.defaults);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEngines();
+  }
+
+  Future<void> _loadEngines() async {
+    final engines = await AddressSearchEnginesPrefs.load();
+    if (!mounted) return;
+    setState(() => _engines = engines);
+  }
 
   @override
   void dispose() {
     _addressCtrl.dispose();
+    _domainCtrl.dispose();
     super.dispose();
   }
 
@@ -60,16 +74,50 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
     }
   }
 
-  Future<void> _openUri(Uri Function(String) builder) async {
+  Future<void> _openEngine(AddressSearchEngine engine) async {
     final address = (_result?.queryAddress ?? _addressCtrl.text).trim();
     if (address.length < 3) {
       setState(() => _error = 'Inserisci almeno via e città prima di aprire il sito.');
       return;
     }
     await launchUrl(
-      builder(address),
+      engine.buildUri(address),
       mode: LaunchMode.externalApplication,
     );
+  }
+
+  Future<void> _removeEngine(AddressSearchEngine engine) async {
+    final next = _engines.where((item) => item.id != engine.id).toList();
+    setState(() => _engines = next);
+    await AddressSearchEnginesPrefs.save(next);
+  }
+
+  Future<void> _addDomain() async {
+    final domain = AddressSearchEnginesPrefs.normalizeDomain(_domainCtrl.text);
+    if (domain == null) {
+      setState(() => _error = 'Inserisci un dominio valido (es. duckduckgo.com).');
+      return;
+    }
+
+    final engine = AddressSearchEnginesPrefs.engineFromDomain(domain);
+    final bare = engine.domain.replaceFirst(RegExp(r'^www\.'), '');
+    final already = _engines.any(
+      (item) =>
+          item.id == engine.id ||
+          item.domain.replaceFirst(RegExp(r'^www\.'), '') == bare,
+    );
+    if (already) {
+      setState(() => _error = 'Questo motore è già presente.');
+      return;
+    }
+
+    final next = [..._engines, engine];
+    setState(() {
+      _engines = next;
+      _error = null;
+      _domainCtrl.clear();
+    });
+    await AddressSearchEnginesPrefs.save(next);
   }
 
   @override
@@ -112,51 +160,72 @@ class _BuildingResidentsLookupPageState extends State<BuildingResidentsLookupPag
                 icon: const Icon(Icons.search),
                 label: const Text('Cerca nominativi'),
               ),
+              const SizedBox(height: 16),
+              Text(
+                'Motori di ricerca',
+                style: TextStyle(
+                  color: Colors.grey.shade800,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Tocca per aprire. Puoi rimuovere un motore o aggiungerne altri '
+                'inserendo il dominio.',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 13,
+                  height: 1.35,
+                ),
+              ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              if (_engines.isEmpty)
+                Text(
+                  'Nessun motore selezionato. Aggiungine uno tramite dominio.',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final engine in _engines)
+                      InputChip(
+                        label: Text(engine.label),
+                        avatar: const Icon(Icons.open_in_new, size: 16),
+                        onPressed: _loading ? null : () => _openEngine(engine),
+                        onDeleted:
+                            _loading ? null : () => _removeEngine(engine),
+                        deleteIcon: const Icon(Icons.close, size: 18),
+                      ),
+                  ],
+                ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  OutlinedButton.icon(
-                    onPressed: _loading
-                        ? null
-                        : () => _openUri(
-                              BuildingResidentsLookupService.pagineBiancheWebUri,
-                            ),
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    label: const Text('Pagine Bianche (indirizzo)'),
+                  Expanded(
+                    child: TextField(
+                      controller: _domainCtrl,
+                      enabled: !_loading,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _addDomain(),
+                      decoration: const InputDecoration(
+                        labelText: 'Aggiungi motore (dominio)',
+                        hintText: 'es. duckduckgo.com',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: _loading
-                        ? null
-                        : () => _openUri(
-                              PagineGialleDirectoryService.searchUri,
-                            ),
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    label: const Text('Pagine Gialle'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _loading
-                        ? null
-                        : () => _openUri(TelextraDirectoryService.webSearchUri),
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    label: const Text('1188 (indirizzo)'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _loading
-                        ? null
-                        : () => _openUri(BuildingResidentsLookupService.bingWebUri),
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    label: const Text('Bing'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _loading
-                        ? null
-                        : () => _openUri(
-                              BuildingResidentsLookupService.googleWebUri,
-                            ),
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    label: const Text('Google'),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: IconButton.filledTonal(
+                      tooltip: 'Aggiungi',
+                      onPressed: _loading ? null : _addDomain,
+                      icon: const Icon(Icons.add),
+                    ),
                   ),
                 ],
               ),
