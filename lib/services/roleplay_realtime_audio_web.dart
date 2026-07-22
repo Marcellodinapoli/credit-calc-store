@@ -11,11 +11,15 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import 'roleplay_realtime_audio.dart';
+import 'roleplay_realtime_audio_probe.dart';
+import 'roleplay_realtime_audio_rates.dart';
 
 RoleplayRealtimeAudio createRoleplayRealtimeAudio() =>
     RoleplayRealtimeAudioWeb();
 
 class RoleplayRealtimeAudioWeb implements RoleplayRealtimeAudio {
+  static const int openaiPcmRate = kRoleplayOpenAiPcmRateHz;
+
   html.MediaStream? _micStream;
   dynamic _audioContext;
   dynamic _micSource;
@@ -24,6 +28,9 @@ class RoleplayRealtimeAudioWeb implements RoleplayRealtimeAudio {
   double _playbackTime = 0;
   DateTime? _outputActiveUntil;
   void Function(List<int> pcmChunk)? _onChunk;
+  int _contextSampleRate = openaiPcmRate;
+  int _chunkLogCount = 0;
+  Float32List _leftOver = Float32List(0);
 
   @override
   bool get isOutputActive {
@@ -31,18 +38,94 @@ class RoleplayRealtimeAudioWeb implements RoleplayRealtimeAudio {
     return until != null && DateTime.now().isBefore(until);
   }
 
+  /// Converte float32 @ contextRate → PCM16 LE mono @ 24 kHz.
+  /// Se AudioContext è già 24 kHz: bypass (nessun doppio resampling).
+  Uint8List _floatToPcm16At24k(Float32List input) {
+    Float32List samples = input;
+    if (_leftOver.isNotEmpty) {
+      final merged = Float32List(_leftOver.length + input.length);
+      merged.setAll(0, _leftOver);
+      merged.setAll(_leftOver.length, input);
+      samples = merged;
+      _leftOver = Float32List(0);
+    }
+
+    final bypass =
+        RoleplayAudioRateReport.shouldBypassResampler(_contextSampleRate);
+
+    if (bypass) {
+      final pcm = Int16List(samples.length);
+      for (var i = 0; i < samples.length; i++) {
+        final clamped = samples[i].clamp(-1.0, 1.0);
+        pcm[i] = (clamped * 32767).round();
+      }
+      return Uint8List.view(pcm.buffer);
+    }
+
+    final ratio = _contextSampleRate / openaiPcmRate;
+    final outCount = (samples.length / ratio).floor();
+    if (outCount <= 0) {
+      _leftOver = samples;
+      return Uint8List(0);
+    }
+    final used = (outCount * ratio).floor();
+    if (used < samples.length) {
+      _leftOver = samples.sublist(used);
+    }
+
+    final pcm = Int16List(outCount);
+    for (var o = 0; o < outCount; o++) {
+      final src = o * ratio;
+      final i0 = src.floor().clamp(0, samples.length - 1);
+      final i1 = math.min(i0 + 1, samples.length - 1);
+      final t = src - i0;
+      final s = samples[i0] + (samples[i1] - samples[i0]) * t;
+      pcm[o] = (s.clamp(-1.0, 1.0) * 32767).round();
+    }
+    return Uint8List.view(pcm.buffer);
+  }
+
   @override
   Future<void> startMicrophone(void Function(List<int> pcmChunk) onChunk) async {
     _onChunk = onChunk;
+    _chunkLogCount = 0;
+    _leftOver = Float32List(0);
+    RoleplayAudioRateReport.reset();
     _micStream = await html.window.navigator.mediaDevices
         ?.getUserMedia({'audio': true});
     if (_micStream == null) {
       throw Exception('Microfono non disponibile.');
     }
 
-    _audioContext ??= js_util.callConstructor(
-      js_util.getProperty(html.window, 'AudioContext'),
-      [],
+    // Preferisci 24 kHz; il browser può comunque usare 44.1/48 → resample sotto.
+    try {
+      _audioContext = js_util.callConstructor(
+        js_util.getProperty(html.window, 'AudioContext'),
+        [
+          js_util.jsify({'sampleRate': openaiPcmRate}),
+        ],
+      );
+    } catch (_) {
+      _audioContext = js_util.callConstructor(
+        js_util.getProperty(html.window, 'AudioContext'),
+        [],
+      );
+    }
+
+    _contextSampleRate =
+        ((js_util.getProperty(_audioContext, 'sampleRate') as num?)
+                ?.round() ??
+            openaiPcmRate);
+
+    final bypass =
+        RoleplayAudioRateReport.shouldBypassResampler(_contextSampleRate);
+    RoleplayAudioRateReport.reportOnce(
+      platform: 'web',
+      deviceSampleRateHz: _contextSampleRate,
+      audioContextSampleRateHz: _contextSampleRate,
+      afterResampleSampleRateHz: openaiPcmRate,
+      openaiSessionSampleRateHz: kRoleplayOpenAiPcmRateHz,
+      resamplerBypassed: bypass,
     );
 
     _micSource = js_util.callMethod(
@@ -70,14 +153,26 @@ class RoleplayRealtimeAudioWeb implements RoleplayRealtimeAudio {
         final length = js_util.getProperty(channelData, 'length') as int? ?? 0;
         if (length == 0) return;
 
-        final pcm = Int16List(length);
+        final floats = Float32List(length);
         for (var i = 0; i < length; i++) {
-          final sample = (js_util.getProperty(channelData, i) as num?) ?? 0;
-          final clamped = sample.clamp(-1.0, 1.0);
-          pcm[i] = (clamped * 32767).round();
+          floats[i] =
+              ((js_util.getProperty(channelData, i) as num?) ?? 0).toDouble();
         }
 
-        _onChunk?.call(Uint8List.view(pcm.buffer).toList());
+        final pcm = _floatToPcm16At24k(floats);
+        if (pcm.isEmpty) return;
+
+        if (kDebugMode && _chunkLogCount < 10) {
+          _chunkLogCount++;
+          final durMs = (pcm.length / 2) / openaiPcmRate * 1000;
+          debugPrint(
+            'RoleplayAudio web chunk#$_chunkLogCount: '
+            'bytes=${pcm.length} duration≈${durMs.toStringAsFixed(1)}ms '
+            'fromContextHz=$_contextSampleRate → 24kHz PCM16LE',
+          );
+        }
+
+        _onChunk?.call(pcm);
       }),
     );
 
@@ -107,6 +202,7 @@ class RoleplayRealtimeAudioWeb implements RoleplayRealtimeAudio {
     _micSource = null;
     _micStream = null;
     _onChunk = null;
+    _leftOver = Float32List(0);
   }
 
   @override
@@ -117,7 +213,7 @@ class RoleplayRealtimeAudioWeb implements RoleplayRealtimeAudio {
 
       _playbackContext ??= js_util.callConstructor(
         js_util.getProperty(html.window, 'AudioContext'),
-        [js_util.jsify({'sampleRate': 24000})],
+        [js_util.jsify({'sampleRate': openaiPcmRate})],
       );
 
       final sampleCount = bytes.length ~/ 2;
@@ -126,7 +222,7 @@ class RoleplayRealtimeAudioWeb implements RoleplayRealtimeAudio {
       final audioBuffer = js_util.callMethod(
         _playbackContext,
         'createBuffer',
-        [1, sampleCount, 24000],
+        [1, sampleCount, openaiPcmRate],
       );
       final channel = js_util.callMethod(audioBuffer, 'getChannelData', [0]);
 
@@ -155,9 +251,9 @@ class RoleplayRealtimeAudioWeb implements RoleplayRealtimeAudio {
               0;
       final startAt = math.max(now, _playbackTime);
       js_util.callMethod(source, 'start', [startAt]);
-      _playbackTime = startAt + sampleCount / 24000;
+      _playbackTime = startAt + sampleCount / openaiPcmRate;
       final endsAt = DateTime.now().add(
-        Duration(milliseconds: (sampleCount / 24000 * 1000).ceil() + 200),
+        Duration(milliseconds: (sampleCount / openaiPcmRate * 1000).ceil() + 200),
       );
       if (_outputActiveUntil == null || endsAt.isAfter(_outputActiveUntil!)) {
         _outputActiveUntil = endsAt;

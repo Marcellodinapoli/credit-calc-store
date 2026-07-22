@@ -1,5 +1,7 @@
 import 'package:credit_calc_core/credit_calc_core.dart';
 
+import 'roleplay_realtime_audio_rates.dart';
+
 /// Costruisce `session.update` Realtime lato Flutter (allineato a `roleplayStep`).
 abstract final class RoleplayRealtimeSessionConfig {
   static Map<String, dynamic> buildSessionUpdate({
@@ -72,7 +74,8 @@ abstract final class RoleplayRealtimeSessionConfig {
           'input': {
             'format': {
               'type': 'audio/pcm',
-              'rate': 24000,
+              // Deve coincidere col PCM di input_audio_buffer.append.
+              'rate': kRoleplayOpenAiPcmRateHz,
             },
             'transcription': {
               'model': 'whisper-1',

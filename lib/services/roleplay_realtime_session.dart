@@ -8,7 +8,11 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'callable_function_client.dart';
 import 'roleplay_event.dart';
 import 'roleplay_realtime_audio.dart';
+import 'roleplay_realtime_audio_probe.dart';
+import 'roleplay_realtime_audio_probe_io.dart'
+    if (dart.library.html) 'roleplay_realtime_audio_probe_stub.dart';
 import 'roleplay_realtime_audio_platform.dart';
+import 'roleplay_realtime_audio_rates.dart';
 import 'roleplay_realtime_session_config.dart';
 import 'roleplay_realtime_ws.dart';
 import 'roleplay_session.dart';
@@ -72,6 +76,8 @@ class RoleplayRealtimeSession implements RoleplaySession {
   bool _loggedFirstFinalTranscript = false;
   bool _loggedVadReady = false;
   int _qaTurnCount = 0;
+  RoleplayPcmPipelineProbe? _sentAudioProbe;
+  bool _sentWavFlushed = false;
 
   static const _postConnectSettle = Duration(milliseconds: 750);
   /// Warm-up post-apertura AudioRecorder (scarta frame incompleti).
@@ -334,6 +340,11 @@ class RoleplayRealtimeSession implements RoleplaySession {
     _skipLeadingSilence = false;
     _loggedFirstMicFrameSent = false;
     _firstPcmSentAt = null;
+    _sentWavFlushed = false;
+    _sentAudioProbe = RoleplayPcmPipelineProbe(
+      tag: 'sent-openai',
+      declaredSampleRate: kRoleplayOpenAiPcmRateHz,
+    );
 
     try {
       // Microfono spento per tutto il greeting: parte solo ora.
@@ -405,6 +416,8 @@ class RoleplayRealtimeSession implements RoleplaySession {
     _loggedFirstFinalTranscript = false;
     _loggedVadReady = false;
     _qaTurnCount = 0;
+    _sentAudioProbe = null;
+    _sentWavFlushed = false;
     _pipelineLog('start simulazione', since: _qaStartedAt);
 
     if (!_connected) {
@@ -505,16 +518,61 @@ class RoleplayRealtimeSession implements RoleplaySession {
       final sinceMic = _micOpenedAt == null
           ? 'n/d'
           : '${_firstPcmSentAt!.difference(_micOpenedAt!).inMilliseconds}ms dopo apertura mic';
+      final endianCheck = pcmChunk.length >= 4
+          ? 's16le samples[0..1]=['
+              '${_readS16Le(pcmChunk, 0)}, ${_readS16Le(pcmChunk, 2)}]'
+          : 'too-short';
       _pipelineLog(
         'istante primo chunk PCM inviato: '
-        '${_firstPcmSentAt!.toIso8601String()} ($sinceMic)',
+        '${_firstPcmSentAt!.toIso8601String()} ($sinceMic) '
+        'bytes=${pcmChunk.length} $endianCheck '
+        'pcmRate=${kRoleplayOpenAiPcmRateHz}Hz == session.audio.input.format.rate '
+        'formato=PCM16 LE mono base64→input_audio_buffer.append',
         since: _qaStartedAt,
       );
+      // ignore: avoid_print
+      print(
+        'RoleplayAudio APPEND confirm: '
+        'pcmBytes=${pcmChunk.length} '
+        'effectivePcmHz=$kRoleplayOpenAiPcmRateHz '
+        'openaiSessionHz=$kRoleplayOpenAiPcmRateHz '
+        'match=true',
+      );
+      assert(
+        kRoleplayOpenAiPcmRateHz == 24000,
+        'input_audio_buffer.append deve usare PCM @ rate sessione OpenAI',
+      );
+    }
+    _sentAudioProbe?.ingest(pcmChunk);
+    if (_sentAudioProbe != null &&
+        _sentAudioProbe!.hasFullCapture &&
+        !_sentWavFlushed) {
+      _sentWavFlushed = true;
+      unawaited(_flushSentAudioWav());
     }
     _sendJson({
       'type': 'input_audio_buffer.append',
       'audio': base64Encode(pcmChunk),
     });
+  }
+
+  static int _readS16Le(List<int> pcm, int offset) {
+    var sample = (pcm[offset] & 0xff) | ((pcm[offset + 1] & 0xff) << 8);
+    if (sample > 32767) sample -= 65536;
+    return sample;
+  }
+
+  Future<void> _flushSentAudioWav() async {
+    final probe = _sentAudioProbe;
+    if (probe == null) return;
+    final path = await writeRoleplayProbeWav(probe: probe);
+    probe.logSummary();
+    _pipelineLog(
+      'WAV primi 3s inviati a OpenAI: ${path ?? '(non scritto)'} — '
+      'se il file è pulito ma la trascrizione no → post-invio; '
+      'se il file è distorto → pipeline locale',
+      since: _qaStartedAt,
+    );
   }
 
   void _muteMicForAssistantOutput() {
@@ -572,6 +630,10 @@ class RoleplayRealtimeSession implements RoleplaySession {
 
     await _audio.stopMicrophone();
     await _audio.stopPlayback();
+    if (_sentAudioProbe != null && !_sentWavFlushed) {
+      await _flushSentAudioWav();
+    }
+    _sentAudioProbe = null;
 
     _socketSubscription?.cancel();
     _socketSubscription = null;

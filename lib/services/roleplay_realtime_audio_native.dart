@@ -1,16 +1,29 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:record/record.dart';
 
 import 'roleplay_realtime_audio.dart';
+import 'roleplay_realtime_audio_probe.dart';
+import 'roleplay_realtime_audio_probe_io.dart';
+import 'roleplay_realtime_audio_rates.dart';
 
 RoleplayRealtimeAudio createRoleplayRealtimeAudio() =>
     RoleplayRealtimeAudioNative();
 
 /// Microfono via `record` + playback PCM16 continuo via SoLoud (gapless).
+///
+/// Contratto OpenAI Realtime: PCM16 little-endian mono @ 24 kHz.
+/// Il resampling device→24 kHz è attivo anche in Release (non solo debug).
+/// Se il device è già ~24 kHz il resampler è bypassato (mai doppio passo).
 class RoleplayRealtimeAudioNative implements RoleplayRealtimeAudio {
+  static const int openaiPcmRate = kRoleplayOpenAiPcmRateHz;
+  static const int openaiChannels = 1;
+  static const int openaiBits = 16;
+
   final AudioRecorder _recorder = AudioRecorder();
   final SoLoud _soloud = SoLoud.instance;
 
@@ -19,23 +32,29 @@ class RoleplayRealtimeAudioNative implements RoleplayRealtimeAudio {
   SoundHandle? _handle;
   Future<void>? _streamReady;
   final List<AudioSource> _endedStreams = <AudioSource>[];
-  /// Fine stimata della coda PCM (senza margine).
   DateTime? _outputQueueEnd;
   DateTime? _outputActiveUntil;
 
+  RoleplayPcmPipelineProbe? _deviceProbe;
+  RoleplayPcmPipelineProbe? _outProbe;
+  /// null = in calibrazione; poi true/false se serve resample verso 24 kHz.
+  bool? _needsResampleTo24k;
+  int _deviceSourceRateHz = openaiPcmRate;
+  final BytesBuilder _calibBuffer = BytesBuilder(copy: false);
+  DateTime? _calibStartedAt;
+  void Function(List<int> pcmChunk)? _clientOnChunk;
+  bool _wavFlushScheduled = false;
+  final int _recorderRequestedHz = openaiPcmRate;
+
   @override
   bool get isOutputActive {
-    // Durante i delta lo stream è attivo.
     if (_stream != null) return true;
-    // Dopo flush NON usare `_endedStreams` (restano 8s e bloccano il mic).
-    // Solo la durata reale della coda + piccolo margine anti-eco.
     final until = _outputActiveUntil;
     return until != null && DateTime.now().isBefore(until);
   }
 
   void _noteOutputDuration(int pcmBytes) {
-    // Somma i chunk in coda (non ripartire da now a ogni delta).
-    final chunkMs = ((pcmBytes / 2) / 24000 * 1000).ceil();
+    final chunkMs = ((pcmBytes / 2) / openaiPcmRate * 1000).ceil();
     const echoPadMs = 150;
     final now = DateTime.now();
     final base = (_outputQueueEnd != null && _outputQueueEnd!.isAfter(now))
@@ -49,7 +68,7 @@ class RoleplayRealtimeAudioNative implements RoleplayRealtimeAudio {
   Future<void> _ensureEngine() async {
     if (_soloud.isInitialized) return;
     await _soloud.init(
-      sampleRate: 24000,
+      sampleRate: openaiPcmRate,
       bufferSize: 2048,
       channels: Channels.mono,
     );
@@ -63,9 +82,8 @@ class RoleplayRealtimeAudioNative implements RoleplayRealtimeAudio {
       _stream = _soloud.setBufferStream(
         maxBufferSizeDuration: const Duration(minutes: 2),
         bufferingType: BufferingType.released,
-        // ~120 ms di jitter buffer: continuo senza ritardo lungo.
         bufferingTimeNeeds: 0.12,
-        sampleRate: 24000,
+        sampleRate: openaiPcmRate,
         channels: Channels.mono,
         format: BufferType.s16le,
       );
@@ -84,35 +102,184 @@ class RoleplayRealtimeAudioNative implements RoleplayRealtimeAudio {
     }
   }
 
+  void _logRecorderConfig(RecordConfig config) {
+    // ignore: avoid_print
+    print(
+      'RoleplayAudio native: RecordConfig richiesto → '
+      'encoder=${config.encoder} sampleRate=${config.sampleRate} '
+      'numChannels=${config.numChannels} '
+      'formato=PCM16 LE mono @ ${config.sampleRate} Hz → OpenAI $openaiPcmRate Hz',
+    );
+  }
+
+  /// Converte (se serve) al contratto 24 kHz. Bypass se già ~24 kHz.
+  Uint8List _toOpenAiPcm(List<int> pcm) {
+    if (_needsResampleTo24k != true) {
+      return pcm is Uint8List ? pcm : Uint8List.fromList(pcm);
+    }
+    return resamplePcm16LeMonoLinear(
+      pcm: pcm,
+      fromRate: _deviceSourceRateHz,
+      toRate: openaiPcmRate,
+    );
+  }
+
+  void _emitRateReport({required bool bypassed}) {
+    RoleplayAudioRateReport.reportOnce(
+      platform: 'native',
+      deviceSampleRateHz: _deviceSourceRateHz,
+      // Su native non c'è AudioContext: usiamo la rate richiesta a `record`.
+      audioContextSampleRateHz: _recorderRequestedHz,
+      afterResampleSampleRateHz: openaiPcmRate,
+      openaiSessionSampleRateHz: kRoleplayOpenAiPcmRateHz,
+      resamplerBypassed: bypassed,
+    );
+  }
+
+  void _deliverToClient(List<int> pcm24k) {
+    assert(
+      openaiPcmRate == kRoleplayOpenAiPcmRateHz,
+      'PCM consegnato alla sessione deve essere @ $kRoleplayOpenAiPcmRateHz',
+    );
+    _outProbe?.ingest(pcm24k);
+    _clientOnChunk?.call(pcm24k);
+    if (_outProbe != null &&
+        _outProbe!.hasFullCapture &&
+        !_wavFlushScheduled) {
+      _wavFlushScheduled = true;
+      unawaited(_flushProbeWavs());
+    }
+  }
+
+  Future<void> _flushProbeWavs() async {
+    final device = _deviceProbe;
+    final out = _outProbe;
+    String? devicePath;
+    String? outPath;
+    if (device != null) {
+      devicePath = await writeRoleplayProbeWav(
+        probe: device,
+        sampleRateOverride: _deviceSourceRateHz,
+      );
+      device.logSummary();
+    }
+    if (out != null) {
+      outPath = await writeRoleplayProbeWav(probe: out);
+      out.logSummary();
+    }
+    if (device != null && out != null) {
+      await writeRoleplayProbeCompareNote(
+        rawPath: devicePath,
+        sentPath: outPath,
+        rawPcm: device.pcmCaptureBytes(),
+        sentPcm: out.pcmCaptureBytes(),
+      );
+    }
+  }
+
+  void _onRecorderChunk(Uint8List chunk) {
+    _deviceProbe?.ingest(chunk);
+
+    // Calibrazione rate (Release + Debug): stima Hz effettivi, poi un solo
+    // eventuale resample → 24 kHz. Mai doppio passo.
+    if (_needsResampleTo24k == null) {
+      _calibStartedAt ??= DateTime.now();
+      _calibBuffer.add(chunk);
+      final elapsed =
+          DateTime.now().difference(_calibStartedAt!).inMilliseconds;
+      if (elapsed < 600 && _calibBuffer.length < openaiPcmRate * 2) {
+        return;
+      }
+      final elapsedSec = elapsed / 1000.0;
+      final inferred =
+          elapsedSec > 0 ? ((_calibBuffer.length / 2) / elapsedSec).round() : 0;
+      _deviceSourceRateHz = inferred > 0 ? inferred : openaiPcmRate;
+      final bypass =
+          RoleplayAudioRateReport.shouldBypassResampler(_deviceSourceRateHz);
+      _needsResampleTo24k = !bypass;
+      _emitRateReport(bypassed: bypass);
+
+      // ignore: avoid_print
+      print(
+        'RoleplayAudio native: calibrazione '
+        'device≈${_deviceSourceRateHz}Hz '
+        'bypassResampler=$bypass '
+        'action=${bypass ? 'passthrough 24k' : 'resample ${_deviceSourceRateHz}→$openaiPcmRate'}',
+      );
+
+      final raw = _calibBuffer.toBytes();
+      _calibBuffer.clear();
+      _deliverToClient(_toOpenAiPcm(raw));
+      return;
+    }
+
+    _deliverToClient(_toOpenAiPcm(chunk));
+  }
+
   @override
   Future<void> startMicrophone(void Function(List<int> pcmChunk) onChunk) async {
     if (!await _recorder.hasPermission()) {
       throw Exception('Permesso microfono negato.');
     }
 
-    final stream = await _recorder.startStream(
-      const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: 24000,
-        numChannels: 1,
-        echoCancel: true,
-        noiseSuppress: true,
-        autoGain: true,
-        audioInterruption: AudioInterruptionMode.none,
-      ),
+    _clientOnChunk = onChunk;
+    _needsResampleTo24k = null;
+    _calibBuffer.clear();
+    _calibStartedAt = null;
+    _wavFlushScheduled = false;
+    _deviceSourceRateHz = openaiPcmRate;
+    RoleplayAudioRateReport.reset();
+    _deviceProbe = RoleplayPcmPipelineProbe(
+      tag: 'device-raw',
+      declaredSampleRate: openaiPcmRate,
+    );
+    _outProbe = RoleplayPcmPipelineProbe(
+      tag: 'to-session-24k',
+      declaredSampleRate: openaiPcmRate,
     );
 
+    const config = RecordConfig(
+      encoder: AudioEncoder.pcm16bits,
+      sampleRate: openaiPcmRate,
+      numChannels: openaiChannels,
+      echoCancel: true,
+      noiseSuppress: true,
+      autoGain: true,
+      audioInterruption: AudioInterruptionMode.none,
+    );
+    _logRecorderConfig(config);
+
+    final stream = await _recorder.startStream(config);
+
     await _micSubscription?.cancel();
-    _micSubscription = stream.listen((chunk) => onChunk(chunk));
+    _micSubscription = stream.listen(
+      _onRecorderChunk,
+      onError: (Object e) {
+        // ignore: avoid_print
+        print('RoleplayAudio native: errore stream mic: $e');
+      },
+    );
   }
 
   @override
   Future<void> stopMicrophone() async {
     await _micSubscription?.cancel();
     _micSubscription = null;
+    _clientOnChunk = null;
+    if (_calibBuffer.length > 0) {
+      final raw = _calibBuffer.toBytes();
+      _calibBuffer.clear();
+      // Se stop prima della fine calibrazione, assume rate richiesta.
+      _needsResampleTo24k ??= false;
+      _deliverToClient(_toOpenAiPcm(raw));
+    }
     if (await _recorder.isRecording()) {
       await _recorder.stop();
     }
+    await _flushProbeWavs();
+    _deviceProbe = null;
+    _outProbe = null;
+    _needsResampleTo24k = null;
   }
 
   @override
@@ -139,7 +306,6 @@ class RoleplayRealtimeAudioNative implements RoleplayRealtimeAudio {
   @override
   Future<void> flushPlayback() async {
     final stream = _stream;
-    // Non stoppare: lascia finire la coda PCM già in buffer.
     _stream = null;
     _handle = null;
     _streamReady = null;
@@ -157,7 +323,6 @@ class RoleplayRealtimeAudioNative implements RoleplayRealtimeAudio {
       } catch (_) {}
     }
 
-    // Cleanup ritardato dopo che la frase è tipicamente finita.
     unawaited(
       Future<void>.delayed(const Duration(seconds: 8), _disposeEndedStreams),
     );
