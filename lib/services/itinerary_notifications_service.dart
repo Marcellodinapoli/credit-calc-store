@@ -8,20 +8,16 @@ abstract final class ItineraryNotificationsService {
   static final _firestore = FirebaseFirestore.instance;
 
   static Future<bool> loadEnabled(String uid) async {
-    return false;
-  }
-
-  /// Solo il flag itinerario (sempre disattivato).
-  static Future<bool> loadItineraryField(String uid) async {
-    return false;
-  }
-
-  /// Azzera il flag su Firestore se era ancora attivo.
-  static Future<void> ensureDisabled(String uid) async {
     final doc = await _firestore.collection('users').doc(uid).get();
-    if (doc.data()?[fieldEnabled] == true) {
-      await setEnabled(uid: uid, enabled: false);
-    }
+    final data = doc.data() ?? {};
+    return data['productNotificationsEnabled'] == true &&
+        data[fieldEnabled] == true;
+  }
+
+  /// Solo il flag itinerario (senza richiedere le notifiche prodotto attive).
+  static Future<bool> loadItineraryField(String uid) async {
+    final doc = await _firestore.collection('users').doc(uid).get();
+    return doc.data()?[fieldEnabled] == true;
   }
 
   static Future<void> setEnabled({

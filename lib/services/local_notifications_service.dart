@@ -12,6 +12,7 @@ class LocalNotificationsService {
   static const _channelName = 'Aggiornamenti CreditCore';
   static const _itineraryChannelId = 'creditcore_itinerary';
   static const _itineraryChannelName = 'Itinerario CreditCalc';
+  static const _clearBadgeNotificationId = 91001;
 
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
@@ -39,8 +40,18 @@ class LocalNotificationsService {
       ),
     );
 
-    await _plugin.initialize(initSettings);
+    await _plugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (_) {
+        clearAppIconBadge();
+      },
+    );
     await _ensureTimeZones();
+
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp == true) {
+      await clearAppIconBadge();
+    }
 
     if (defaultTargetPlatform == TargetPlatform.android) {
       final android = _plugin.resolvePlatformSpecificImplementation<
@@ -59,6 +70,7 @@ class LocalNotificationsService {
           _itineraryChannelName,
           description: 'Promemoria itinerario e avvisi pre-visita',
           importance: Importance.high,
+          showBadge: true,
         ),
       );
     }
@@ -148,6 +160,37 @@ class LocalNotificationsService {
     return requestPermission();
   }
 
+  /// Toglie il pallino/numero sull'icona (iOS/macOS; su Android sparisce con la notifica).
+  static Future<void> clearAppIconBadge() async {
+    if (kIsWeb || !_initialized) return;
+    if (defaultTargetPlatform != TargetPlatform.iOS &&
+        defaultTargetPlatform != TargetPlatform.macOS) {
+      return;
+    }
+    try {
+      await _plugin.show(
+        _clearBadgeNotificationId,
+        null,
+        null,
+        const NotificationDetails(
+          iOS: DarwinNotificationDetails(
+            presentAlert: false,
+            presentBadge: true,
+            presentSound: false,
+            badgeNumber: 0,
+          ),
+          macOS: DarwinNotificationDetails(
+            presentAlert: false,
+            presentBadge: true,
+            presentSound: false,
+            badgeNumber: 0,
+          ),
+        ),
+      );
+      await _plugin.cancel(_clearBadgeNotificationId);
+    } catch (_) {}
+  }
+
   static Future<void> showProductNotification({
     required String title,
     required String body,
@@ -159,6 +202,7 @@ class LocalNotificationsService {
       payload: payload,
       channelId: _channelId,
       channelName: _channelName,
+      showAppIconBadge: false,
     );
   }
 
@@ -173,6 +217,7 @@ class LocalNotificationsService {
       payload: payload,
       channelId: _itineraryChannelId,
       channelName: _itineraryChannelName,
+      showAppIconBadge: true,
     );
   }
 
@@ -181,6 +226,7 @@ class LocalNotificationsService {
     required String body,
     required String channelId,
     required String channelName,
+    required bool showAppIconBadge,
     String? payload,
   }) async {
     if (!_initialized || kIsWeb) return;
@@ -190,15 +236,19 @@ class LocalNotificationsService {
       channelName,
       importance: Importance.high,
       priority: Priority.high,
+      channelShowBadge: showAppIconBadge,
+      number: showAppIconBadge ? 1 : null,
     );
-    const iosDetails = DarwinNotificationDetails(
+    final iosDetails = DarwinNotificationDetails(
       presentAlert: true,
-      presentBadge: true,
+      presentBadge: showAppIconBadge,
       presentSound: true,
+      badgeNumber: showAppIconBadge ? 1 : null,
     );
     final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
+      macOS: iosDetails,
     );
 
     await _plugin.show(
@@ -217,23 +267,34 @@ class LocalNotificationsService {
     required DateTime when,
     String? payload,
   }) async {
-    if (!_initialized || kIsWeb) return;
+    if (kIsWeb) return;
+    await initialize();
     await _ensureTimeZones();
+
+    final granted = await ensurePermission(allowPrompt: true);
+    if (!granted) {
+      throw StateError('Permesso notifiche non concesso.');
+    }
+    await _ensureExactAlarmPermission();
 
     const androidDetails = AndroidNotificationDetails(
       _itineraryChannelId,
       _itineraryChannelName,
       importance: Importance.high,
       priority: Priority.high,
+      channelShowBadge: true,
+      number: 1,
     );
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
+      badgeNumber: 1,
     );
     const details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
+      macOS: iosDetails,
     );
 
     await _plugin.zonedSchedule(
@@ -242,13 +303,25 @@ class LocalNotificationsService {
       body,
       tz.TZDateTime.from(when, tz.local),
       details,
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       payload: payload,
     );
   }
 
+  /// Android 12+: senza allarmi esatti i promemoria possono non scattare.
+  static Future<void> _ensureExactAlarmPermission() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return;
+    final canSchedule = await android.canScheduleExactNotifications();
+    if (canSchedule == true) return;
+    await android.requestExactAlarmsPermission();
+  }
+
   static Future<void> cancelScheduled(int id) async {
-    if (!_initialized || kIsWeb) return;
+    if (kIsWeb) return;
+    if (!_initialized) return;
     await _plugin.cancel(id);
   }
 }

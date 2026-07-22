@@ -63,8 +63,18 @@ abstract final class FieldReminderNotificationService {
       );
     }
 
-    // Consenso già dato in Area personale → Notifiche: non richiedere di nuovo.
-    final hasPermission = await _hasDeviceNotificationPermission();
+    // Consenso già dato in Area personale → Notifiche: chiedi permesso sistema se manca.
+    final hasPermission = await LocalNotificationsService.ensurePermission(
+      allowPrompt: true,
+    );
+    if (!hasPermission) {
+      return const FieldReminderScheduleResult(
+        scheduled: false,
+        issue:
+            'Permesso notifiche non concesso. Abilitalo nelle impostazioni '
+            'del telefono per CreditCalc.',
+      );
+    }
 
     final timeLabel = _formatTime(reminder.remindAt);
     final body = reminder.notes?.trim().isNotEmpty == true
@@ -84,21 +94,13 @@ abstract final class FieldReminderNotificationService {
         notifyAt: notifyAt,
       );
     } catch (e) {
-      final permissionHint = hasPermission
-          ? ''
-          : ' Verifica il permesso notifiche per CreditCalc '
-              'nelle impostazioni del telefono.';
       return FieldReminderScheduleResult(
         scheduled: false,
         issue:
-            'Impossibile programmare l\'avviso sul dispositivo.$permissionHint',
+            'Impossibile programmare l\'avviso sul dispositivo. '
+            'Verifica permesso notifiche e allarmi esatti per CreditCalc.',
       );
     }
-  }
-
-  static Future<bool> _hasDeviceNotificationPermission() async {
-    if (await LocalNotificationsService.hasPermission()) return true;
-    return ProductNotificationsService.hasSystemPermission();
   }
 
   static Future<void> cancelForReminder(String reminderId) async {
