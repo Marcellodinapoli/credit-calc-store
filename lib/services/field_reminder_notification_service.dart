@@ -63,16 +63,17 @@ abstract final class FieldReminderNotificationService {
       );
     }
 
-    // Consenso già dato in Area personale → Notifiche: chiedi permesso sistema se manca.
+    // Nessun dialog sistema qui: i permessi si chiedono solo quando l'utente
+    // attiva «Notifiche itinerario» (Area personale → Notifiche).
     final hasPermission = await LocalNotificationsService.ensurePermission(
-      allowPrompt: true,
+      allowPrompt: false,
     );
     if (!hasPermission) {
       return const FieldReminderScheduleResult(
         scheduled: false,
         issue:
-            'Permesso notifiche non concesso. Abilitalo nelle impostazioni '
-            'del telefono per CreditCalc.',
+            'Permesso notifiche non concesso. Attiva «Notifiche itinerario» '
+            'in Area personale → Notifiche.',
       );
     }
 
@@ -117,11 +118,23 @@ abstract final class FieldReminderNotificationService {
     final productEnabled = await ProductNotificationsService.loadEnabled(uid);
     final itineraryEnabled =
         await ItineraryNotificationsService.loadEnabled(uid);
-    if (!productEnabled || !itineraryEnabled) return;
+    if (!productEnabled || !itineraryEnabled) {
+      await cancelAllForCurrentUser();
+      return;
+    }
 
     final reminders = await FieldReminderService.fetchAllForUserId(uid);
     for (final reminder in reminders) {
       await scheduleIfEnabled(reminder);
+    }
+  }
+
+  static Future<void> cancelAllForCurrentUser() async {
+    final uid = FirestoreUserScope.uid;
+    if (uid == null) return;
+    final reminders = await FieldReminderService.fetchAllForUserId(uid);
+    for (final reminder in reminders) {
+      await cancelForReminder(reminder.id);
     }
   }
 

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:credit_calc_core/credit_calc_core.dart';
+import 'package:credit_calc_core/credit_calc_core.dart' hide AppCardTheme;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_card_theme.dart';

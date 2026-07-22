@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../services/field_reminder_notification_service.dart';
+import '../services/field_visit_notification_service.dart';
 import '../services/itinerary_notifications_service.dart';
+import '../services/local_notifications_service.dart';
 import '../services/location_consent_service.dart';
 import '../services/notification_preferences_notifier.dart';
 import '../services/product_notifications_service.dart';
@@ -68,8 +71,37 @@ class _ItineraryNotificationsCardState extends State<ItineraryNotificationsCard>
       _itineraryEnabled = value;
     });
 
+    if (value) {
+      final notificationsOk =
+          await LocalNotificationsService.ensurePermission(allowPrompt: true);
+      if (!notificationsOk) {
+        if (!mounted) return;
+        setState(() {
+          _itineraryEnabled = false;
+          _saving = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Permesso notifiche necessario. Attivalo dalle impostazioni del telefono.',
+            ),
+          ),
+        );
+        return;
+      }
+      await LocalNotificationsService.requestExactAlarmPermission();
+    }
+
     await ItineraryNotificationsService.setEnabled(uid: uid, enabled: value);
     await LocationConsentService.setEnabled(uid: uid, enabled: value);
+
+    if (value) {
+      await FieldReminderNotificationService.syncAllForCurrentUser();
+      await FieldVisitNotificationService.syncAllForCurrentUser();
+    } else {
+      await FieldReminderNotificationService.cancelAllForCurrentUser();
+      await FieldVisitNotificationService.cancelAllForCurrentUser();
+    }
 
     if (!mounted) return;
     setState(() => _saving = false);
@@ -117,7 +149,8 @@ class _ItineraryNotificationsCardState extends State<ItineraryNotificationsCard>
         subtitle: Text(
           !_productEnabled
               ? 'Attiva prima «Ricevi notifiche» in Area personale → Notifiche.'
-              : 'Promemoria programmati e avviso 30 min prima delle visite.',
+              : 'Promemoria e avvisi visite. I permessi sistema si chiedono '
+                  'solo quando attivi questa opzione.',
         ),
         value: _itineraryEnabled,
         onChanged: _productEnabled && !_saving ? _onChanged : null,

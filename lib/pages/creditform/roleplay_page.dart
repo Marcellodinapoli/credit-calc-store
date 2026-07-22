@@ -186,6 +186,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
     required String title,
     required Map<String, dynamic> simulationData,
     required VoidCallback onRestartCall,
+    int initialTabIndex = 0,
   }) async {
     if (!mounted) return;
     final restart = await Navigator.of(context).push<bool>(
@@ -194,6 +195,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
           simulationId: simulationId,
           title: title,
           simulationData: simulationData,
+          initialTabIndex: initialTabIndex,
         ),
       ),
     );
@@ -389,6 +391,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
               difficulty: difficulty,
               personality: personality,
               isNew: isNew,
+              completed: _simulationDetails[doc.id]?.hasConversation == true,
               simulationActive: _isSimulationActive,
               detail: _simulationDetails[doc.id],
               onOpenSimulation: () => _startSimulation(
@@ -397,10 +400,22 @@ class _RoleplayPageState extends State<RoleplayPage> {
                 category: type,
               ),
               onStopSimulation: () => _stopSimulation(),
-              onOpenResults: () => _openResults(
+              onShowHint: () => _openResults(
                 simulationId: doc.id,
                 title: title,
                 simulationData: simulationPayload,
+                initialTabIndex: 1,
+                onRestartCall: () => _startSimulation(
+                  simulationPayload,
+                  simulationId: doc.id,
+                  category: type,
+                ),
+              ),
+              onReplay: () => _openResults(
+                simulationId: doc.id,
+                title: title,
+                simulationData: simulationPayload,
+                initialTabIndex: 0,
                 onRestartCall: () => _startSimulation(
                   simulationPayload,
                   simulationId: doc.id,

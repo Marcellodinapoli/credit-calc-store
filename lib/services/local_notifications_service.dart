@@ -266,16 +266,23 @@ class LocalNotificationsService {
     required String body,
     required DateTime when,
     String? payload,
+    /// Solo da un gesto esplicito (toggle Notifiche itinerario). Mai all'avvio.
+    bool allowSystemPrompts = false,
   }) async {
     if (kIsWeb) return;
     await initialize();
     await _ensureTimeZones();
 
-    final granted = await ensurePermission(allowPrompt: true);
+    final granted = await ensurePermission(allowPrompt: allowSystemPrompts);
     if (!granted) {
       throw StateError('Permesso notifiche non concesso.');
     }
-    await _ensureExactAlarmPermission();
+
+    final exactAllowed = await hasExactAlarmPermission();
+    if (allowSystemPrompts && !exactAllowed) {
+      await requestExactAlarmPermission();
+    }
+    final useExact = exactAllowed || await hasExactAlarmPermission();
 
     const androidDetails = AndroidNotificationDetails(
       _itineraryChannelId,
@@ -303,14 +310,26 @@ class LocalNotificationsService {
       body,
       tz.TZDateTime.from(when, tz.local),
       details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: useExact
+          ? AndroidScheduleMode.exactAllowWhileIdle
+          : AndroidScheduleMode.inexactAllowWhileIdle,
       payload: payload,
     );
   }
 
-  /// Android 12+: senza allarmi esatti i promemoria possono non scattare.
-  static Future<void> _ensureExactAlarmPermission() async {
+  /// Android: permesso «Sveglie e promemoria» già concesso (senza aprire impostazioni).
+  static Future<bool> hasExactAlarmPermission() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return true;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return false;
+    return await android.canScheduleExactNotifications() ?? false;
+  }
+
+  /// Apre le impostazioni Android «Sveglie e promemoria» — solo su scelta utente.
+  static Future<void> requestExactAlarmPermission() async {
     if (defaultTargetPlatform != TargetPlatform.android) return;
+    await initialize();
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     if (android == null) return;
@@ -323,5 +342,13 @@ class LocalNotificationsService {
     if (kIsWeb) return;
     if (!_initialized) return;
     await _plugin.cancel(id);
+  }
+
+  static Future<void> cancelAllScheduled() async {
+    if (kIsWeb) return;
+    if (!_initialized) {
+      await initialize();
+    }
+    await _plugin.cancelAll();
   }
 }

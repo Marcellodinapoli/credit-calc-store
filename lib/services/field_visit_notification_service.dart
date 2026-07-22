@@ -126,7 +126,10 @@ abstract final class FieldVisitNotificationService {
     final productEnabled = await ProductNotificationsService.loadEnabled(uid);
     final itineraryEnabled =
         await ItineraryNotificationsService.loadEnabled(uid);
-    if (!productEnabled || !itineraryEnabled) return;
+    if (!productEnabled || !itineraryEnabled) {
+      await cancelAllForCurrentUser();
+      return;
+    }
 
     final visits = await FieldVisitService.fetchAllForUserId(uid);
     for (final visit in visits) {
@@ -135,6 +138,15 @@ abstract final class FieldVisitNotificationService {
         continue;
       }
       await scheduleIfEnabled(visit);
+    }
+  }
+
+  static Future<void> cancelAllForCurrentUser() async {
+    final uid = FirestoreUserScope.uid;
+    if (uid == null) return;
+    final visits = await FieldVisitService.fetchAllForUserId(uid);
+    for (final visit in visits) {
+      await cancelForVisit(visit.id);
     }
   }
 
