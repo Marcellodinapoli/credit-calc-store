@@ -4612,9 +4612,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
                             ? 'Ogni dilazione ha lo stesso importo in euro interi. '
                                 'Il totale recuperato può essere leggermente inferiore '
                                 'all\'importo netto, ma non lo supera mai.'
-                            : 'Numero dilazioni = debito netto ÷ rata (arrotondato per eccesso). '
-                                'Le prime n−1 rate seguono la rata scelta; l\'ultima '
-                                'chiude il residuo con i centesimi fino all\'importo netto.',
+                            : 'La rata finale comprende anche i centesimi fino all\'importo netto.',
                     style: TextStyle(
                       fontSize: 12,
                       height: 1.45,
@@ -5683,8 +5681,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
               Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
-                'Età $ageYears anni (anno in corso − nascita) · '
-                'Mesi residui: ($maxAge − $ageYears) × 12 = ${months ?? '—'}',
+                'Età: $ageYears · Mesi residui: ${months ?? '—'}',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
             ),
@@ -6118,6 +6115,23 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
           tabAmount: tab++,
         ),
       );
+      if (i >= 1 && i == _modulatedVisiblePhaseCount - 1) {
+        widgets.add(
+          _skipFocus(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'È possibile inserire solo n rate, solo importo o entrambi.',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.45,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+          ),
+        );
+      }
     }
 
     if (_modulatedValidationVisible && _modulatedSizingError != null) {

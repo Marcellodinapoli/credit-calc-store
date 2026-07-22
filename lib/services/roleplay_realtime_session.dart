@@ -37,10 +37,20 @@ class RoleplayRealtimeSession implements RoleplaySession {
   bool _simulationActive = false;
   bool _connected = false;
   bool _bootstrapped = false;
+  /// True solo dopo `session.updated` (VAD/config applicati).
+  bool _sessionUpdatedReceived = false;
   bool _speaking = false;
   bool _micMutedForOutput = false;
   bool _greetingRequested = false;
+  bool _openingGreetingDone = false;
+  /// Solo dopo sessione pronta + settle + greeting AI + warm-up mic.
+  bool _micCaptureEnabled = false;
+  /// Dopo warm-up: scarta silenzio/rumore finché non arriva PCM utilizzabile.
+  bool _skipLeadingSilence = false;
+  DateTime? _micWarmupUntil;
   Timer? _micUnmuteTimer;
+  Completer<void>? _sessionReadyCompleter;
+  Completer<void>? _openingGreetingCompleter;
   RoleplayVoiceStatus _status = RoleplayVoiceStatus.idle;
 
   String _sessionId = 'default';
@@ -51,15 +61,68 @@ class RoleplayRealtimeSession implements RoleplaySession {
 
   DateTime? _qaStartedAt;
   DateTime? _qaUserSpeechStoppedAt;
+  DateTime? _greetingCreateAt;
+  DateTime? _greetingFirstAudioAt;
+  DateTime? _micOpenedAt;
+  DateTime? _firstPcmSentAt;
+  DateTime? _firstFinalTranscriptAt;
   bool _qaLoggedFirstAudio = false;
+  bool _loggedFirstMicFrameSent = false;
+  bool _loggedFirstAudioReceived = false;
+  bool _loggedFirstFinalTranscript = false;
+  bool _loggedVadReady = false;
   int _qaTurnCount = 0;
 
-  void _qaLog(String label, {DateTime? since}) {
+  static const _postConnectSettle = Duration(milliseconds: 750);
+  /// Warm-up post-apertura AudioRecorder (scarta frame incompleti).
+  static const _micWarmup = Duration(milliseconds: 600);
+  static const _postGreetingSync = Duration(milliseconds: 250);
+  /// Peak PCM16 sotto questa soglia = silenzio / rumore di avvio.
+  static const _silencePeakThreshold = 180;
+
+  void _pipelineLog(String label, {DateTime? since}) {
     if (!kDebugMode) return;
+    final ts = DateTime.now().toIso8601String();
     final elapsed = since == null
         ? ''
         : ' +${DateTime.now().difference(since).inMilliseconds}ms';
-    debugPrint('RoleplayRealtime QA: $label$elapsed');
+    debugPrint('RoleplayRealtime pipeline [$ts]$elapsed: $label');
+  }
+
+  void _qaLog(String label, {DateTime? since}) {
+    _pipelineLog(label, since: since);
+  }
+
+  /// Hallucination tipiche Whisper su silenzio / rumore di avvio.
+  static bool _isSpuriousTranscript(String text) {
+    final t = text.trim().toLowerCase();
+    if (t.isEmpty) return true;
+    if (t.length < 2) return true;
+    return t.contains('amara.org') ||
+        t.contains('sottotitoli creati') ||
+        t.contains('sottotitoli generati') ||
+        t.contains('sous-titres') ||
+        t.contains('subtitles by') ||
+        t.contains('a cura di qtss') ||
+        t.contains('revisione a cura di qtss');
+  }
+
+  /// PCM16 LE mono: true se quasi silenzioso o troppo corto (frame corrotto).
+  static bool _isUnusablePcm(List<int> pcm) {
+    if (pcm.length < 8) return true;
+    // Lunghezza dispari = stream corrotto / incompleto.
+    if (pcm.length.isOdd) return true;
+    var peak = 0;
+    for (var i = 0; i + 1 < pcm.length; i += 4) {
+      final lo = pcm[i] & 0xff;
+      final hi = pcm[i + 1] & 0xff;
+      var sample = lo | (hi << 8);
+      if (sample > 32767) sample -= 65536;
+      final abs = sample.abs();
+      if (abs > peak) peak = abs;
+      if (peak >= _silencePeakThreshold) return false;
+    }
+    return peak < _silencePeakThreshold;
   }
 
   @override
@@ -92,10 +155,16 @@ class RoleplayRealtimeSession implements RoleplaySession {
   }
 
   void _emitTranscript(String speaker, String text, {bool isFinal = true}) {
+    // Cronologia / UI: solo finali.
+    if (!isFinal) return;
     _events.add(
-      TranscriptEvent(speaker: speaker, text: text, isFinal: isFinal),
+      TranscriptEvent(speaker: speaker, text: text, isFinal: true),
     );
     if (isContextActive()) onStateChanged();
+  }
+
+  void _clearInputAudioBuffer() {
+    _sendJson({'type': 'input_audio_buffer.clear'});
   }
 
   Future<Map<String, dynamic>> _mintFirebaseRealtimeToken() async {
@@ -170,6 +239,7 @@ class RoleplayRealtimeSession implements RoleplaySession {
       _connectTimeoutTimer?.cancel();
       if (!completer.isCompleted) completer.complete();
       await completer.future;
+      _pipelineLog('connessione WebSocket', since: _qaStartedAt);
     } catch (e) {
       _connectTimeoutTimer?.cancel();
       _emitError(
@@ -180,12 +250,16 @@ class RoleplayRealtimeSession implements RoleplaySession {
     }
   }
 
-  Future<void> _bootstrap() async {
+  Future<void> _bootstrapAndWaitReady() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       _emitError('Accesso richiesto per la simulazione Realtime.');
       return;
     }
+
+    _sessionUpdatedReceived = false;
+    _sessionReadyCompleter = Completer<void>();
+    final ready = _sessionReadyCompleter!;
 
     final sessionUpdate = RoleplayRealtimeSessionConfig.buildSessionUpdate(
       simulationData: _currentSimulation ?? const {},
@@ -194,12 +268,108 @@ class RoleplayRealtimeSession implements RoleplaySession {
     );
 
     _sendJson(sessionUpdate);
-    _bootstrapped = true;
-    _setStatus(RoleplayVoiceStatus.listening);
-    _qaLog(
-      'session.update inviato (Firebase + OpenAI diretto)',
+    _pipelineLog(
+      'session.update inviato (attendo session.updated)',
       since: _qaStartedAt,
     );
+
+    try {
+      await ready.future.timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      _emitError(
+        'Servizio Realtime non disponibile (timeout sessione). Riprova.',
+      );
+      return;
+    } catch (_) {
+      // stop() o chiusura anticipata
+      return;
+    }
+  }
+
+  Future<void> _waitOpeningGreetingDone() async {
+    if (_openingGreetingDone) return;
+    final c = _openingGreetingCompleter;
+    if (c == null) return;
+    try {
+      await c.future.timeout(const Duration(seconds: 15));
+    } on TimeoutException {
+      _pipelineLog(
+        'timeout greeting iniziale — sblocco mic comunque',
+        since: _qaStartedAt,
+      );
+      _openingGreetingDone = true;
+    }
+
+    // Attende fine coda altoparlante (anti-eco sul "Pronto?").
+    final deadline = DateTime.now().add(const Duration(seconds: 8));
+    while (_simulationActive &&
+        _audio.isOutputActive &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+    }
+    if (_simulationActive) {
+      await Future<void>.delayed(_postGreetingSync);
+    }
+
+    final createAt = _greetingCreateAt;
+    final firstAudio = _greetingFirstAudioAt;
+    if (createAt != null) {
+      final totalMs = DateTime.now().difference(createAt).inMilliseconds;
+      final audioMs = firstAudio == null
+          ? 'n/d'
+          : '${DateTime.now().difference(firstAudio).inMilliseconds}ms audio';
+      _pipelineLog(
+        'durata effettiva greeting: ${totalMs}ms (da response.create; $audioMs)',
+        since: _qaStartedAt,
+      );
+    }
+  }
+
+  Future<void> _enableMicrophoneAfterReady() async {
+    if (!_simulationActive || !_bootstrapped || !_openingGreetingDone) return;
+
+    // Hard gate: nessun PCM verso OpenAI finché warm-up + silenzio iniziale ok.
+    _micMutedForOutput = true;
+    _micCaptureEnabled = false;
+    _skipLeadingSilence = false;
+    _loggedFirstMicFrameSent = false;
+    _firstPcmSentAt = null;
+
+    try {
+      // Microfono spento per tutto il greeting: parte solo ora.
+      await _audio.startMicrophone(_sendMicChunk);
+      _micOpenedAt = DateTime.now();
+      _pipelineLog(
+        'istante apertura microfono: ${_micOpenedAt!.toIso8601String()}',
+        since: _qaStartedAt,
+      );
+      _micWarmupUntil = DateTime.now().add(_micWarmup);
+
+      // Warm-up: callback AudioRecorder attivi ma scartati (_micCaptureEnabled=false).
+      await Future<void>.delayed(_micWarmup);
+      if (!_simulationActive) return;
+
+      _clearInputAudioBuffer();
+      _micWarmupUntil = null;
+      _skipLeadingSilence = true;
+      _micMutedForOutput = false;
+      _micCaptureEnabled = true;
+      if (!_loggedVadReady) {
+        _loggedVadReady = true;
+        _pipelineLog(
+          'attivazione VAD / mic pronto '
+          '(warm-up ${_micWarmup.inMilliseconds}ms + skip silenzio iniziale)',
+          since: _qaStartedAt,
+        );
+      }
+      _setStatus(RoleplayVoiceStatus.listening);
+    } catch (e) {
+      _emitError(
+        e.toString().contains('Permesso')
+            ? 'Permesso microfono negato. Consenti l\'accesso al microfono.'
+            : 'Microfono non disponibile per Realtime.',
+      );
+    }
   }
 
   @override
@@ -216,38 +386,67 @@ class RoleplayRealtimeSession implements RoleplaySession {
     _assistantBuffer = '';
     _simulationActive = true;
     _bootstrapped = false;
+    _sessionUpdatedReceived = false;
     _greetingRequested = false;
+    _openingGreetingDone = false;
+    _micCaptureEnabled = false;
+    _skipLeadingSilence = false;
+    _micWarmupUntil = null;
     _qaStartedAt = kDebugMode ? DateTime.now() : null;
     _qaUserSpeechStoppedAt = null;
+    _greetingCreateAt = null;
+    _greetingFirstAudioAt = null;
+    _micOpenedAt = null;
+    _firstPcmSentAt = null;
+    _firstFinalTranscriptAt = null;
     _qaLoggedFirstAudio = false;
+    _loggedFirstMicFrameSent = false;
+    _loggedFirstAudioReceived = false;
+    _loggedFirstFinalTranscript = false;
+    _loggedVadReady = false;
     _qaTurnCount = 0;
-    _qaLog('start simulazione', since: _qaStartedAt);
+    _pipelineLog('start simulazione', since: _qaStartedAt);
 
     if (!_connected) {
       await _connect();
     }
-    if (!_connected || _channel == null) return;
+    if (!_connected || _channel == null || !_simulationActive) return;
 
-    await _bootstrap();
-
-    try {
-      await _audio.startMicrophone(_sendMicChunk);
-      // Resta muto finché non arriva (e finisce) il "Pronto?" iniziale.
-      _micMutedForOutput = true;
-      _micUnmuteTimer?.cancel();
-      _setStatus(RoleplayVoiceStatus.listening);
-    } catch (e) {
-      _emitError(
-        e.toString().contains('Permesso')
-            ? 'Permesso microfono negato. Consenti l\'accesso al microfono.'
-            : 'Microfono non disponibile per Realtime.',
-      );
+    await _bootstrapAndWaitReady();
+    if (!_sessionUpdatedReceived || !_bootstrapped || !_simulationActive) {
+      return;
     }
+
+    // Settle post-connessione prima di greeting / mic (500–1000 ms).
+    _pipelineLog(
+      'settle post-connessione ${_postConnectSettle.inMilliseconds}ms',
+      since: _qaStartedAt,
+    );
+    await Future<void>.delayed(_postConnectSettle);
+    if (!_simulationActive || !_sessionUpdatedReceived) return;
+
+    // Nessun evento AI prima di session.updated (già atteso sopra).
+    _requestOpeningGreeting();
+    await _waitOpeningGreetingDone();
+    if (!_simulationActive) return;
+
+    await _enableMicrophoneAfterReady();
   }
 
   void _requestOpeningGreeting() {
     if (!_simulationActive || _greetingRequested) return;
+    // Garanzia: nessun response.create prima di session.updated.
+    if (!_sessionUpdatedReceived || !_bootstrapped) {
+      _pipelineLog(
+        'BLOCCATO response.create: session.updated non ricevuto',
+        since: _qaStartedAt,
+      );
+      return;
+    }
     _greetingRequested = true;
+    _openingGreetingCompleter = Completer<void>();
+    _greetingCreateAt = DateTime.now();
+    // Mic ancora non aperto: mute + clear preventivi su buffer server.
     _muteMicForAssistantOutput();
     _sendJson({
       'type': 'response.create',
@@ -257,14 +456,61 @@ class RoleplayRealtimeSession implements RoleplaySession {
             'poi taci. Non dire altro. Non interpretare il consulente.',
       },
     });
-    _qaLog('response.create Pronto?', since: _qaStartedAt);
+    _pipelineLog(
+      'response.create Pronto? (post session.updated)',
+      since: _qaStartedAt,
+    );
+  }
+
+  void _completeOpeningGreetingIfNeeded() {
+    if (_openingGreetingDone) return;
+    if (!_greetingRequested) return;
+    _openingGreetingDone = true;
+    final c = _openingGreetingCompleter;
+    if (c != null && !c.isCompleted) {
+      c.complete();
+    }
+    _pipelineLog('greeting iniziale completato (response.done)', since: _qaStartedAt);
   }
 
   void _sendMicChunk(List<int> pcmChunk) {
+    // Race-safe: durante greeting / pre-arm nessun frame lascia il device.
     if (!_simulationActive || !_bootstrapped || pcmChunk.isEmpty) return;
-    // Evita eco: mentre l'AI parla (o coda altoparlante) non inviare mic a OpenAI,
-    // altrimenti sente se stessa e finge anche il consulente.
+    if (!_openingGreetingDone) return;
+    if (!_micCaptureEnabled) return;
+    final warmup = _micWarmupUntil;
+    if (warmup != null && DateTime.now().isBefore(warmup)) return;
+    // Evita eco: mentre l'AI parla (o coda altoparlante) non inviare mic.
     if (_speaking || _micMutedForOutput || _audio.isOutputActive) return;
+
+    if (_skipLeadingSilence) {
+      if (_isUnusablePcm(pcmChunk)) {
+        return;
+      }
+      // Primo frame con energia utile: buffer pulito e poi trasmetti.
+      _skipLeadingSilence = false;
+      _clearInputAudioBuffer();
+      _pipelineLog(
+        'primo frame PCM utilizzabile (fine skip silenzio)',
+        since: _qaStartedAt,
+      );
+    } else if (_isUnusablePcm(pcmChunk) && !_loggedFirstMicFrameSent) {
+      // Non mandare silenzio/corrotto come all-time-first frame.
+      return;
+    }
+
+    if (!_loggedFirstMicFrameSent) {
+      _loggedFirstMicFrameSent = true;
+      _firstPcmSentAt = DateTime.now();
+      final sinceMic = _micOpenedAt == null
+          ? 'n/d'
+          : '${_firstPcmSentAt!.difference(_micOpenedAt!).inMilliseconds}ms dopo apertura mic';
+      _pipelineLog(
+        'istante primo chunk PCM inviato: '
+        '${_firstPcmSentAt!.toIso8601String()} ($sinceMic)',
+        since: _qaStartedAt,
+      );
+    }
     _sendJson({
       'type': 'input_audio_buffer.append',
       'audio': base64Encode(pcmChunk),
@@ -272,14 +518,17 @@ class RoleplayRealtimeSession implements RoleplaySession {
   }
 
   void _muteMicForAssistantOutput() {
-    if (!_micMutedForOutput) {
-      _micMutedForOutput = true;
-      _sendJson({'type': 'input_audio_buffer.clear'});
-    }
+    _micMutedForOutput = true;
+    _clearInputAudioBuffer();
     _micUnmuteTimer?.cancel();
   }
 
   void _scheduleMicUnmute() {
+    // Prima del greeting / warm-up non sbloccare il mic.
+    if (!_micCaptureEnabled || !_openingGreetingDone) {
+      _clearInputAudioBuffer();
+      return;
+    }
     _micUnmuteTimer?.cancel();
     _micUnmuteTimer = Timer.periodic(const Duration(milliseconds: 80), (t) {
       if (!_simulationActive) {
@@ -288,8 +537,8 @@ class RoleplayRealtimeSession implements RoleplaySession {
       }
       if (_speaking || _audio.isOutputActive) return;
       t.cancel();
+      _clearInputAudioBuffer();
       _micMutedForOutput = false;
-      _sendJson({'type': 'input_audio_buffer.clear'});
       _setStatus(RoleplayVoiceStatus.listening);
     });
   }
@@ -299,11 +548,27 @@ class RoleplayRealtimeSession implements RoleplaySession {
     _simulationActive = false;
     _speaking = false;
     _micMutedForOutput = false;
+    _micCaptureEnabled = false;
+    _skipLeadingSilence = false;
+    _micWarmupUntil = null;
     _greetingRequested = false;
+    _openingGreetingDone = false;
+    _sessionUpdatedReceived = false;
     _micUnmuteTimer?.cancel();
     _micUnmuteTimer = null;
     _bootstrapped = false;
     _connectTimeoutTimer?.cancel();
+
+    final sessionReady = _sessionReadyCompleter;
+    _sessionReadyCompleter = null;
+    if (sessionReady != null && !sessionReady.isCompleted) {
+      sessionReady.completeError(StateError('stopped'));
+    }
+    final greeting = _openingGreetingCompleter;
+    _openingGreetingCompleter = null;
+    if (greeting != null && !greeting.isCompleted) {
+      greeting.complete();
+    }
 
     await _audio.stopMicrophone();
     await _audio.stopPlayback();
@@ -354,17 +619,32 @@ class RoleplayRealtimeSession implements RoleplaySession {
 
     switch (type) {
       case 'session.created':
+        // Connessione OK, ma VAD/config arrivano con session.updated.
+        _pipelineLog('session.created', since: _qaStartedAt);
+        return;
       case 'session.updated':
         _bootstrapped = true;
+        _sessionUpdatedReceived = true;
         _setStatus(RoleplayVoiceStatus.listening);
-        _qaLog(type, since: _qaStartedAt);
-        _requestOpeningGreeting();
+        _pipelineLog('sessione pronta (session.updated)', since: _qaStartedAt);
+        final ready = _sessionReadyCompleter;
+        if (ready != null && !ready.isCompleted) {
+          ready.complete();
+        }
+        // Greeting avviato da start() solo dopo questo evento + settle.
         return;
       case 'input_audio_buffer.speech_started':
+        if (!_micCaptureEnabled ||
+            !_openingGreetingDone ||
+            _micMutedForOutput) {
+          _clearInputAudioBuffer();
+          return;
+        }
         if (_speaking) _interruptAssistant();
         _setStatus(RoleplayVoiceStatus.listening);
         return;
       case 'input_audio_buffer.speech_stopped':
+        if (!_micCaptureEnabled || !_openingGreetingDone) return;
         _setStatus(RoleplayVoiceStatus.thinking);
         _qaUserSpeechStoppedAt = kDebugMode ? DateTime.now() : null;
         _qaTurnCount++;
@@ -377,6 +657,11 @@ class RoleplayRealtimeSession implements RoleplaySession {
       case 'response.output_audio.delta':
         final delta = event['delta']?.toString();
         if (delta != null && delta.isNotEmpty) {
+          if (!_loggedFirstAudioReceived) {
+            _loggedFirstAudioReceived = true;
+            _greetingFirstAudioAt ??= DateTime.now();
+            _pipelineLog('primo frame audio ricevuto', since: _qaStartedAt);
+          }
           if (kDebugMode && !_qaLoggedFirstAudio) {
             _qaLoggedFirstAudio = true;
             _qaLog('prima risposta audio', since: _qaStartedAt);
@@ -396,31 +681,75 @@ class RoleplayRealtimeSession implements RoleplaySession {
         return;
       case 'response.audio_transcript.delta':
       case 'response.output_audio_transcript.delta':
+        // Solo buffer interno; niente parziali in cronologia/UI.
         final delta = event['delta']?.toString() ?? '';
         if (delta.isNotEmpty) {
           _assistantBuffer += delta;
-          _emitTranscript('debitore', _assistantBuffer, isFinal: false);
         }
         return;
       case 'response.audio_transcript.done':
       case 'response.output_audio_transcript.done':
         final transcript = event['transcript']?.toString() ?? _assistantBuffer;
-        if (transcript.trim().isNotEmpty) {
-          _history.add({'role': 'assistant', 'content': transcript.trim()});
-          _emitTranscript('debitore', transcript.trim());
+        final trimmed = transcript.trim();
+        if (trimmed.isNotEmpty && !_isSpuriousTranscript(trimmed)) {
+          _history.add({'role': 'assistant', 'content': trimmed});
+          _firstFinalTranscriptAt ??= DateTime.now();
+          if (!_loggedFirstFinalTranscript) {
+            _loggedFirstFinalTranscript = true;
+            _pipelineLog(
+              'istante prima trascrizione finale (AI): '
+              '${_firstFinalTranscriptAt!.toIso8601String()} → "$trimmed"',
+              since: _qaStartedAt,
+            );
+          }
+          _emitTranscript('debitore', trimmed);
         }
         _assistantBuffer = '';
         return;
       case 'conversation.item.input_audio_transcription.completed':
+        // Ignora qualsiasi trascrizione user prima che il mic sia armato.
+        if (!_openingGreetingDone || !_micCaptureEnabled) {
+          final early = event['transcript']?.toString() ?? '';
+          if (early.trim().isNotEmpty) {
+            _pipelineLog(
+              'trascrizione user ignorata (pre-mic/greeting): ${early.trim()}',
+              since: _qaStartedAt,
+            );
+          }
+          return;
+        }
         final transcript = event['transcript']?.toString() ?? '';
-        if (transcript.trim().isNotEmpty) {
-          _history.add({'role': 'user', 'content': transcript.trim()});
-          _emitTranscript('consulente', transcript.trim());
+        final trimmed = transcript.trim();
+        if (trimmed.isNotEmpty && !_isSpuriousTranscript(trimmed)) {
+          _history.add({'role': 'user', 'content': trimmed});
+          _firstFinalTranscriptAt ??= DateTime.now();
+          if (!_loggedFirstFinalTranscript) {
+            _loggedFirstFinalTranscript = true;
+            _pipelineLog(
+              'istante prima trascrizione finale (user): '
+              '${_firstFinalTranscriptAt!.toIso8601String()} → "$trimmed"',
+              since: _qaStartedAt,
+            );
+          } else {
+            _pipelineLog(
+              'trascrizione finale (user): "$trimmed"',
+              since: _qaStartedAt,
+            );
+          }
+          _emitTranscript('consulente', trimmed);
+        } else if (trimmed.isNotEmpty) {
+          _pipelineLog(
+            'trascrizione spurio ignorata: $trimmed',
+            since: _qaStartedAt,
+          );
         }
         return;
       case 'response.done':
+      case 'response.cancelled':
         _speaking = false;
+        _clearInputAudioBuffer();
         unawaited(_audio.flushPlayback());
+        _completeOpeningGreetingIfNeeded();
         _scheduleMicUnmute();
         return;
       case 'error':
@@ -431,6 +760,8 @@ class RoleplayRealtimeSession implements RoleplaySession {
         final lower = message.toLowerCase();
         if (lower.contains('no active response') ||
             lower.contains('cancellation failed')) {
+          // Coda audio / buffer: pulizia comunque.
+          _clearInputAudioBuffer();
           return;
         }
         _emitError(message);
@@ -441,16 +772,22 @@ class RoleplayRealtimeSession implements RoleplaySession {
   }
 
   void _interruptAssistant() {
+    if (!_micCaptureEnabled || !_openingGreetingDone) {
+      _clearInputAudioBuffer();
+      return;
+    }
     _speaking = false;
     _micUnmuteTimer?.cancel();
-    _micMutedForOutput = false;
+    // Resta muto finché la coda output non è ferma (anti-eco).
+    _micMutedForOutput = true;
     unawaited(_audio.stopPlayback());
     _sendJson({'type': 'response.cancel'});
-    _sendJson({'type': 'input_audio_buffer.clear'});
+    _clearInputAudioBuffer();
     if (_history.isNotEmpty && _history.last['role'] == 'assistant') {
       _history.removeLast();
     }
     _assistantBuffer = '';
+    _scheduleMicUnmute();
     _setStatus(RoleplayVoiceStatus.listening);
   }
 }
