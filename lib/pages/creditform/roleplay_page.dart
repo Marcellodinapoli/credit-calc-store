@@ -11,7 +11,6 @@ import 'package:credit_calc_core/credit_calc_core.dart' hide AppCardTheme;
 import '../../core/theme/app_card_theme.dart';
 import '../../services/read_state_service.dart';
 import '../../services/roleplay_progress_service.dart';
-import '../../services/roleplay_conversation_service.dart';
 import '../../services/roleplay_session.dart';
 import '../../services/roleplay_session_factory.dart';
 import '../../services/roleplay_voice_status.dart';
@@ -19,6 +18,7 @@ import '../../widgets/roleplay_call_overlay.dart';
 import '../../utils/roleplay_practice_data.dart';
 import 'personal_form_shell.dart';
 import 'personal_form_menu.dart';
+import 'roleplay_results_page.dart';
 
 class RoleplayPage extends StatefulWidget {
   const RoleplayPage({super.key});
@@ -181,153 +181,25 @@ class _RoleplayPageState extends State<RoleplayPage> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _showAiSuggestion({
-    required Map<String, dynamic> simulationData,
-    required String title,
+  Future<void> _openResults({
     required String simulationId,
+    required String title,
+    required Map<String, dynamic> simulationData,
+    required VoidCallback onRestartCall,
   }) async {
-    final saved = _simulationDetails[simulationId];
-    final history = _chatHistory.isNotEmpty
-        ? _chatHistory
-        : (saved?.history ?? const <Map<String, String>>[]);
-
-    if (history.isEmpty) {
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Suggerimento AI'),
-          content: const Text(
-            'Avvia e completa almeno uno scambio nella simulazione '
-            'prima di richiedere il suggerimento.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Chiudi'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
     if (!mounted) return;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 16),
-            Expanded(child: Text('Generazione suggerimento…')),
-          ],
+    final restart = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => RoleplayResultsPage(
+          simulationId: simulationId,
+          title: title,
+          simulationData: simulationData,
         ),
       ),
     );
-
-    try {
-      final practiceData =
-          simulationData['practiceData'] as List<dynamic>? ?? [];
-      final practiceText = practiceData
-          .whereType<Map>()
-          .map((row) => '${row['label'] ?? ''}: ${row['value'] ?? ''}')
-          .join('; ');
-
-      final suggestion = await RoleplayConversationService.suggestion(
-        prompt: RoleplayConfigService.resolveSimulationPrompt(simulationData),
-        title: title,
-        history: history,
-        practiceData: practiceData,
-        practiceText: practiceText,
-        difficulty: RoleplayConfigService.resolveDifficulty(simulationData),
-        personality: RoleplayConfigService.resolvePersonality(simulationData),
-      );
-
-      await RoleplayProgressService.saveSimulationSuggestion(
-        simulationId: simulationId,
-        suggestion: suggestion,
-      );
-
-      if (!mounted) return;
-      Navigator.pop(context);
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Suggerimento AI'),
-          content: SingleChildScrollView(child: Text(suggestion)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Chiudi'),
-            ),
-          ],
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Impossibile generare il suggerimento. Riprova.'),
-        ),
-      );
+    if (restart == true && mounted) {
+      onRestartCall();
     }
-  }
-
-  Future<void> _showRecordingReplay({String? simulationId}) async {
-    final saved =
-        simulationId == null ? null : _simulationDetails[simulationId];
-    final history = _chatHistory.isNotEmpty
-        ? _chatHistory
-        : (saved?.history ?? const <Map<String, String>>[]);
-
-    if (history.isEmpty) {
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Conversazione telefonata'),
-          content: const Text(
-            'Avvia e termina una simulazione prima di leggere '
-            'la conversazione.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Chiudi'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Conversazione telefonata'),
-        content: SingleChildScrollView(
-          child: Text(
-            history
-                .map((message) {
-                  final who =
-                      message['role'] == 'user' ? 'Consulente' : 'Debitore';
-                  return '$who: ${message['content'] ?? ''}';
-                })
-                .join('\n\n'),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Chiudi'),
-          ),
-        ],
-      ),
-    );
   }
 
   // ============================================================
@@ -488,7 +360,6 @@ class _RoleplayPageState extends State<RoleplayPage> {
                 RoleplayConfigService.resolveDifficulty(data);
             final personality =
                 RoleplayConfigService.resolvePersonality(data);
-            final completed = data['completed'] == true;
 
             final createdAt = data['date'];
             int? millis;
@@ -500,46 +371,42 @@ class _RoleplayPageState extends State<RoleplayPage> {
             final isNew =
                 _readStateReady && millis != null && millis > _lastSeen;
 
+            final simulationPayload = {
+              'title': title,
+              'prompt': data['prompt'] ?? '',
+              'gptPrompt': data['gptPrompt'] ?? '',
+              'practiceData': practiceData,
+              'scenarioWeights':
+                  data['scenarioWeights'] as Map<String, dynamic>?,
+              'difficulty': data['difficulty'] ?? '',
+              'personality': data['personality'] ?? '',
+              'aiProvider': data[RoleplayConfigService.aiProviderField],
+            };
+
             return _RoleplaySimulationCard(
               title: title,
               practiceData: practiceData,
               difficulty: difficulty,
               personality: personality,
               isNew: isNew,
-              completed: completed,
               simulationActive: _isSimulationActive,
               detail: _simulationDetails[doc.id],
               onOpenSimulation: () => _startSimulation(
-                {
-                  'title': title,
-                  'prompt': data['prompt'] ?? '',
-                  'gptPrompt': data['gptPrompt'] ?? '',
-                  'practiceData': practiceData,
-                  'scenarioWeights':
-                      data['scenarioWeights'] as Map<String, dynamic>?,
-                  'difficulty': data['difficulty'] ?? '',
-                  'personality': data['personality'] ?? '',
-                  'aiProvider': data[RoleplayConfigService.aiProviderField],
-                },
+                simulationPayload,
                 simulationId: doc.id,
                 category: type,
               ),
               onStopSimulation: () => _stopSimulation(),
-              onShowHint: () => _showAiSuggestion(
-                simulationData: {
-                  'title': title,
-                  'prompt': data['prompt'] ?? '',
-                  'gptPrompt': data['gptPrompt'] ?? '',
-                  'practiceData': practiceData,
-                  'scenarioWeights':
-                      data['scenarioWeights'] as Map<String, dynamic>?,
-                  'difficulty': data['difficulty'] ?? '',
-                  'personality': data['personality'] ?? '',
-                },
-                title: title,
+              onOpenResults: () => _openResults(
                 simulationId: doc.id,
+                title: title,
+                simulationData: simulationPayload,
+                onRestartCall: () => _startSimulation(
+                  simulationPayload,
+                  simulationId: doc.id,
+                  category: type,
+                ),
               ),
-              onReplay: () => _showRecordingReplay(simulationId: doc.id),
             );
           },
         );
@@ -554,13 +421,11 @@ class _RoleplaySimulationCard extends StatelessWidget {
   final String difficulty;
   final String personality;
   final bool isNew;
-  final bool completed;
   final bool simulationActive;
   final RoleplaySimulationDetail? detail;
   final VoidCallback onOpenSimulation;
   final VoidCallback onStopSimulation;
-  final VoidCallback onShowHint;
-  final VoidCallback onReplay;
+  final VoidCallback onOpenResults;
 
   const _RoleplaySimulationCard({
     required this.title,
@@ -568,19 +433,44 @@ class _RoleplaySimulationCard extends StatelessWidget {
     required this.difficulty,
     required this.personality,
     required this.isNew,
-    required this.completed,
     required this.simulationActive,
     required this.detail,
     required this.onOpenSimulation,
     required this.onStopSimulation,
-    required this.onShowHint,
-    required this.onReplay,
+    required this.onOpenResults,
   });
+
+  String? get _resultsSummary {
+    final d = detail;
+    if (d == null || (!d.hasConversation && !d.hasSuggestion)) return null;
+    final at = d.conversationAt ?? d.evaluatedAt;
+    final datePart =
+        at == null ? null : RoleplaySimulationDetail.formatDateTime(at);
+    final score = _scoreFromSuggestion(d.suggestion);
+    final parts = <String>[
+      if (datePart != null) datePart,
+      if (score != null) score,
+      if (score == null && d.hasSuggestion) 'Valutazione',
+      if (score == null && !d.hasSuggestion && d.hasConversation)
+        'Conversazione',
+    ];
+    if (parts.isEmpty) return 'Risultati disponibili';
+    return 'Ultima sessione · ${parts.join(' · ')}';
+  }
+
+  static String? _scoreFromSuggestion(String? suggestion) {
+    final text = (suggestion ?? '').trim();
+    if (text.isEmpty) return null;
+    final match = RegExp(r'(\d+)\s*/\s*100').firstMatch(text);
+    if (match == null) return null;
+    return '${match.group(1)}/100';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final canOpenSuggestion = detail?.hasConversation == true;
-    final canReplay = detail?.hasConversation == true;
+    final summary = _resultsSummary;
+    final canOpenResults = detail != null &&
+        (detail!.hasConversation || detail!.hasSuggestion);
 
     return Container(
       decoration: BoxDecoration(
@@ -670,152 +560,68 @@ class _RoleplaySimulationCard extends StatelessWidget {
             'a scopo formativo.',
             style: TextStyle(fontSize: 12, color: Colors.black54),
           ),
-          if (detail != null &&
-              (detail!.hasConversation || detail!.hasSuggestion)) ...[
+          if (summary != null) ...[
             const SizedBox(height: 12),
-            if (detail!.hasConversation)
-              _expandablePreviewCard(
-                context: context,
-                title: detail!.conversationAt == null
-                    ? 'Ultima conversazione'
-                    : 'Ultima conversazione · ${RoleplaySimulationDetail.formatDateTime(detail!.conversationAt!)}',
-                preview: detail!.formatHistoryPreview(),
-                fullText: detail!.history
-                    .map((m) {
-                      final who =
-                          m['role'] == 'user' ? 'Consulente' : 'Debitore';
-                      return '$who: ${m['content'] ?? ''}';
-                    })
-                    .join('\n\n'),
+            InkWell(
+              onTap: canOpenResults ? onOpenResults : null,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        summary,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: Colors.grey.shade600,
+                    ),
+                  ],
+                ),
               ),
-            if (detail!.hasSuggestion) ...[
-              if (detail!.hasConversation) const SizedBox(height: 8),
-              _expandablePreviewCard(
-                context: context,
-                title: detail!.evaluatedAt == null
-                    ? 'Ultima valutazione AI'
-                    : 'Ultima valutazione AI · ${RoleplaySimulationDetail.formatDateTime(detail!.evaluatedAt!)}',
-                preview: detail!.formatSuggestionPreview(),
-                fullText: detail!.suggestion ?? '',
-              ),
-            ],
+            ),
           ],
           const SizedBox(height: 16),
           const Divider(height: 1),
           const SizedBox(height: 12),
-          _actionButton(
-            label: 'Vedi suggerimento AI',
-            enabled: canOpenSuggestion,
-            onPressed: onShowHint,
-          ),
-          const SizedBox(height: 8),
-          _actionButton(
-            label: 'Conversazione / Leggi',
-            enabled: canReplay,
-            onPressed: onReplay,
-          ),
-          const SizedBox(height: 8),
-          _actionButton(
-            label: simulationActive ? 'Termina chiamata' : 'Avvia chiamata',
-            enabled: true,
-            filled: true,
-            onPressed: simulationActive ? onStopSimulation : onOpenSimulation,
+          if (canOpenResults) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.black87,
+                  side: const BorderSide(color: Colors.black54),
+                ),
+                onPressed: onOpenResults,
+                child: const Text('Vedi risultati'),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFFFA726),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade300,
+              ),
+              onPressed:
+                  simulationActive ? onStopSimulation : onOpenSimulation,
+              child: Text(
+                simulationActive ? 'Termina chiamata' : 'Avvia chiamata',
+              ),
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _expandablePreviewCard({
-    required BuildContext context,
-    required String title,
-    required String preview,
-    required String fullText,
-  }) {
-    final needsExpand = fullText.trim().length > preview.trim().length;
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          title: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              preview,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.35,
-                color: Colors.grey.shade800,
-              ),
-            ),
-          ),
-          trailing: needsExpand ? null : const SizedBox.shrink(),
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                fullText,
-                style: const TextStyle(fontSize: 13, height: 1.45),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _actionButton({
-    required String label,
-    required bool enabled,
-    required VoidCallback? onPressed,
-    bool filled = false,
-  }) {
-    if (filled) {
-      return SizedBox(
-        width: double.infinity,
-        child: FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFFFFA726),
-            foregroundColor: Colors.white,
-            disabledBackgroundColor: Colors.grey.shade300,
-          ),
-          onPressed: enabled ? onPressed : null,
-          child: Text(label),
-        ),
-      );
-    }
-
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.black87,
-          side: const BorderSide(color: Colors.black54),
-          disabledForegroundColor: Colors.black38,
-        ),
-        onPressed: enabled ? onPressed : null,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: enabled ? Colors.black87 : Colors.black38,
-          ),
-        ),
       ),
     );
   }
