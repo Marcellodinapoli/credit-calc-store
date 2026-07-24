@@ -88,7 +88,7 @@ abstract final class FieldReminderNotificationService {
         title: reminder.title,
         body: body,
         when: notifyAt,
-        payload: reminder.id,
+        payload: 'field_reminder:${reminder.id}',
       );
       return FieldReminderScheduleResult(
         scheduled: true,

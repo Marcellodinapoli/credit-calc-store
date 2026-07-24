@@ -1,8 +1,8 @@
+import 'package:credit_calc_core/credit_calc_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../pages/area/announcements_page.dart';
 import '../pages/creditform/personal_form_menu.dart';
 import '../pages/creditjob/personal_job_menu.dart';
 import '../shell/credit_calc_shell_nav.dart';

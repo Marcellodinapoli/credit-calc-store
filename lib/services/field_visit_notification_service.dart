@@ -90,7 +90,7 @@ abstract final class FieldVisitNotificationService {
         title: company,
         body: body,
         when: notifyAt,
-        payload: visit.id,
+        payload: 'field_visit:${visit.id}',
       );
       return FieldVisitScheduleResult(
         scheduled: true,

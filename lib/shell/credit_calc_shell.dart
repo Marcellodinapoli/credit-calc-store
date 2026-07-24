@@ -15,6 +15,7 @@ import '../pages/creditcalc/develop_page.dart';
 import '../pages/creditcalc/itinerary/itinerary_hub_page.dart';
 import '../services/account_menu_badge_controller.dart';
 import '../services/itinerary_nav_badge_notifier.dart';
+import '../services/notification_navigation.dart';
 import '../ui/layout/page_shell.dart';
 import '../widgets/account_menu_badge_icon_button.dart';
 import '../widgets/desktop_app_update_button.dart';
@@ -63,10 +64,14 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     CreditCalcRuntime.writeBlockedMessage.addListener(_onWriteBlocked);
     creditCalcReturnToCreditorsRequest.addListener(_onReturnToCreditorsRequest);
     _accountMenuBadgeController.start();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationNavigation.markShellReady();
+    });
   }
 
   @override
   void dispose() {
+    NotificationNavigation.markShellUnavailable();
     CreditCalcRuntime.writeBlockedMessage.removeListener(_onWriteBlocked);
     creditCalcReturnToCreditorsRequest
         .removeListener(_onReturnToCreditorsRequest);

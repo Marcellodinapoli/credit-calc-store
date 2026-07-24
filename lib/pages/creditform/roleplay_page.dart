@@ -548,33 +548,32 @@ class _RoleplaySimulationCard extends StatelessWidget {
           if (practiceData.isNotEmpty) ...[
             const SizedBox(height: 12),
             for (final item
-                in RoleplayPracticeData.forUserDisplay(practiceData))
-              if (item is Map) ...[
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '${item['label'] ?? ''}: ',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                          fontSize: 14,
-                          height: 1.4,
-                        ),
+                in RoleplayPracticeData.forUserDisplay(practiceData)) ...[
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '${item['label'] ?? ''}: ',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                        fontSize: 14,
+                        height: 1.4,
                       ),
-                      TextSpan(
-                        text: '${item['value'] ?? ''}',
-                        style: const TextStyle(
-                          color: Colors.black87,
-                          fontSize: 14,
-                          height: 1.4,
-                        ),
+                    ),
+                    TextSpan(
+                      text: '${item['value'] ?? ''}',
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 14,
+                        height: 1.4,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 6),
-              ],
+              ),
+              const SizedBox(height: 6),
+            ],
           ],
           const SizedBox(height: 8),
           const Text(
