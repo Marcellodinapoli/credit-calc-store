@@ -173,13 +173,14 @@ class _RoleplayPageState extends State<RoleplayPage> {
       }
       final userExchanges =
           history.where((m) => m['role'] == 'user').length;
+      // Nuova conversazione: invalida il suggerimento precedente (stesso simulationId).
       final detail = RoleplaySimulationDetail(
         history: history,
         conversationAt: DateTime.now(),
         durationMs: durationMs,
         userExchanges: userExchanges,
-        suggestion: _simulationDetails[simulationId]?.suggestion,
-        evaluatedAt: _simulationDetails[simulationId]?.evaluatedAt,
+        suggestion: null,
+        evaluatedAt: null,
       );
 
       await RoleplayProgressService.saveLastSimulation(

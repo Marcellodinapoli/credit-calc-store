@@ -12,6 +12,9 @@ abstract final class RoleplayProgressService {
       FirebaseFirestore.instance.collection(collection).doc(userId);
 
   /// Salva/sovrascrive l'ultima simulazione completata o interrotta.
+  ///
+  /// Se viene salvata una nuova [history], il suggerimento/valutazione
+  /// precedenti per quella simulazione vengono azzerati.
   static Future<void> saveLastSimulation({
     required String simulationId,
     required String title,
@@ -55,6 +58,8 @@ abstract final class RoleplayProgressService {
           conversationAtMs: nowMs,
           durationMs: durationMs,
           userExchanges: userExchanges,
+          // Nuova conversazione: il suggerimento precedente non vale più.
+          clearSuggestion: true,
         );
       }
     } on FirebaseException catch (e) {
@@ -93,6 +98,7 @@ abstract final class RoleplayProgressService {
     int? evaluatedAtMs,
     int? durationMs,
     int? userExchanges,
+    bool clearSuggestion = false,
   }) async {
     final ref = _doc(uid);
     final snap = await ref.get();
@@ -115,11 +121,16 @@ abstract final class RoleplayProgressService {
     if (conversationAtMs != null) {
       current['conversationAtMs'] = conversationAtMs;
     }
-    if (suggestion != null) {
-      current['suggestion'] = suggestion;
-    }
-    if (evaluatedAtMs != null) {
-      current['evaluatedAtMs'] = evaluatedAtMs;
+    if (clearSuggestion) {
+      current['suggestion'] = '';
+      current.remove('evaluatedAtMs');
+    } else {
+      if (suggestion != null) {
+        current['suggestion'] = suggestion;
+      }
+      if (evaluatedAtMs != null) {
+        current['evaluatedAtMs'] = evaluatedAtMs;
+      }
     }
     if (durationMs != null) {
       current['durationMs'] = durationMs;
