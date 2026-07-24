@@ -45,4 +45,19 @@ abstract final class RoleplayPracticeData {
 
   static String _compact(String label) =>
       label.toLowerCase().replaceAll(RegExp(r'[\s._-]'), '');
+
+  /// Riga «Terza persona»: nascosta all'utente, resta in BK/AI.
+  static bool _isHiddenFromUser(Map<String, dynamic> item) {
+    final label = '${item['label'] ?? ''}'.toLowerCase();
+    return label.contains('terza');
+  }
+
+  /// Practice data per UI utente (senza terza persona).
+  static List<Map<String, dynamic>> forUserDisplay(List<dynamic> raw) {
+    final items = normalize(raw);
+    return [
+      for (final item in items)
+        if (!_isHiddenFromUser(item)) item,
+    ];
+  }
 }

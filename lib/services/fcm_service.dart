@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'fcm_background_handler.dart';
 import 'local_notifications_service.dart';
+import 'notification_navigation.dart';
 import 'product_notifications_service.dart';
 import 'push_platform.dart';
 
@@ -77,11 +78,12 @@ class FcmService {
         data['body']?.toString() ??
         'Nuovo aggiornamento disponibile';
 
+    final localPayload = _localPayloadForData(data);
     if (type == 'field_visit' || type == 'field_reminder') {
       await LocalNotificationsService.showItineraryNotification(
         title: title,
         body: body,
-        payload: data['visitId'] ?? data['reminderId'],
+        payload: localPayload,
       );
       return;
     }
@@ -89,10 +91,22 @@ class FcmService {
     await LocalNotificationsService.showProductNotification(
       title: title,
       body: body,
-      payload: data['announcementId'] ??
-          data['offerId'] ??
-          data['courseId'],
+      payload: localPayload,
     );
+  }
+
+  static String? _localPayloadForData(Map<String, dynamic> data) {
+    final type = data['type']?.toString().trim() ?? '';
+    if (type.isEmpty) return null;
+    final id = data['announcementId'] ??
+        data['offerId'] ??
+        data['courseId'] ??
+        data['visitId'] ??
+        data['reminderId'] ??
+        data['id'];
+    final idStr = id?.toString().trim() ?? '';
+    if (idStr.isEmpty) return NotificationNavigation.encodeLocalPayload(type, '');
+    return NotificationNavigation.encodeLocalPayload(type, idStr);
   }
 
   static void _onMessageOpenedApp(RemoteMessage message) {
@@ -101,5 +115,6 @@ class FcmService {
         'FCM opened: ${message.notification?.title ?? message.data}',
       );
     }
+    NotificationNavigation.openFromRemoteMessage(message);
   }
 }

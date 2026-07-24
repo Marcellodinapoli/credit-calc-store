@@ -11,7 +11,6 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 import 'roleplay_realtime_audio.dart';
-import 'roleplay_realtime_audio_probe.dart';
 import 'roleplay_realtime_audio_rates.dart';
 
 RoleplayRealtimeAudio createRoleplayRealtimeAudio() =>

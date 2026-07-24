@@ -1,7 +1,5 @@
 import 'dart:developer' as developer;
 
-import 'package:flutter/foundation.dart';
-
 /// Contratto fisso verso OpenAI Realtime (input PCM).
 const int kRoleplayOpenAiPcmRateHz = 24000;
 

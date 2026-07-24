@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_card_theme.dart';
+import '../utils/roleplay_practice_data.dart';
 
 /// Dettagli pratica (campi `practiceData` da Firestore) per roleplay.
 class RoleplayPracticeDetailsPanel extends StatelessWidget {
@@ -48,33 +49,33 @@ class RoleplayPracticeDetailsPanel extends StatelessWidget {
             ),
             if (practiceData.isNotEmpty) ...[
               SizedBox(height: compact ? 10 : 12),
-              for (final item in practiceData)
-                if (item is Map) ...[
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: '${item['label'] ?? ''}: ',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                            fontSize: 14,
-                            height: 1.45,
-                          ),
+              for (final item
+                  in RoleplayPracticeData.forUserDisplay(practiceData)) ...[
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '${item['label'] ?? ''}: ',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                          fontSize: 14,
+                          height: 1.45,
                         ),
-                        TextSpan(
-                          text: '${item['value'] ?? ''}',
-                          style: const TextStyle(
-                            color: Colors.black87,
-                            fontSize: 14,
-                            height: 1.45,
-                          ),
+                      ),
+                      TextSpan(
+                        text: '${item['value'] ?? ''}',
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 14,
+                          height: 1.45,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 6),
-                ],
+                ),
+                const SizedBox(height: 6),
+              ],
             ],
           ],
         ),

@@ -38,6 +38,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
   Map<String, dynamic>? _currentSimulation;
   String? _currentSimulationId;
   String? _currentSimulationCategory;
+  DateTime? _simulationStartedAt;
 
   Map<String, RoleplaySimulationDetail> _simulationDetails = {};
   StreamSubscription<Map<String, RoleplaySimulationDetail>>? _detailsSub;
@@ -145,6 +146,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
     _currentSimulation = simulationData;
     _currentSimulationId = simulationId;
     _currentSimulationCategory = category;
+    _simulationStartedAt = DateTime.now();
 
     setState(() {});
 
@@ -157,25 +159,56 @@ class _RoleplayPageState extends State<RoleplayPage> {
 
   Future<void> _stopSimulation() async {
     if (_isSimulationActive && _currentSimulation != null) {
+      final simulationId = _currentSimulationId ?? '';
+      final started = _simulationStartedAt;
+      final durationMs = started == null
+          ? 0
+          : DateTime.now().difference(started).inMilliseconds;
+      final history = List<Map<String, String>>.from(_chatHistory);
+      if (history.isEmpty) {
+        history.add({
+          'role': 'assistant',
+          'content': 'Simulazione avviata.',
+        });
+      }
       final userExchanges =
-          _chatHistory.where((m) => m['role'] == 'user').length;
-      if (userExchanges > 0 || _chatHistory.isNotEmpty) {
-        await RoleplayProgressService.saveLastSimulation(
-          simulationId: _currentSimulationId ?? '',
-          title: (_currentSimulation!['title'] ?? 'Simulazione').toString(),
-          category: _currentSimulationCategory ?? '',
-          practiceData:
-              _currentSimulation!['practiceData'] as List<dynamic>? ?? [],
-          userExchanges: userExchanges,
-          totalMessages: _chatHistory.length,
-          history: List<Map<String, String>>.from(_chatHistory),
-        );
+          history.where((m) => m['role'] == 'user').length;
+      final detail = RoleplaySimulationDetail(
+        history: history,
+        conversationAt: DateTime.now(),
+        durationMs: durationMs,
+        userExchanges: userExchanges,
+        suggestion: _simulationDetails[simulationId]?.suggestion,
+        evaluatedAt: _simulationDetails[simulationId]?.evaluatedAt,
+      );
+
+      await RoleplayProgressService.saveLastSimulation(
+        simulationId: simulationId,
+        title: (_currentSimulation!['title'] ?? 'Simulazione').toString(),
+        category: _currentSimulationCategory ?? '',
+        practiceData:
+            _currentSimulation!['practiceData'] as List<dynamic>? ?? [],
+        userExchanges: userExchanges,
+        totalMessages: history.length,
+        history: history,
+        durationMs: durationMs,
+      );
+
+      // Aggiornamento locale immediato: a Termina il tasto è già pronto.
+      if (simulationId.isNotEmpty && mounted) {
+        setState(() {
+          _simulationDetails = {
+            ..._simulationDetails,
+            simulationId: detail,
+          };
+        });
       }
     }
 
     _currentSimulation = null;
     _currentSimulationId = null;
     _currentSimulationCategory = null;
+    _simulationStartedAt = null;
 
     await _session?.stop();
     if (mounted) setState(() {});
@@ -411,17 +444,6 @@ class _RoleplayPageState extends State<RoleplayPage> {
                   category: type,
                 ),
               ),
-              onReplay: () => _openResults(
-                simulationId: doc.id,
-                title: title,
-                simulationData: simulationPayload,
-                initialTabIndex: 0,
-                onRestartCall: () => _startSimulation(
-                  simulationPayload,
-                  simulationId: doc.id,
-                  category: type,
-                ),
-              ),
             );
           },
         );
@@ -442,7 +464,6 @@ class _RoleplaySimulationCard extends StatelessWidget {
   final VoidCallback onOpenSimulation;
   final VoidCallback onStopSimulation;
   final VoidCallback onShowHint;
-  final VoidCallback onReplay;
 
   const _RoleplaySimulationCard({
     required this.title,
@@ -456,13 +477,21 @@ class _RoleplaySimulationCard extends StatelessWidget {
     required this.onOpenSimulation,
     required this.onStopSimulation,
     required this.onShowHint,
-    required this.onReplay,
   });
 
   @override
   Widget build(BuildContext context) {
-    final canOpenSuggestion = detail?.hasConversation == true;
-    final canReplay = detail?.hasConversation == true;
+    final hasConversation = detail?.hasConversation == true;
+    final hasSuggestion = detail?.hasSuggestion == true;
+    final longEnough = detail?.isLongEnoughForSuggestion == true;
+    final canDevelopSuggestion =
+        hasConversation && longEnough && !hasSuggestion && !simulationActive;
+
+    final suggestionButtonLabel = hasSuggestion
+        ? 'Suggerimento già sviluppato'
+        : (hasConversation && !longEnough)
+            ? 'Simulazione durata troppo poco'
+            : 'Sviluppa suggerimento';
 
     return Container(
       decoration: BoxDecoration(
@@ -518,7 +547,8 @@ class _RoleplaySimulationCard extends StatelessWidget {
           ),
           if (practiceData.isNotEmpty) ...[
             const SizedBox(height: 12),
-            for (final item in practiceData)
+            for (final item
+                in RoleplayPracticeData.forUserDisplay(practiceData))
               if (item is Map) ...[
                 Text.rich(
                   TextSpan(
@@ -552,49 +582,59 @@ class _RoleplaySimulationCard extends StatelessWidget {
             'a scopo formativo.',
             style: TextStyle(fontSize: 12, color: Colors.black54),
           ),
-          if (detail != null &&
-              (detail!.hasConversation || detail!.hasSuggestion)) ...[
+          if (hasConversation) ...[
             const SizedBox(height: 12),
-            if (detail!.hasConversation)
-              _expandablePreviewCard(
-                context: context,
-                title: detail!.conversationAt == null
-                    ? 'Ultima conversazione'
-                    : 'Ultima conversazione · ${RoleplaySimulationDetail.formatDateTime(detail!.conversationAt!)}',
-                preview: detail!.formatHistoryPreview(),
-                fullText: detail!.history
-                    .map((m) {
-                      final who =
-                          m['role'] == 'user' ? 'Consulente' : 'Debitore';
-                      return '$who: ${m['content'] ?? ''}';
-                    })
-                    .join('\n\n'),
-              ),
-            if (detail!.hasSuggestion) ...[
-              if (detail!.hasConversation) const SizedBox(height: 8),
+            _expandablePreviewCard(
+              context: context,
+              title: () {
+                final parts = <String>['Ultima conversazione'];
+                if (detail!.conversationAt != null) {
+                  parts.add(
+                    RoleplaySimulationDetail.formatDateTime(
+                      detail!.conversationAt!,
+                    ),
+                  );
+                }
+                final durationLabel =
+                    RoleplaySimulationDetail.formatDuration(detail!.durationMs);
+                if (durationLabel.isNotEmpty) {
+                  parts.add('Durata $durationLabel');
+                }
+                return parts.join(' · ');
+              }(),
+              preview: detail!.formatHistoryPreview(),
+              fullText: detail!.history
+                  .map((m) {
+                    final who =
+                        m['role'] == 'user' ? 'Consulente' : 'Debitore';
+                    return '$who: ${m['content'] ?? ''}';
+                  })
+                  .join('\n\n'),
+            ),
+            const SizedBox(height: 8),
+            if (hasSuggestion)
               _expandablePreviewCard(
                 context: context,
                 title: detail!.evaluatedAt == null
-                    ? 'Ultima valutazione AI'
-                    : 'Ultima valutazione AI · ${RoleplaySimulationDetail.formatDateTime(detail!.evaluatedAt!)}',
+                    ? 'Ultima valutazione'
+                    : 'Ultima valutazione · ${RoleplaySimulationDetail.formatDateTime(detail!.evaluatedAt!)}',
                 preview: detail!.formatSuggestionPreview(),
                 fullText: detail!.suggestion ?? '',
+              )
+            else
+              _suggestionPlaceholderCard(
+                message: longEnough
+                    ? 'Sviluppa suggerimento'
+                    : 'Simulazione durata troppo poco',
               ),
-            ],
           ],
           const SizedBox(height: 16),
           const Divider(height: 1),
           const SizedBox(height: 12),
           _actionButton(
-            label: 'Vedi suggerimento AI',
-            enabled: canOpenSuggestion,
+            label: suggestionButtonLabel,
+            enabled: canDevelopSuggestion,
             onPressed: onShowHint,
-          ),
-          const SizedBox(height: 8),
-          _actionButton(
-            label: 'Conversazione / Leggi',
-            enabled: canReplay,
-            onPressed: onReplay,
           ),
           const SizedBox(height: 8),
           _actionButton(
@@ -602,6 +642,40 @@ class _RoleplaySimulationCard extends StatelessWidget {
             enabled: true,
             filled: true,
             onPressed: simulationActive ? onStopSimulation : onOpenSimulation,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _suggestionPlaceholderCard({required String message}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Ultima valutazione',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              color: Colors.grey.shade700,
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ],
       ),

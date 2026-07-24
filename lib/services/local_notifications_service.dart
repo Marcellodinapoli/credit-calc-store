@@ -4,6 +4,8 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
+import 'notification_navigation.dart';
+
 /// Notifiche di sistema per foreground FCM, promemoria itinerario e push desktop.
 class LocalNotificationsService {
   LocalNotificationsService._();
@@ -42,8 +44,9 @@ class LocalNotificationsService {
 
     await _plugin.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: (_) {
+      onDidReceiveNotificationResponse: (response) {
         clearAppIconBadge();
+        NotificationNavigation.openFromLocalPayload(response.payload);
       },
     );
     await _ensureTimeZones();
@@ -51,6 +54,9 @@ class LocalNotificationsService {
     final launch = await _plugin.getNotificationAppLaunchDetails();
     if (launch?.didNotificationLaunchApp == true) {
       await clearAppIconBadge();
+      NotificationNavigation.openFromLocalPayload(
+        launch!.notificationResponse?.payload,
+      );
     }
 
     if (defaultTargetPlatform == TargetPlatform.android) {

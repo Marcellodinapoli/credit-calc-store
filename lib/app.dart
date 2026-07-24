@@ -5,6 +5,7 @@ import 'auth/auth_gate.dart';
 import 'core/app_localizations_config.dart';
 import 'core/theme/app_card_theme.dart';
 import 'core/theme/app_surface_theme.dart';
+import 'services/notification_navigation.dart';
 
 class CreditCalcApp extends StatelessWidget {
   const CreditCalcApp({super.key});
@@ -13,6 +14,7 @@ class CreditCalcApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'CreditCalc',
+      navigatorKey: NotificationNavigation.navigatorKey,
       debugShowCheckedModeBanner: false,
       locale: AppLocalizationsConfig.locale,
       localizationsDelegates: AppLocalizationsConfig.localizationsDelegates,

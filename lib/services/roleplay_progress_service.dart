@@ -23,6 +23,7 @@ abstract final class RoleplayProgressService {
     String? familyRelation,
     bool privacyViolation = false,
     List<Map<String, String>> history = const [],
+    int durationMs = 0,
   }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -52,6 +53,8 @@ abstract final class RoleplayProgressService {
           simulationId: simulationId,
           history: history,
           conversationAtMs: nowMs,
+          durationMs: durationMs,
+          userExchanges: userExchanges,
         );
       }
     } on FirebaseException catch (e) {
@@ -88,6 +91,8 @@ abstract final class RoleplayProgressService {
     int? conversationAtMs,
     String? suggestion,
     int? evaluatedAtMs,
+    int? durationMs,
+    int? userExchanges,
   }) async {
     final ref = _doc(uid);
     final snap = await ref.get();
@@ -115,6 +120,12 @@ abstract final class RoleplayProgressService {
     }
     if (evaluatedAtMs != null) {
       current['evaluatedAtMs'] = evaluatedAtMs;
+    }
+    if (durationMs != null) {
+      current['durationMs'] = durationMs;
+    }
+    if (userExchanges != null) {
+      current['userExchanges'] = userExchanges;
     }
     current['updatedAtMs'] = DateTime.now().millisecondsSinceEpoch;
 
@@ -182,20 +193,34 @@ abstract final class RoleplayProgressService {
 }
 
 class RoleplaySimulationDetail {
+  /// Durata minima per poter sviluppare il suggerimento.
+  static const minSuggestionDuration = Duration(seconds: 30);
+
+  /// Almeno uno scambio utente, in alternativa alla sola durata.
+  static const minSuggestionUserExchanges = 1;
+
   const RoleplaySimulationDetail({
     this.history = const [],
     this.suggestion,
     this.conversationAt,
     this.evaluatedAt,
+    this.durationMs = 0,
+    this.userExchanges = 0,
   });
 
   final List<Map<String, String>> history;
   final String? suggestion;
   final DateTime? conversationAt;
   final DateTime? evaluatedAt;
+  final int durationMs;
+  final int userExchanges;
 
   bool get hasConversation => history.isNotEmpty;
   bool get hasSuggestion => (suggestion ?? '').trim().isNotEmpty;
+
+  bool get isLongEnoughForSuggestion =>
+      durationMs >= minSuggestionDuration.inMilliseconds ||
+      userExchanges >= minSuggestionUserExchanges;
 
   static RoleplaySimulationDetail? fromMap(dynamic raw) {
     if (raw is! Map) return null;
@@ -214,6 +239,9 @@ class RoleplaySimulationDetail {
     final suggestion = (map['suggestion'] ?? '').toString().trim();
     final conversationMs = map['conversationAtMs'];
     final evaluatedMs = map['evaluatedAtMs'];
+    final durationMs = (map['durationMs'] as num?)?.toInt() ?? 0;
+    final exchanges = (map['userExchanges'] as num?)?.toInt() ??
+        history.where((m) => m['role'] == 'user').length;
     return RoleplaySimulationDetail(
       history: history,
       suggestion: suggestion.isEmpty ? null : suggestion,
@@ -223,6 +251,8 @@ class RoleplaySimulationDetail {
       evaluatedAt: evaluatedMs is int
           ? DateTime.fromMillisecondsSinceEpoch(evaluatedMs)
           : null,
+      durationMs: durationMs,
+      userExchanges: exchanges,
     );
   }
 
@@ -249,6 +279,15 @@ class RoleplaySimulationDetail {
     final hh = value.hour.toString().padLeft(2, '0');
     final min = value.minute.toString().padLeft(2, '0');
     return '$dd/$mm/$yy $hh:$min';
+  }
+
+  static String formatDuration(int durationMs) {
+    if (durationMs <= 0) return '';
+    final totalSec = (durationMs / 1000).round();
+    final minutes = totalSec ~/ 60;
+    final seconds = totalSec % 60;
+    if (minutes <= 0) return '$seconds sec';
+    return '$minutes min ${seconds.toString().padLeft(2, '0')} sec';
   }
 }
 

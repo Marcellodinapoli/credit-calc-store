@@ -204,7 +204,7 @@ class RoleplayRealtimeAudioNative implements RoleplayRealtimeAudio {
         'RoleplayAudio native: calibrazione '
         'device≈${_deviceSourceRateHz}Hz '
         'bypassResampler=$bypass '
-        'action=${bypass ? 'passthrough 24k' : 'resample ${_deviceSourceRateHz}→$openaiPcmRate'}',
+        'action=${bypass ? 'passthrough 24k' : 'resample $_deviceSourceRateHz→$openaiPcmRate'}',
       );
 
       final raw = _calibBuffer.toBytes();
