@@ -487,6 +487,10 @@ class _RoleplaySimulationCard extends StatelessWidget {
     final longEnough = detail?.isLongEnoughForSuggestion == true;
     final canDevelopSuggestion =
         hasConversation && longEnough && !hasSuggestion && !simulationActive;
+    // Anche se troppo corta: apre i risultati in sola lettura; il ritorno
+    // non deve riavviare una nuova chiamata.
+    final canOpenResults = canDevelopSuggestion ||
+        (hasConversation && !longEnough && !hasSuggestion && !simulationActive);
 
     final suggestionButtonLabel = hasSuggestion
         ? 'Suggerimento già sviluppato'
@@ -633,7 +637,7 @@ class _RoleplaySimulationCard extends StatelessWidget {
           const SizedBox(height: 12),
           _actionButton(
             label: suggestionButtonLabel,
-            enabled: canDevelopSuggestion,
+            enabled: canOpenResults,
             onPressed: onShowHint,
           ),
           const SizedBox(height: 8),

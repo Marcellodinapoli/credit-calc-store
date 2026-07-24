@@ -46,8 +46,12 @@ abstract final class RoleplayRealtimeSessionConfig {
       '',
       'CONTESTO LIVE ASSEGNATO DAL SISTEMA:',
       roleBlock,
-      'Rispondi sempre in italiano, massimo 1-2 frasi brevi, tono telefonico '
-          'realistico e umano (esitazioni, obiezioni, interruzioni naturali).',
+      'Rispondi normalmente come in una telefonata reale. Ogni turno deve '
+          'essere generalmente composto da 1-2 frasi complete e concise. '
+          'Concludi sempre il pensiero prima di terminare la risposta. '
+          'Solo se la situazione lo richiede puoi utilizzare una frase '
+          'leggermente più lunga.',
+      'Rispondi sempre in italiano, tono telefonico realistico e umano.',
       'Non dire mai di essere un\'intelligenza artificiale.',
       '',
       'REGOLE TURNO (OBBLIGATORIE):',
