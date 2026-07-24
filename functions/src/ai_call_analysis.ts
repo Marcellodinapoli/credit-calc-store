@@ -41,8 +41,15 @@ export const callAnalysis = onCall(
 
     trackAiUsage({
       feature: "callAnalysis",
+      userId: request.auth.uid,
+      userEmail: request.auth.token.email,
+      model: OPENAI_MODEL_GPT_41,
       inputTokens: result.usage.promptTokens,
       outputTokens: result.usage.completionTokens,
+      totalTokens: result.usage.totalTokens,
+      modality: result.usage.cachedTokens > 0
+        ? { cachedTokens: result.usage.cachedTokens }
+        : undefined,
     });
 
     return { analysis: result.content };

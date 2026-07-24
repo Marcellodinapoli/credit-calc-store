@@ -76,8 +76,15 @@ export const contestationGenerate = onCall(
 
     trackAiUsage({
       feature: "contestationGenerate",
+      userId: request.auth.uid,
+      userEmail: request.auth.token.email,
+      model: OPENAI_MODEL_GPT_55,
       inputTokens: chat.usage.promptTokens,
       outputTokens: chat.usage.completionTokens,
+      totalTokens: chat.usage.totalTokens,
+      modality: chat.usage.cachedTokens > 0
+        ? { cachedTokens: chat.usage.cachedTokens }
+        : undefined,
     });
 
     let parsed: Record<string, unknown>;

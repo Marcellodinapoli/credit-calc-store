@@ -25,13 +25,14 @@ async function transcribeAudio(
     throw new HttpsError("invalid-argument", "Registrazione troppo breve.");
   }
 
-  const whisperSeconds = estimateWhisperSecondsFromBytes(buffer.length);
   const extension = mimeType.includes("wav") ? "wav" : "m4a";
   const blob = new Blob([buffer], { type: mimeType || "audio/m4a" });
   const form = new FormData();
+  const estimatedFallbackSeconds = estimateWhisperSecondsFromBytes(buffer.length);
   form.append("file", blob, `recording.${extension}`);
   form.append("model", "whisper-1");
   form.append("language", "it");
+  form.append("response_format", "verbose_json");
 
   const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
@@ -44,10 +45,17 @@ async function transcribeAudio(
     throw new HttpsError("internal", "Impossibile trascrivere l'audio.");
   }
 
-  const payload = (await response.json()) as { text?: string };
+  const payload = (await response.json()) as {
+    text?: string;
+    duration?: number;
+  };
+  const reportedDuration = typeof payload.duration === "number" && payload.duration > 0
+    ? payload.duration
+    : null;
+
   return {
     text: (payload.text ?? "").trim(),
-    whisperSeconds,
+    whisperSeconds: reportedDuration ?? estimatedFallbackSeconds,
   };
 }
 
@@ -116,7 +124,11 @@ async function evaluateTranscript(params: {
   puoProseguire: boolean;
   commento: string;
   versione_migliorata: string;
-  usage: { promptTokens: number; completionTokens: number };
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    cachedTokens: number;
+  };
 }> {
   const defaultWarmupSystemPrompt =
     "Sei un formatore esperto in recupero crediti e warm-up telefonico "
@@ -202,6 +214,7 @@ async function evaluateTranscript(params: {
     usage: {
       promptTokens: result.usage.promptTokens,
       completionTokens: result.usage.completionTokens,
+      cachedTokens: result.usage.cachedTokens,
     },
   };
 }
@@ -276,6 +289,9 @@ export const warmupEvaluate = onCall(
         outputTokens: evaluation.usage.completionTokens,
         totalTokens:
           evaluation.usage.promptTokens + evaluation.usage.completionTokens,
+        modality: evaluation.usage.cachedTokens > 0
+          ? { cachedTokens: evaluation.usage.cachedTokens }
+          : undefined,
         responseTimeMs: Date.now() - evalStartedAt,
       });
 

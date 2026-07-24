@@ -10,6 +10,7 @@ import { callAnalysis } from "./ai_call_analysis";
 import { roleplayStep } from "./ai_roleplay_step";
 import { roleplaySuggestion } from "./ai_roleplay_suggestion";
 import { roleplayRealtimeToken } from "./ai_roleplay_realtime_token";
+import { trackRoleplayRealtimeUsage } from "./ai_roleplay_realtime_usage";
 import { warmupEvaluate } from "./ai_warmup_evaluate";
 import { contestationGenerate } from "./ai_contestation_generate";
 import { getAiUsageStats } from "./ai_get_usage_stats";
@@ -281,6 +282,7 @@ export {
   roleplayStep,
   roleplaySuggestion,
   roleplayRealtimeToken,
+  trackRoleplayRealtimeUsage,
   warmupEvaluate,
   contestationGenerate,
   getAiUsageStats,

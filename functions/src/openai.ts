@@ -35,6 +35,8 @@ export interface OpenAiUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  /** Token input in cache (prompt caching), se presenti nella risposta. */
+  cachedTokens: number;
 }
 
 export interface OpenAiChatResult {
@@ -105,6 +107,7 @@ export async function callOpenAiChat(
       prompt_tokens?: number;
       completion_tokens?: number;
       total_tokens?: number;
+      prompt_tokens_details?: { cached_tokens?: number };
     };
   };
   const content = payload.choices?.[0]?.message?.content?.trim() ?? "";
@@ -119,6 +122,7 @@ export async function callOpenAiChat(
       promptTokens: usage.prompt_tokens ?? 0,
       completionTokens: usage.completion_tokens ?? 0,
       totalTokens: usage.total_tokens ?? 0,
+      cachedTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
     },
   };
 }

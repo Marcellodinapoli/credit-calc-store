@@ -60,6 +60,7 @@ class RoleplayRealtimeSession implements RoleplaySession {
   String _sessionId = 'default';
   Map<String, dynamic>? _currentSimulation;
   String? _responderRole;
+  String _realtimeModel = 'gpt-realtime';
   final List<Map<String, String>> _history = [];
   String _assistantBuffer = '';
 
@@ -199,6 +200,10 @@ class RoleplayRealtimeSession implements RoleplaySession {
       final minted = await _mintFirebaseRealtimeToken();
       final token = minted['token'].toString();
       final wsUrl = minted['wsUrl'].toString();
+      final mintedModel = (minted['model'] ?? '').toString().trim();
+      if (mintedModel.isNotEmpty) {
+        _realtimeModel = mintedModel;
+      }
       _channel = connectOpenAiRealtimeWs(
         uri: Uri.parse(wsUrl),
         ephemeralToken: token,
@@ -661,6 +666,38 @@ class RoleplayRealtimeSession implements RoleplaySession {
     } catch (_) {}
   }
 
+  /// Invia a Firebase i token reali di `response.done` (audio/text/cached).
+  void _trackRealtimeUsageFromEvent(Map<String, dynamic> event) {
+    final response = event['response'];
+    if (response is! Map) return;
+    final usage = response['usage'];
+    if (usage is! Map) return;
+    final usageMap = Map<String, dynamic>.from(usage);
+    final input = usageMap['input_tokens'];
+    final output = usageMap['output_tokens'];
+    final total = usageMap['total_tokens'];
+    final hasTokens = (input is num && input > 0) ||
+        (output is num && output > 0) ||
+        (total is num && total > 0);
+    if (!hasTokens) return;
+
+    unawaited(() async {
+      try {
+        await CallableFunctionClient.call(
+          'trackRoleplayRealtimeUsage',
+          <String, dynamic>{
+            'model': _realtimeModel,
+            'usage': usageMap,
+          },
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('RoleplayRealtime usage track failed: $e');
+        }
+      }
+    }());
+  }
+
   void _onSocketMessage(dynamic raw) {
     if (!_simulationActive) return;
     final text = raw?.toString() ?? '';
@@ -808,6 +845,9 @@ class RoleplayRealtimeSession implements RoleplaySession {
         return;
       case 'response.done':
       case 'response.cancelled':
+        if (type == 'response.done') {
+          _trackRealtimeUsageFromEvent(event);
+        }
         _speaking = false;
         _clearInputAudioBuffer();
         unawaited(_audio.flushPlayback());

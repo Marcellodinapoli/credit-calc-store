@@ -28,9 +28,15 @@ const FEATURE_META: Array<{
 }> = [
   {
     key: "roleplayStep",
-    label: "Role Play",
+    label: "Role Play (Chat)",
     model: "gpt-5.5",
     aliases: ["roleplaySuggestion", "roleplay"],
+  },
+  {
+    key: "roleplayRealtime",
+    label: "Role Play (Realtime)",
+    model: "gpt-realtime",
+    aliases: ["realtime"],
   },
   {
     key: "warmupEvaluate",
@@ -406,7 +412,10 @@ export const getAiUsageStats = onCall(
     const roleplay = emptyTotals();
     const evaluation = emptyTotals();
     addTotals(roleplay, byFeature.get("roleplayStep") ?? emptyTotals());
+    addTotals(roleplay, byFeature.get("roleplaySuggestion") ?? emptyTotals());
+    addTotals(roleplay, byFeature.get("roleplayRealtime") ?? emptyTotals());
     addTotals(evaluation, byFeature.get("warmupEvaluate") ?? emptyTotals());
+    addTotals(evaluation, byFeature.get("contestationGenerate") ?? emptyTotals());
 
     // Ordine stabile per area (come FEATURE_META), poi eventuale resto.
     const byFeatureOrdered: BreakdownRow[] = [];

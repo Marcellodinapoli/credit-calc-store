@@ -155,6 +155,9 @@ export const roleplayStep = onCall(
       inputTokens: result.usage.promptTokens,
       outputTokens: result.usage.completionTokens,
       totalTokens: result.usage.totalTokens,
+      modality: result.usage.cachedTokens > 0
+        ? { cachedTokens: result.usage.cachedTokens }
+        : undefined,
       responseTimeMs: Date.now() - startedAt,
     });
 

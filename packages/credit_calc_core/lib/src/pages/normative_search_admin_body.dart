@@ -255,8 +255,8 @@ class _AiUsageMonthCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Totali mensili registrati dal server per le chiamate AI '
-                  'dell\'app, in linea con il conteggio di usage.',
+                  'Totali mensili da usage OpenAI reale (Chat + Realtime): '
+                  'token, audio, cached e costo con listino del modello usato.',
                   style: TextStyle(color: Colors.grey.shade700, height: 1.4),
                 ),
                 const SizedBox(height: 16),
@@ -280,6 +280,21 @@ class _AiUsageMonthCard extends StatelessWidget {
                       label: 'Token totali',
                       value: _formatInt(stats.totalTokens),
                     ),
+                    if (stats.inputAudioTokens > 0)
+                      _UsageStatChip(
+                        label: 'Audio input',
+                        value: _formatInt(stats.inputAudioTokens),
+                      ),
+                    if (stats.outputAudioTokens > 0)
+                      _UsageStatChip(
+                        label: 'Audio output',
+                        value: _formatInt(stats.outputAudioTokens),
+                      ),
+                    if (stats.cachedTokens > 0)
+                      _UsageStatChip(
+                        label: 'Cached',
+                        value: _formatInt(stats.cachedTokens),
+                      ),
                     _UsageStatChip(
                       label: 'Costo stimato',
                       value: EuroFormat.format(stats.estimatedEur),

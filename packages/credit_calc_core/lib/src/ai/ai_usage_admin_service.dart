@@ -4,12 +4,18 @@ class AiUsageMonthStats {
   final int calls;
   final int inputTokens;
   final int outputTokens;
+  final int inputAudioTokens;
+  final int outputAudioTokens;
+  final int cachedTokens;
   final double estimatedEur;
 
   const AiUsageMonthStats({
     required this.calls,
     required this.inputTokens,
     required this.outputTokens,
+    required this.inputAudioTokens,
+    required this.outputAudioTokens,
+    required this.cachedTokens,
     required this.estimatedEur,
   });
 
@@ -19,6 +25,9 @@ class AiUsageMonthStats {
     calls: 0,
     inputTokens: 0,
     outputTokens: 0,
+    inputAudioTokens: 0,
+    outputAudioTokens: 0,
+    cachedTokens: 0,
     estimatedEur: 0,
   );
 
@@ -33,6 +42,9 @@ class AiUsageMonthStats {
       calls: _asInt(map['calls']),
       inputTokens: _asInt(map['inputTokens']),
       outputTokens: _asInt(map['outputTokens']),
+      inputAudioTokens: _asInt(map['inputAudioTokens']),
+      outputAudioTokens: _asInt(map['outputAudioTokens']),
+      cachedTokens: _asInt(map['cachedTokens']),
       estimatedEur: _asDouble(map['estimatedEur']),
     );
   }
