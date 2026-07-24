@@ -1,0 +1,35 @@
+---
+description: Procedura obbligatoria per deploy/rilascio monitoraggio Consumi AI (OpenAI → Functions → Firestore → UI)
+alwaysApply: true
+---
+
+# Consumi AI — procedura di rilascio
+
+Quando si modificano tracking AI, `trackAiUsage`, Realtime usage, listino costi, o la card Consumi AI, **segui questa sequenza**. Non saltare passi. Non fare commit/release prima della verifica reale.
+
+## Sequenza
+
+1. **`firebase login`** sul PC che può autenticarsi (browser). **Non** usare `firebase login:ci` salvo pipeline CI/CD.
+2. **Deploy Cloud Functions** sul progetto `creditform-d505d` (almeno le function AI: `trackRoleplayRealtimeUsage`, `warmupEvaluate`, `normativeSearch`, `callAnalysis`, `roleplayStep`, `roleplaySuggestion`, `contestationGenerate`, `getAiUsageStats`, `roleplayRealtimeToken`).
+3. **Test reale sull’app** (non basta lo script offline):
+   - 1 Roleplay Realtime
+   - 1 `roleplaySuggestion` (dopo la simulazione)
+   - 1 Warm-up (`warmupEvaluate`)
+   - 1 Ricerca normativa
+4. **Controlli**:
+   - Firestore `ai_usage` → nuovi record per feature
+   - Firestore `settings/ai_usage/months/{YYYY-MM}` → incrementi corretti
+   - Card **Utilizzo AI del mese** / Consumi AI in app (Prompt ricerca normativa) → stessi incrementi della UI
+5. **Confronta OpenAI Usage** (stesso intervallo temporale e progetto): i **token** devono coincidere; piccole differenze di **costo** per arrotondamento sono accettabili.
+6. **Solo se tutto OK** → commit → release app (Windows/Android).
+
+## Catena da validare
+
+`OpenAI → Cloud Function → Firestore → UI app`
+
+## Script di supporto
+
+- Offline listino: `functions/scripts/verify_ai_usage_costs.cjs`
+- Deploy helper: `scripts/deploy-and-verify-ai-usage.ps1` (dopo `firebase login`)
+
+Lo script **non** sostituisce il test sull’app né il confronto OpenAI Usage.
