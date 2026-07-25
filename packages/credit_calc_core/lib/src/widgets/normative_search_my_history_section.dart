@@ -76,7 +76,10 @@ class NormativeSearchMyHistorySection extends StatelessWidget {
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final entry = entries[index];
+                      // Elenco più recenti in alto: numero cronologico (1 = prima ricerca).
+                      final number = entries.length - index;
                       return _NormativeSearchMyLogTile(
+                        number: number,
                         entry: entry,
                         onSelectQuestion: onSelectQuestion,
                       );
@@ -94,10 +97,12 @@ class NormativeSearchMyHistorySection extends StatelessWidget {
 
 class _NormativeSearchMyLogTile extends StatefulWidget {
   const _NormativeSearchMyLogTile({
+    required this.number,
     required this.entry,
     this.onSelectQuestion,
   });
 
+  final int number;
   final NormativeSearchLogEntry entry;
   final ValueChanged<String>? onSelectQuestion;
 
@@ -126,6 +131,15 @@ class _NormativeSearchMyLogTileState extends State<_NormativeSearchMyLogTile> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(
+                  '${widget.number}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade700,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     entry.question,

@@ -632,7 +632,7 @@ class _DirectSupportPageState extends State<DirectSupportPage> {
                           DateTime.fromMillisecondsSinceEpoch(0);
                       final tb = (b['createdAt'] as Timestamp?)?.toDate() ??
                           DateTime.fromMillisecondsSinceEpoch(0);
-                      return ta.compareTo(tb);
+                      return tb.compareTo(ta);
                     });
 
                   return ListView.builder(

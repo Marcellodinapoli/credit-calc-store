@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'credit_calc_shell_nav.dart';
-
 /// Route delle pagine aperte dal menù (Form, Job, Area, Sincronizza).
 const creditCoreModuleRouteName = 'credit_core_module';
 
-/// Segnala alla shell CreditCalc di mostrare la sezione Creditori al ritorno.
+/// Segnala alla shell CreditCalc di tornare a Creditori (uso esplicito, raro).
 final ValueNotifier<bool> creditCalcReturnToCreditorsRequest =
     ValueNotifier(false);
 
@@ -16,10 +14,9 @@ Route<T> creditCoreModuleRoute<T>(WidgetBuilder builder) {
   );
 }
 
-/// Torna alla schermata Creditori in CreditCalc.
+/// Chiude Form/Job/Area/Sincronizza e torna a CreditCalc
+/// sulla sezione già attiva (non forza Creditori).
 void popToCreditCalcHome(BuildContext context) {
-  creditCalcGoToCreditors();
-  creditCalcReturnToCreditorsRequest.value = true;
   final navigator = Navigator.of(context);
   if (!navigator.canPop()) return;
   navigator.popUntil(

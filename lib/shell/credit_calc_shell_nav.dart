@@ -9,8 +9,12 @@ void creditCalcGoToCreditors() {
   creditCalcActiveSection.value = CreditCalcNavItem.creditors;
 }
 
-/// Torna a Creditori, poi chiude la pagina secondaria.
-void popCreditCalcSecondaryToCreditors(BuildContext context) {
-  creditCalcGoToCreditors();
+/// Chiude la pagina secondaria restando sulla sezione già attiva.
+void popCreditCalcSecondary(BuildContext context) {
   Navigator.of(context, rootNavigator: true).maybePop();
+}
+
+/// Alias storico: non forza più Creditori.
+void popCreditCalcSecondaryToCreditors(BuildContext context) {
+  popCreditCalcSecondary(context);
 }

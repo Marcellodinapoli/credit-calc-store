@@ -242,7 +242,7 @@ class SecondaryPageScaffold extends StatelessWidget {
                         tooltip: 'Indietro',
                         onPressed: () {
                           if (project == BrandedPageProject.calc) {
-                            popCreditCalcSecondaryToCreditors(context);
+                            popCreditCalcSecondary(context);
                           } else {
                             Navigator.maybePop(context);
                           }

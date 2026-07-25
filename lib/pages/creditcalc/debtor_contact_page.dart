@@ -271,9 +271,11 @@ class _DebtorContactPageState extends State<DebtorContactPage> {
     if (Dimensions.isPhone(context)) {
       return DropdownButtonFormField<_ContactChannel>(
         value: _channel,
+        isExpanded: true,
         decoration: const InputDecoration(
           labelText: 'Canale',
           border: OutlineInputBorder(),
+          floatingLabelBehavior: FloatingLabelBehavior.always,
         ),
         items: const [
           DropdownMenuItem(
@@ -315,9 +317,11 @@ class _DebtorContactPageState extends State<DebtorContactPage> {
   Widget _messageKindSelector() {
     return DropdownButtonFormField<DebtorMessageKind>(
       value: _messageKind,
+      isExpanded: true,
       decoration: const InputDecoration(
         labelText: 'Tipo di messaggio',
         border: OutlineInputBorder(),
+        floatingLabelBehavior: FloatingLabelBehavior.always,
       ),
       items: [
         for (final kind in DebtorMessageKind.values)
@@ -335,17 +339,17 @@ class _DebtorContactPageState extends State<DebtorContactPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<String?>(
+        DropdownButtonFormField<String>(
+          key: const ValueKey('debtor-creditor'),
           value: _selectedCreditorId,
+          isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Creditore',
             border: OutlineInputBorder(),
+            floatingLabelBehavior: FloatingLabelBehavior.always,
           ),
+          hint: const Text('Seleziona creditore'),
           items: [
-            const DropdownMenuItem(
-              value: null,
-              child: Text('Seleziona creditore'),
-            ),
             for (var i = 0; i < creditors.length; i++)
               DropdownMenuItem(
                 value: creditors[i].id,
@@ -365,17 +369,17 @@ class _DebtorContactPageState extends State<DebtorContactPage> {
           },
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String?>(
+        DropdownButtonFormField<String>(
+          key: ValueKey('debtor-payment-$_selectedCreditorId'),
           value: _selectedPaymentMethodKey,
+          isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Modalità di pagamento',
             border: OutlineInputBorder(),
+            floatingLabelBehavior: FloatingLabelBehavior.always,
           ),
+          hint: const Text('Seleziona modalità'),
           items: [
-            const DropdownMenuItem(
-              value: null,
-              child: Text('Seleziona modalità'),
-            ),
             for (final method in paymentMethods)
               DropdownMenuItem(
                 value: method.key,
@@ -429,17 +433,17 @@ class _DebtorContactPageState extends State<DebtorContactPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<DebtorContactPracticeOption?>(
+        DropdownButtonFormField<DebtorContactPracticeOption>(
+          key: const ValueKey('sollecito-practice'),
           value: _selectedPractice,
+          isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Pratica da provvigioni',
             border: OutlineInputBorder(),
+            floatingLabelBehavior: FloatingLabelBehavior.always,
           ),
+          hint: const Text('Seleziona pratica'),
           items: [
-            const DropdownMenuItem(
-              value: null,
-              child: Text('Seleziona pratica'),
-            ),
             for (final practice in practices)
               DropdownMenuItem(
                 value: practice,
@@ -471,17 +475,17 @@ class _DebtorContactPageState extends State<DebtorContactPage> {
             ),
           ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<SollecitoInstallmentOption?>(
+        DropdownButtonFormField<SollecitoInstallmentOption>(
+          key: ValueKey('sollecito-rate-${_selectedPractice?.key}'),
           value: _selectedInstallment,
+          isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Rata da sollecitare',
             border: OutlineInputBorder(),
+            floatingLabelBehavior: FloatingLabelBehavior.always,
           ),
+          hint: const Text('Seleziona rata'),
           items: [
-            const DropdownMenuItem(
-              value: null,
-              child: Text('Seleziona rata'),
-            ),
             for (final installment in installments)
               DropdownMenuItem(
                 value: installment,
@@ -561,9 +565,15 @@ class _DebtorContactPageState extends State<DebtorContactPage> {
                           _messageKindSelector(),
                           const SizedBox(height: 16),
                           if (_messageKind == DebtorMessageKind.coordinate)
-                            _coordinateSection(creditors)
+                            KeyedSubtree(
+                              key: const ValueKey('section-coordinate'),
+                              child: _coordinateSection(creditors),
+                            )
                           else if (_messageKind == DebtorMessageKind.sollecito)
-                            _sollecitoSection(practices, entries)
+                            KeyedSubtree(
+                              key: const ValueKey('section-sollecito'),
+                              child: _sollecitoSection(practices, entries),
+                            )
                           else
                             const Text(
                               'Scrivi liberamente il messaggio nel campo sotto.',
