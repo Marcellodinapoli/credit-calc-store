@@ -123,13 +123,13 @@ export const roleplayStep = onCall(
       .join("\n");
 
     const isOpening = trimHistory(history).length === 0 && !userText;
-    if (isOpening) {
-      return {
-        reply: "Pronto?",
-        role,
-        familyRelation: role === "TERZO" ? familyRelation || "moglie" : null,
-      };
-    }
+
+    // Apertura chiamata: usa sempre il prompt BK + OpenAI (niente "Pronto?" hardcoded).
+    const openingCue =
+      "[SISTEMA: la telefonata è appena iniziata. Alza il telefono e fai " +
+      "la prima battuta come farebbe il personaggio assegnato dal prompt e " +
+      "dai parametri sopra. Una sola frase breve, tono telefonico realistico. " +
+      "Non presentarti come AI.]";
 
     const messages = [
       { role: "system" as const, content: systemPrompt },
@@ -139,7 +139,7 @@ export const roleplayStep = onCall(
       })),
       {
         role: "user" as const,
-        content: userText || "Pronto, chi parla?",
+        content: userText || (isOpening ? openingCue : "Pronto, chi parla?"),
       },
     ];
 
