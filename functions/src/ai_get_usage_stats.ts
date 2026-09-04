@@ -1,6 +1,9 @@
 import * as admin from "firebase-admin";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 
+import { openAiAdminApiKey, openAiApiKey } from "./openai";
+import { fetchOpenAiOrganizationCosts } from "./openai_organization_costs";
+
 const region = "europe-west1";
 const MAX_EVENTS = 5000;
 const USD_TO_EUR = 0.92;
@@ -268,8 +271,13 @@ function accumulateEvent(
   const outputTokens = asInt(data.outputTokens ?? data.completionTokens);
   const totalTokens = asInt(data.totalTokens) || inputTokens + outputTokens;
   const estimatedCostUsd = asFloat(data.estimatedCostUsd)
+    || asFloat(data.estimatedCost)
     || eurToUsd(asFloat(data.estimatedCostEur ?? data.estimatedEur));
-  const errors = data.error === true || data.ok === false ? 1 : asInt(data.errors);
+  const hasError =
+    data.error === true
+    || data.ok === false
+    || (typeof data.error === "string" && data.error.trim().length > 0);
+  const errors = hasError ? 1 : asInt(data.errors);
   const delta: Totals = {
     calls: 1,
     inputTokens,
@@ -301,7 +309,11 @@ function accumulateEvent(
  * in `settings/ai_usage/months` per area (feature) e modello OpenAI.
  */
 export const getAiUsageStats = onCall(
-  { region, timeoutSeconds: 60 },
+  {
+    region,
+    timeoutSeconds: 60,
+    secrets: [openAiApiKey, openAiAdminApiKey],
+  },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Accesso richiesto.");
@@ -356,56 +368,69 @@ export const getAiUsageStats = onCall(
     }
 
     const hasEvents = [...byFeature.values()].some((row) => row.calls > 0);
-    if (!hasEvents) {
-      const monthKeys = monthKeysBetween(fromMs, toMs);
-      let monthScanned = 0;
-      for (const key of monthKeys) {
-        const doc = await db
-          .collection("settings")
-          .doc("ai_usage")
-          .collection("months")
-          .doc(key)
-          .get();
-        if (!doc.exists) continue;
-        monthScanned += 1;
-        const data = (doc.data() ?? {}) as Record<string, unknown>;
-        const monthUsd = eurToUsd(monthEstimatedEur(data));
 
-        const featureTotals = new Map<string, Totals>();
-        let featureTokenSum = 0;
-        for (const meta of FEATURE_META) {
-          const trackerKeys = [meta.key];
-          if (meta.key === "roleplayStep") {
-            trackerKeys.push("roleplaySuggestion");
-          }
-          const totals = featureFromMonthDoc(data, trackerKeys);
-          if (totals.calls <= 0 && totals.totalTokens <= 0) continue;
-          featureTotals.set(meta.key, totals);
-          featureTokenSum += totals.totalTokens;
+    // Integra sempre i mesi: completa feature mancanti negli eventi e
+    // assegna costi da totals.estimatedEur quando gli eventi non li portano.
+    const monthKeys = monthKeysBetween(fromMs, toMs);
+    let monthScanned = 0;
+    for (const key of monthKeys) {
+      const doc = await db
+        .collection("settings")
+        .doc("ai_usage")
+        .collection("months")
+        .doc(key)
+        .get();
+      if (!doc.exists) continue;
+      monthScanned += 1;
+      const data = (doc.data() ?? {}) as Record<string, unknown>;
+      const monthUsd = eurToUsd(monthEstimatedEur(data));
+
+      const featureTotals = new Map<string, Totals>();
+      let featureTokenSum = 0;
+      for (const meta of FEATURE_META) {
+        const trackerKeys = [meta.key];
+        if (meta.key === "roleplayStep") {
+          trackerKeys.push("roleplaySuggestion");
         }
-
-        const denom = monthTokenDenom(data, featureTokenSum);
-        const dayDelta = emptyTotals();
-
-        for (const [featureKey, totals] of featureTotals) {
-          if (featureTokenSum > 0 && monthUsd > 0) {
-            totals.estimatedCostUsd = monthUsd * (totals.totalTokens / denom);
-          }
-          upsertBreakdown(
-            byFeature,
-            featureKey,
-            featureLabel(featureKey),
-            totals,
-          );
-          const model = featureModel(featureKey);
-          upsertBreakdown(byModel, model, model, totals);
-          addTotals(dayDelta, totals);
-        }
-
-        if (dayDelta.calls > 0) {
-          upsertBreakdown(byDay, `${key}-01`, key, dayDelta);
-        }
+        const totals = featureFromMonthDoc(data, trackerKeys);
+        if (totals.calls <= 0 && totals.totalTokens <= 0) continue;
+        featureTotals.set(meta.key, totals);
+        featureTokenSum += totals.totalTokens;
       }
+
+      const denom = monthTokenDenom(data, featureTokenSum);
+      const dayDelta = emptyTotals();
+
+      for (const [featureKey, totals] of featureTotals) {
+        if (featureTokenSum > 0 && monthUsd > 0) {
+          totals.estimatedCostUsd = monthUsd * (totals.totalTokens / denom);
+        }
+
+        const existing = byFeature.get(featureKey);
+        if (hasEvents && existing && existing.calls > 0) {
+          if (existing.estimatedCostUsd <= 0 && totals.estimatedCostUsd > 0) {
+            existing.estimatedCostUsd = totals.estimatedCostUsd;
+            byFeature.set(featureKey, existing);
+          }
+          continue;
+        }
+
+        upsertBreakdown(
+          byFeature,
+          featureKey,
+          featureLabel(featureKey),
+          totals,
+        );
+        const model = featureModel(featureKey);
+        upsertBreakdown(byModel, model, model, totals);
+        addTotals(dayDelta, totals);
+      }
+
+      if (!hasEvents && dayDelta.calls > 0) {
+        upsertBreakdown(byDay, `${key}-01`, key, dayDelta);
+      }
+    }
+    if (!hasEvents) {
       scanned = monthScanned;
     }
 
@@ -429,6 +454,11 @@ export const getAiUsageStats = onCall(
       }
     }
 
+    const openaiOfficial = await fetchOpenAiOrganizationCosts({
+      fromMs,
+      toMs,
+    });
+
     return {
       fromMs,
       toMs,
@@ -442,6 +472,7 @@ export const getAiUsageStats = onCall(
         a.key.localeCompare(b.key)
       ),
       byModel: sortRows([...byModel.values()]),
+      openaiOfficial,
     };
   },
 );

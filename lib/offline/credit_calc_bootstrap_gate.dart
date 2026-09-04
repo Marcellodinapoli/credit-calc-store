@@ -188,6 +188,8 @@ class _CreditCalcBootstrapGateState extends State<CreditCalcBootstrapGate> {
     CreditCalcRepositorySetup.apply(userId: userId);
     CreditCalcRuntime.install(sessionService: _sessionService!);
     CreditCalcRepositorySetup.notifyDataChanged();
+    // Cache piano/limiti per i check offline (es. salvataggio provvigioni).
+    unawaited(PublicUsageService.prefetchUserContext());
 
     await LocalItineraryCoordinator.start(userId);
 

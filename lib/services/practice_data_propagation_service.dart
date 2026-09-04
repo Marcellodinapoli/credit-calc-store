@@ -399,6 +399,7 @@ abstract final class PracticeDataPropagationService {
         id: reminder.id,
         title: reminder.title.replaceFirst(oldCompanyName, newCompanyName),
         remindAt: reminder.remindAt,
+        status: reminder.status,
         notes: reminder.notes,
         visitId: reminder.visitId,
       );

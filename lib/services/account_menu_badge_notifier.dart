@@ -7,6 +7,8 @@ class AccountMenuBadges {
   final bool warmup;
   final bool roleplay;
   final bool jobOffers;
+  /// Solo utenti `public`: annunci non letti.
+  final bool announcements;
 
   const AccountMenuBadges({
     this.directSupport = false,
@@ -15,6 +17,7 @@ class AccountMenuBadges {
     this.warmup = false,
     this.roleplay = false,
     this.jobOffers = false,
+    this.announcements = false,
   });
 
   bool get hasAny =>
@@ -23,7 +26,8 @@ class AccountMenuBadges {
       courses ||
       warmup ||
       roleplay ||
-      jobOffers;
+      jobOffers ||
+      announcements;
 
   bool get hasCreditForm => courses || warmup || roleplay;
 

@@ -1,16 +1,7 @@
-﻿CreditCalc 1.0.25 — distribuzione
-================================
+﻿FILE UNICO DA DISTRIBUIRE
+=========================
 
-File da scaricare dopo build GitHub Actions:
-  CreditCalc-1.0.25-Setup.exe          (PC Windows)
-  CreditCalc-1.0.25-android-arm64.apk  (Android)
+  C:\FlutterProjects\credit-calc-store\dist\CreditCalc-1.0.41-Setup.exe
 
-Script automatici (con gh auth login):
-  scripts\scarica_installer_pc.ps1
-  scripts\scarica_apk_android.ps1
-
-Installazione PC locale: dist\INSTALLA-CREDITCALC.bat
-
-Novita' 1.0.25:
-- Fix sincronizzazione PC/cell: UI itinerario e monitoraggio rata aggiornata dopo ricezione
-- Allineamento Develop Sync con Firestore dopo trasferimento manuale
+Cartella applicazione (sviluppo/test):
+  C:\FlutterProjects\credit-calc-store\dist\CreditCalc-1.0.41-win64\CreditCalc.exe

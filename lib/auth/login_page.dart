@@ -10,6 +10,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../session/credit_core_session_runtime.dart';
 import '../offline/services/connectivity_service.dart';
 import '../services/biometric_service.dart';
+import '../services/creditcalc_gestionale_service.dart';
 import 'biometric_lock_gate.dart';
 import 'auth_form_validation.dart';
 import 'auth_redirect_feedback.dart';
@@ -136,9 +137,21 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 
+  Future<void> _linkGestionaleSilently(String email, String password) async {
+    if (email.trim().isEmpty || password.isEmpty) return;
+    try {
+      await CreditCalcGestionaleService.instance.tryAutoLinkFromAppLogin(
+        email: email,
+        password: password,
+      );
+    } catch (_) {}
+  }
+
   Future<void> _saveCredentials(String email, String password) async {
     await _secureStorage.write(key: 'credit_calc_email', value: email);
     await _secureStorage.write(key: 'credit_calc_password', value: password);
+    // Stesse credenziali → sessione pratiche in affido (se consulente abilitato).
+    unawaited(_linkGestionaleSilently(email, password));
   }
 
   Future<bool> _matchesSavedCredentials({
@@ -212,6 +225,7 @@ class _LoginPageState extends State<LoginPage> {
 
     final current = FirebaseAuth.instance.currentUser;
     if (current != null && current.email == email) {
+      await _linkGestionaleSilently(email, password);
       await _resumeAuthFlowAfterLogin();
       return;
     }
@@ -533,6 +547,7 @@ class _LoginPageState extends State<LoginPage> {
           .signInWithEmailAndPassword(email: email, password: password)
           .timeout(const Duration(seconds: 12));
       if (!mounted) return;
+      await _linkGestionaleSilently(email, password);
       await widget.onUnlocked?.call();
     } on FirebaseAuthException catch (e) {
       final feedback = await AuthFormValidation.resolveLoginAuthFailure(e, email);
@@ -596,6 +611,12 @@ class _LoginPageState extends State<LoginPage> {
 
     if (widget.unlockMode) {
       if (await _matchesSavedCredentials(email: email, password: password)) {
+        await _linkGestionaleSilently(
+          email.isNotEmpty
+              ? email
+              : (FirebaseAuth.instance.currentUser?.email ?? ''),
+          password,
+        );
         await widget.onUnlocked?.call();
         setState(() => _busy = false);
         return;
@@ -637,9 +658,11 @@ class _LoginPageState extends State<LoginPage> {
           )
           .timeout(const Duration(seconds: 15));
       if (widget.unlockMode) {
+        await _linkGestionaleSilently(email, password);
         await widget.onUnlocked?.call();
         return;
       }
+      await _linkGestionaleSilently(email, password);
       await _resumeAuthFlowAfterLogin();
       try {
         await _saveCredentials(email, password);

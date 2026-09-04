@@ -35,6 +35,9 @@ class ItineraryDaySummaryCard extends StatelessWidget {
                         .where((a) => !a.completed)
                         .length;
                     final reminders = (remindersSnap.data ?? []).where((r) {
+                      if (r.status != FieldReminderStatus.planned) {
+                        return false;
+                      }
                       return ItineraryDateTime.isSameCalendarDay(
                         r.remindAt,
                         today,

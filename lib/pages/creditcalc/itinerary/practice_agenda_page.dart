@@ -7,6 +7,7 @@ import '../../../models/field_visit.dart';
 import '../../../offline/repository/credit_calc_repository.dart';
 import '../../../services/field_visit_service.dart';
 import '../../../services/installment_monitor_service.dart';
+import '../../../services/itinerary_nav_badge_notifier.dart';
 import '../../../utils/field_visit_route_planner.dart';
 import '../../../utils/itinerary_calendar_export.dart';
 import '../../../widgets/address_field_with_scan.dart';
@@ -24,9 +25,11 @@ class PracticeAgendaPage extends StatefulWidget {
   const PracticeAgendaPage({
     super.key,
     this.pageTitle = 'Agenda pratiche',
+    this.focusVisitId,
   });
 
   final String pageTitle;
+  final String? focusVisitId;
 
   @override
   State<PracticeAgendaPage> createState() => _PracticeAgendaPageState();
@@ -35,8 +38,37 @@ class PracticeAgendaPage extends StatefulWidget {
 class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
   DateTime _selectedDay = DateTime.now();
   bool _busy = false;
+  bool _focusApplied = false;
 
   static const _shell = ItineraryPageShell();
+
+  @override
+  void initState() {
+    super.initState();
+    ItineraryNavBadgeNotifier.instance.clearAppointments();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applyFocusVisit());
+  }
+
+  Future<void> _applyFocusVisit() async {
+    final id = widget.focusVisitId?.trim() ?? '';
+    if (_focusApplied || id.isEmpty) return;
+    _focusApplied = true;
+    try {
+      final visits = await FieldVisitService.fetchAllForUser();
+      FieldVisit? match;
+      for (final v in visits) {
+        if (v.id == id) {
+          match = v;
+          break;
+        }
+      }
+      if (match == null || !mounted) return;
+      final day = match.scheduledAt;
+      setState(() {
+        _selectedDay = DateTime(day.year, day.month, day.day);
+      });
+    } catch (_) {}
+  }
 
   Future<void> _pickDay() async {
     final picked = await showFieldVisitDayPicker(
@@ -60,7 +92,7 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
           0,
         );
 
-    final result = await showDialog<_VisitEditorResult>(
+    final editor = await showDialog<_VisitEditorResult>(
       context: context,
       builder: (ctx) => _VisitEditorDialog(
         visit: visit,
@@ -68,26 +100,78 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
       ),
     );
 
-    if (result == null || !mounted) return;
+    if (editor == null || !mounted) return;
+
+    final rescheduled = visit != null &&
+        !_sameMinute(editor.scheduledAt, visit.scheduledAt);
+    final status =
+        rescheduled ? FieldVisitStatus.planned : editor.status;
 
     setState(() => _busy = true);
     try {
-      await FieldVisitService.save(
+      final saved = await FieldVisitService.save(
         id: visit?.id,
-        companyName: result.companyName,
-        address: result.address,
-        scheduledAt: result.scheduledAt,
-        status: result.status,
-        notes: result.notes,
+        companyName: editor.companyName,
+        address: editor.address,
+        scheduledAt: editor.scheduledAt,
+        status: status,
+        notes: editor.notes,
         creditorId: visit?.creditorId,
         creditorName: visit?.creditorName,
         calculationId: visit?.calculationId,
         routeOrder: visit?.routeOrder,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Visita salvata.')),
-      );
+
+      final schedule = saved.schedule;
+      if (rescheduled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              schedule.scheduled && schedule.notifyAt != null
+                  ? 'Visita riprogrammata e rimessa in programma. '
+                      'Avviso alle '
+                      '${schedule.notifyAt!.hour.toString().padLeft(2, '0')}:'
+                      '${schedule.notifyAt!.minute.toString().padLeft(2, '0')}.'
+                  : 'Visita riprogrammata e rimessa in programma.',
+            ),
+          ),
+        );
+      } else if (status != FieldVisitStatus.planned) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Visita salvata (${fieldVisitStatusLabel(status)}). '
+              'Notifica disattivata.',
+            ),
+          ),
+        );
+      } else if (schedule.scheduled && schedule.notifyAt != null) {
+        final at = schedule.notifyAt!;
+        final h = at.hour.toString().padLeft(2, '0');
+        final m = at.minute.toString().padLeft(2, '0');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Visita salvata. Avviso programmato alle $h:$m '
+              '(e all\'orario dell\'appuntamento).',
+            ),
+          ),
+        );
+      } else if (schedule.issue != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Visita salvata, ma l\'avviso non è programmato: '
+              '${schedule.issue}',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Visita salvata.')),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -171,8 +255,15 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
     try {
       await FieldVisitService.updateStatus(visit.id, status);
       if (!mounted) return;
+      final notifyOff = status != FieldVisitStatus.planned;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Stato: ${fieldVisitStatusLabel(status)}')),
+        SnackBar(
+          content: Text(
+            notifyOff
+                ? 'Stato: ${fieldVisitStatusLabel(status)}. Notifica disattivata.'
+                : 'Stato: ${fieldVisitStatusLabel(status)}. Notifica riattivata.',
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -251,13 +342,42 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
   Color _statusColor(FieldVisitStatus status) {
     switch (status) {
       case FieldVisitStatus.planned:
-        return Colors.blue;
+        return const Color(0xFF1565C0);
       case FieldVisitStatus.completed:
-        return Colors.green;
+        return const Color(0xFF2E7D32);
       case FieldVisitStatus.cancelled:
-        return Colors.grey;
+        return const Color(0xFF757575);
     }
   }
+
+  Color _cardColor(FieldVisitStatus status) {
+    switch (status) {
+      case FieldVisitStatus.planned:
+        return AppCardTheme.surface;
+      case FieldVisitStatus.completed:
+        return const Color(0xFFE8F5E9);
+      case FieldVisitStatus.cancelled:
+        return const Color(0xFFEEEEEE);
+    }
+  }
+
+  IconData _statusIcon(FieldVisitStatus status) {
+    switch (status) {
+      case FieldVisitStatus.planned:
+        return Icons.event_available;
+      case FieldVisitStatus.completed:
+        return Icons.check_circle;
+      case FieldVisitStatus.cancelled:
+        return Icons.cancel;
+    }
+  }
+
+  static bool _sameMinute(DateTime a, DateTime b) =>
+      a.year == b.year &&
+      a.month == b.month &&
+      a.day == b.day &&
+      a.hour == b.hour &&
+      a.minute == b.minute;
 
   @override
   Widget build(BuildContext context) {
@@ -363,19 +483,28 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
                       },
                       itemBuilder: (context, index) {
                         final visit = visits[index];
+                        final accent = _statusColor(visit.status);
                         return Card(
                           key: ValueKey(visit.id),
-                          color: AppCardTheme.surface,
+                          color: _cardColor(visit.status),
                           margin: const EdgeInsets.only(bottom: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AppCardTheme.radius,
+                            ),
+                            side: BorderSide(
+                              color: accent.withValues(alpha: 0.35),
+                            ),
+                          ),
                           child: ListTile(
                             leading: ReorderableDragStartListener(
                               index: index,
                               child: CircleAvatar(
-                                backgroundColor: _statusColor(visit.status)
-                                    .withValues(alpha: 0.15),
+                                backgroundColor:
+                                    accent.withValues(alpha: 0.18),
                                 child: Icon(
-                                  Icons.drag_handle,
-                                  color: _statusColor(visit.status),
+                                  _statusIcon(visit.status),
+                                  color: accent,
                                 ),
                               ),
                             ),
@@ -383,8 +512,17 @@ class _PracticeAgendaPageState extends State<PracticeAgendaPage> {
                               visit.companyName.isEmpty
                                   ? 'Visita'
                                   : visit.companyName,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: visit.status ==
+                                        FieldVisitStatus.cancelled
+                                    ? Colors.black54
+                                    : null,
+                                decoration: visit.status ==
+                                        FieldVisitStatus.cancelled
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -636,7 +774,17 @@ class _VisitEditorDialogState extends State<_VisitEditorDialog> {
                       excludeVisitId: visit?.id,
                     );
                     if (picked == null || !mounted) return;
-                    setState(() => _scheduled = picked);
+                    setState(() {
+                      _scheduled = picked;
+                      final original = visit?.scheduledAt;
+                      if (original != null &&
+                          !_PracticeAgendaPageState._sameMinute(
+                            picked,
+                            original,
+                          )) {
+                        _status = FieldVisitStatus.planned;
+                      }
+                    });
                   },
                 ),
               ),

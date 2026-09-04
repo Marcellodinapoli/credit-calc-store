@@ -478,7 +478,7 @@ class _DeviceSyncPageState extends State<DeviceSyncPage>
       _isSender && _activeTransfer?.isPrepared == true && !_receiverReady;
 
   Future<void> _logout() async {
-    await CreditCoreSessionRuntime.signOutWithSessionRelease();
+    await CreditCoreSessionRuntime.signOutAndClearNavigation(context);
   }
 
   void _openAnnouncements() {

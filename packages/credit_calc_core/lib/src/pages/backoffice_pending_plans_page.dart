@@ -587,123 +587,139 @@ class _BackofficePendingPlansPageState extends State<BackofficePendingPlansPage>
               final planDays = _planDays(allPlans);
               final plans = _filterPlans(allPlans, entries);
 
-              if (plans.isEmpty) {
-                return ListView(
-                  children: [
-                    _buildHeader(planDays),
-                    if (planDays.isNotEmpty) const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          _emptyMessage(allPlans),
-                          style: TextStyle(
-                            color: Colors.grey.shade700,
-                            height: 1.45,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }
-
-              return ListView.separated(
-                itemCount: plans.length + 1,
-                separatorBuilder: (context, index) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return _buildHeader(planDays);
-                  }
-
-                  final plan = plans[index - 1];
-                  return Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () => _showDetails(context, plan),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
+              // Search/header fuori dalla ListView filtrata: altrimenti a ogni
+              // lettera cambia itemCount e il TextField perde il focus.
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildHeader(planDays),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: plans.isEmpty
+                        ? ListView(
+                            children: [
+                              Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
                                   child: Text(
-                                    plan.type.label,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 16,
+                                    _emptyMessage(allPlans),
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      height: 1.45,
                                     ),
                                   ),
-                                ),
-                                if (plan.isAccepted)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.shade50,
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Text(
-                                      'Accettato',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.green.shade800,
-                                      ),
-                                    ),
-                                  )
-                                else if (plan.hasCommissionExport)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.green.shade50,
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Text(
-                                      'Incasso registrato',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.green.shade800,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            if (plan.companyName?.isNotEmpty == true) ...[
-                              Text(
-                                plan.companyName!,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
                                 ),
                               ),
-                              const SizedBox(height: 4),
                             ],
-                            Text(
-                              plan.creditorName,
-                              style: const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 8),
-                            ..._planMetaLines(
-                              plan,
-                              includeAcceptedVia: false,
-                              showIncassoInserito: true,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
+                          )
+                        : ListView.separated(
+                            itemCount: plans.length,
+                            separatorBuilder: (context, index) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final plan = plans[index];
+                              return Card(
+                                clipBehavior: Clip.antiAlias,
+                                child: InkWell(
+                                  onTap: () => _showDetails(context, plan),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                plan.type.label,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 16,
+                                                ),
+                                              ),
+                                            ),
+                                            if (plan.isAccepted)
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.green.shade50,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          999),
+                                                ),
+                                                child: Text(
+                                                  'Accettato',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color:
+                                                        Colors.green.shade800,
+                                                  ),
+                                                ),
+                                              )
+                                            else if (plan.hasCommissionExport)
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.green.shade50,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          999),
+                                                ),
+                                                child: Text(
+                                                  'Incasso registrato',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color:
+                                                        Colors.green.shade800,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        if (plan.companyName?.isNotEmpty ==
+                                            true) ...[
+                                          Text(
+                                            plan.companyName!,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                        ],
+                                        Text(
+                                          plan.creditorName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        ..._planMetaLines(
+                                          plan,
+                                          includeAcceptedVia: false,
+                                          showIncassoInserito: true,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
               );
             },
           );

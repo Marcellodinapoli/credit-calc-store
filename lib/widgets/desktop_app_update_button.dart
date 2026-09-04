@@ -24,11 +24,8 @@ class _DesktopAppUpdateButtonState extends State<DesktopAppUpdateButton> {
 
   static bool get _enabled {
     if (kIsWeb) return false;
-    return Platform.isWindows ||
-        Platform.isMacOS ||
-        Platform.isLinux ||
-        Platform.isAndroid ||
-        Platform.isIOS;
+    // Solo app PC: su mobile l'aggiornamento passa dagli store.
+    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
   }
 
   String get _downloadActionLabel {

@@ -8,6 +8,16 @@ import 'itinerary_storage.dart';
 import 'itinerary_storage_access.dart';
 import 'practice_data_propagation_service.dart';
 
+class FieldVisitSaveResult {
+  const FieldVisitSaveResult({
+    required this.id,
+    required this.schedule,
+  });
+
+  final String id;
+  final FieldVisitScheduleResult schedule;
+}
+
 abstract final class FieldVisitService {
   static ItineraryStorage get _storage => ItineraryStorageAccess.instance;
 
@@ -117,7 +127,7 @@ abstract final class FieldVisitService {
     });
   }
 
-  static Future<String> save({
+  static Future<FieldVisitSaveResult> save({
     String? id,
     required String companyName,
     required String address,
@@ -139,7 +149,7 @@ abstract final class FieldVisitService {
     }
 
     FieldVisit? previousVisit;
-    if (!skipPracticePropagation && id != null && id.isNotEmpty) {
+    if (id != null && id.isNotEmpty) {
       final existingVisits = await _storage.fetchAllVisits();
       for (final visit in existingVisits) {
         if (visit.id == id) {
@@ -160,6 +170,9 @@ abstract final class FieldVisitService {
     }
 
     final isNew = id == null || id.isEmpty;
+    final timeChanged = previousVisit != null &&
+        previousVisit.scheduledAt.millisecondsSinceEpoch !=
+            scheduledAt.millisecondsSinceEpoch;
     final visit = FieldVisit(
       id: id ?? '',
       userId: userId,
@@ -180,12 +193,13 @@ abstract final class FieldVisitService {
       id: id,
       visit: visit,
       isNew: isNew,
-      includePreVisitPushReset: isNew,
+      includePreVisitPushReset: isNew || timeChanged,
     );
 
+    var schedule = const FieldVisitScheduleResult(scheduled: false);
     await FieldVisitNotificationService.cancelForVisit(savedId);
     if (status == FieldVisitStatus.planned) {
-      await FieldVisitNotificationService.scheduleIfEnabled(
+      schedule = await FieldVisitNotificationService.scheduleIfEnabled(
         FieldVisit(
           id: savedId,
           userId: userId,
@@ -225,7 +239,7 @@ abstract final class FieldVisitService {
       );
     }
 
-    return savedId;
+    return FieldVisitSaveResult(id: savedId, schedule: schedule);
   }
 
   static Future<void> delete(String id) async {
@@ -288,7 +302,7 @@ abstract final class FieldVisitService {
     return _storage.saveVisitRouteOrder(ordered);
   }
 
-  static Future<void> importFromCalculation({
+  static Future<FieldVisitSaveResult> importFromCalculation({
     required Map<String, dynamic> calculation,
     required String calculationId,
     required DateTime scheduledAt,
@@ -307,7 +321,7 @@ abstract final class FieldVisitService {
       }
     }
 
-    await save(
+    return save(
       companyName: (calculation['companyName'] ?? 'Pratica').toString(),
       address: resolvedAddress,
       scheduledAt: scheduledAt,

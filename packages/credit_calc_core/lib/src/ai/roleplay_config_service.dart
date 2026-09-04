@@ -24,6 +24,7 @@ abstract final class RoleplayConfigService {
     'manipolatore',
     'emotivo',
     'razionale',
+    'realistico',
   ];
 
   static const defaultDifficulty = 'media';
@@ -59,6 +60,7 @@ abstract final class RoleplayConfigService {
       'manipolatore' => 'Manipolatore',
       'emotivo' => 'Emotivo',
       'razionale' => 'Razionale',
+      'realistico' => 'Realistico/Misto',
       _ => 'Collaborativo',
     };
   }
@@ -103,6 +105,10 @@ abstract final class RoleplayConfigService {
         'reazioni emotive marcate (ansia, stress, frustrazione).',
       'razionale' =>
         'freddo e procedurale, chiede dettagli e contesta con logica.',
+      'realistico' =>
+        'misto realistico: durante la conversazione alterna e combina tratti di '
+        'aggressivo, collaborativo, diffidente, emotivo e manipolatore; '
+        'non restare su un solo stile.',
       _ => 'aperto al confronto, propone soluzioni e chiede chiarimenti.',
     };
   }

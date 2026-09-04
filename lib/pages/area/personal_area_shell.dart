@@ -60,7 +60,7 @@ class _PersonalAreaShellState extends State<PersonalAreaShell> {
   }
 
   Future<void> _logout() async {
-    await CreditCoreSessionRuntime.signOutWithSessionRelease();
+    await CreditCoreSessionRuntime.signOutAndClearNavigation(context);
   }
 
   void _openAnnouncements() {

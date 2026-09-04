@@ -178,7 +178,7 @@ class RoleplayRealtimeSession implements RoleplaySession {
     final data = await CallableFunctionClient.call(
       'roleplayRealtimeToken',
       const <String, dynamic>{},
-    );
+    ).timeout(const Duration(seconds: 30));
     if (data is! Map) {
       throw StateError('Token Realtime non valido.');
     }
@@ -401,6 +401,8 @@ class RoleplayRealtimeSession implements RoleplaySession {
     _history.clear();
     _assistantBuffer = '';
     _simulationActive = true;
+    // Notifica subito la UI (overlay "Connessione…") prima delle await lunghe.
+    _setStatus(RoleplayVoiceStatus.connecting);
     _bootstrapped = false;
     _sessionUpdatedReceived = false;
     _greetingRequested = false;

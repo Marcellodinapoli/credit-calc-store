@@ -35,7 +35,7 @@ Future<bool> showScheduleFieldVisitDialog(
   if (result == null || !context.mounted) return false;
 
   try {
-    await FieldVisitService.importFromCalculation(
+    final saved = await FieldVisitService.importFromCalculation(
       calculation: {
         ...calculation,
         'companyName': result.companyName,
@@ -45,8 +45,16 @@ Future<bool> showScheduleFieldVisitDialog(
       address: result.address,
     );
     if (context.mounted) {
+      final schedule = saved.schedule;
+      final message = schedule.scheduled && schedule.notifyAt != null
+          ? 'Visita aggiunta in agenda. Avviso alle '
+              '${schedule.notifyAt!.hour.toString().padLeft(2, '0')}:'
+              '${schedule.notifyAt!.minute.toString().padLeft(2, '0')}.'
+          : schedule.issue != null
+              ? 'Visita aggiunta, ma l\'avviso non è programmato: ${schedule.issue}'
+              : 'Visita aggiunta in agenda.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Visita aggiunta in agenda.')),
+        SnackBar(content: Text(message)),
       );
     }
     return true;

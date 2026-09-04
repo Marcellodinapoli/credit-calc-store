@@ -4,6 +4,9 @@ import { HttpsError } from "firebase-functions/v2/https";
 
 export const openAiApiKey = defineSecret("OPENAI_API_KEY");
 
+/** Admin key OpenAI per /v1/organization/costs (Consumi AI ufficiali). */
+export const openAiAdminApiKey = defineSecret("OPENAI_ADMIN_API_KEY");
+
 /** Ricerca normativa, warm-up telefonata, contestazioni. */
 export const OPENAI_MODEL_GPT_55 = "gpt-5.5";
 

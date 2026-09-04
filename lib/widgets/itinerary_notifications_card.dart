@@ -213,7 +213,7 @@ class _ItineraryNotificationsConsentHintState
         padding: const EdgeInsets.all(16),
         child: Text(
           'Attiva le notifiche itinerario da Area personale → Notifiche '
-          'per ricevere promemoria programmati e avvisi 30 min prima delle visite.',
+          'per ricevere promemoria e avvisi visite (30 min prima e all\'orario).',
           style: TextStyle(color: Colors.black.withValues(alpha: 0.54)),
         ),
       ),

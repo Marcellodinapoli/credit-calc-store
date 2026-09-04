@@ -13,12 +13,26 @@ export const contactEmail = defineString("CONTACT_EMAIL", {
     "Email di riferimento progetto (sostituire con email personale quando disponibile)",
 });
 
+/** Secret condiviso Outfit → CreditCore per push assistenza admin. */
+export const supportAdminBridgeSecret = defineString(
+  "SUPPORT_ADMIN_BRIDGE_SECRET",
+  {
+    default: "outfit-creditcore-support-bridge-v1",
+    description:
+      "Secret HTTP per bridge push assistenza da progetto Outfit al BackOffice",
+  },
+);
+
 export const NOTIFICATION_TYPES = {
   ANNOUNCEMENT: "announcement",
   JOB_OFFER: "job_offer",
   COURSE: "course",
   FIELD_VISIT: "field_visit",
   FIELD_REMINDER: "field_reminder",
+  SUPPORT_MESSAGE: "support_message",
+  SUPPORT_REPLY: "support_reply",
+  COMMUNITY_MESSAGE: "community_message",
+  ROLEPLAY: "roleplay",
 } as const;
 
 export type NotificationType =

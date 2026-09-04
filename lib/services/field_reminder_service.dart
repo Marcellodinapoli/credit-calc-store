@@ -33,6 +33,7 @@ abstract final class FieldReminderService {
     String? id,
     required String title,
     required DateTime remindAt,
+    FieldReminderStatus status = FieldReminderStatus.planned,
     String? notes,
     String? visitId,
   }) async {
@@ -40,35 +41,80 @@ abstract final class FieldReminderService {
     if (userId == null) throw StateError('Utente non autenticato');
 
     final isNew = id == null || id.isEmpty;
+    FieldReminder? previous;
+    if (!isNew) {
+      final existing = await _storage.fetchAllReminders();
+      for (final item in existing) {
+        if (item.id == id) {
+          previous = item;
+          break;
+        }
+      }
+    }
+
+    final timeChanged = previous != null &&
+        previous.remindAt.millisecondsSinceEpoch !=
+            remindAt.millisecondsSinceEpoch;
+
     final reminder = FieldReminder(
       id: id ?? '',
       userId: userId,
       title: title.trim(),
       remindAt: remindAt,
+      status: status,
       notes: notes?.trim(),
       visitId: visitId,
     );
 
+    // Come le visite: reset push solo se nuovo o orario cambiato.
+    // Completato/Annullato non deve riarmare il push cloud.
     final savedId = await _storage.saveReminder(
       id: id,
       reminder: reminder,
       isNew: isNew,
-      resetPushSent: !isNew,
+      resetPushSent: isNew || timeChanged,
     );
 
     await FieldReminderNotificationService.cancelForReminder(savedId);
-    final schedule = await FieldReminderNotificationService.scheduleIfEnabled(
-      FieldReminder(
-        id: savedId,
-        userId: userId,
-        title: reminder.title,
-        remindAt: remindAt,
-        notes: reminder.notes,
-        visitId: visitId,
-      ),
-    );
+    final schedule = status == FieldReminderStatus.planned
+        ? await FieldReminderNotificationService.scheduleIfEnabled(
+            FieldReminder(
+              id: savedId,
+              userId: userId,
+              title: reminder.title,
+              remindAt: remindAt,
+              status: status,
+              notes: reminder.notes,
+              visitId: visitId,
+            ),
+          )
+        : const FieldReminderScheduleResult(scheduled: false);
 
     return FieldReminderSaveResult(id: savedId, schedule: schedule);
+  }
+
+  static Future<void> updateStatus(
+    String id,
+    FieldReminderStatus status,
+  ) async {
+    final reminders = await _storage.fetchAllReminders();
+    FieldReminder? current;
+    for (final reminder in reminders) {
+      if (reminder.id == id) {
+        current = reminder;
+        break;
+      }
+    }
+    if (current == null) return;
+
+    await save(
+      id: current.id,
+      title: current.title,
+      remindAt: current.remindAt,
+      status: status,
+      notes: current.notes,
+      visitId: current.visitId,
+    );
   }
 
   static Future<void> delete(String id) async {

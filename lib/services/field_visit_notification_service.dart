@@ -18,10 +18,15 @@ class FieldVisitScheduleResult {
 }
 
 abstract final class FieldVisitNotificationService {
+  /// Preavviso locale (allineato al push cloud ~30 min prima).
   static const Duration advance = Duration(minutes: 30);
 
   static int notificationIdFor(String visitId) =>
       (visitId.hashCode ^ 0x56495349) & 0x7fffffff;
+
+  /// Secondo avviso all'orario dell'appuntamento (come i promemoria "al momento").
+  static int atTimeNotificationIdFor(String visitId) =>
+      (notificationIdFor(visitId) ^ 0x00A77A1E) & 0x7fffffff;
 
   static DateTime? resolveNotifyAt(DateTime scheduledAt) {
     if (!scheduledAt.isAfter(DateTime.now())) return null;
@@ -29,6 +34,7 @@ abstract final class FieldVisitNotificationService {
     final early = scheduledAt.subtract(advance);
     if (early.isAfter(DateTime.now())) return early;
 
+    // Appuntamento entro 30 minuti: avvisa quasi subito.
     return DateTime.now().add(const Duration(seconds: 45));
   }
 
@@ -43,6 +49,7 @@ abstract final class FieldVisitNotificationService {
     }
 
     if (visit.status != FieldVisitStatus.planned) {
+      await cancelForVisit(visit.id);
       return const FieldVisitScheduleResult(scheduled: false);
     }
 
@@ -68,55 +75,82 @@ abstract final class FieldVisitNotificationService {
 
     final notifyAt = resolveNotifyAt(visit.scheduledAt);
     if (notifyAt == null) {
+      await cancelForVisit(visit.id);
       return const FieldVisitScheduleResult(
         scheduled: false,
         issue: 'L\'orario della visita è già trascorso.',
       );
     }
 
-    final hasPermission = await _hasDeviceNotificationPermission();
+    // Come i promemoria: verifica permesso prima di programmare.
+    final hasPermission = await LocalNotificationsService.ensurePermission(
+      allowPrompt: false,
+    );
+    if (!hasPermission) {
+      return const FieldVisitScheduleResult(
+        scheduled: false,
+        issue:
+            'Permesso notifiche non concesso. Attiva «Notifiche itinerario» '
+            'in Area personale → Notifiche.',
+      );
+    }
+
     final timeLabel = _formatTime(visit.scheduledAt);
     final company = visit.companyName.trim().isEmpty
         ? 'Visita in programma'
         : visit.companyName.trim();
     final address = visit.address.trim();
-    final body = address.isEmpty
+    final preBody = address.isEmpty
         ? 'Appuntamento alle $timeLabel'
         : '$address · $timeLabel';
+    final atBody = address.isEmpty
+        ? 'È l\'orario dell\'appuntamento ($timeLabel)'
+        : '$address · è ora ($timeLabel)';
 
     try {
+      await cancelForVisit(visit.id);
+
       await LocalNotificationsService.scheduleItineraryReminder(
         id: notificationIdFor(visit.id),
         title: company,
-        body: body,
+        body: preBody,
         when: notifyAt,
         payload: 'field_visit:${visit.id}',
       );
+
+      // Secondo avviso all'orario visita (se ancora nel futuro e distinto).
+      final atTime = visit.scheduledAt;
+      if (atTime.isAfter(DateTime.now().add(const Duration(seconds: 90))) &&
+          atTime.difference(notifyAt).inSeconds > 60) {
+        await LocalNotificationsService.scheduleItineraryReminder(
+          id: atTimeNotificationIdFor(visit.id),
+          title: company,
+          body: atBody,
+          when: atTime,
+          payload: 'field_visit:${visit.id}',
+        );
+      }
+
       return FieldVisitScheduleResult(
         scheduled: true,
         notifyAt: notifyAt,
       );
     } catch (e) {
-      final permissionHint = hasPermission
-          ? ''
-          : ' Verifica il permesso notifiche per CreditCalc '
-              'nelle impostazioni del telefono.';
       return FieldVisitScheduleResult(
         scheduled: false,
         issue:
-            'Impossibile programmare l\'avviso sul dispositivo.$permissionHint',
+            'Impossibile programmare l\'avviso sul dispositivo. '
+            'Verifica permesso notifiche e allarmi esatti per CreditCalc.',
       );
     }
-  }
-
-  static Future<bool> _hasDeviceNotificationPermission() async {
-    if (await LocalNotificationsService.hasPermission()) return true;
-    return ProductNotificationsService.hasSystemPermission();
   }
 
   static Future<void> cancelForVisit(String visitId) async {
     if (visitId.isEmpty) return;
     await LocalNotificationsService.cancelScheduled(notificationIdFor(visitId));
+    await LocalNotificationsService.cancelScheduled(
+      atTimeNotificationIdFor(visitId),
+    );
   }
 
   static Future<void> syncAllForCurrentUser() async {

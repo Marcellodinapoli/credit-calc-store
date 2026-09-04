@@ -1,10 +1,15 @@
 import * as admin from "firebase-admin";
 import { DocumentData } from "firebase-admin/firestore";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
+import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 
-import { contactEmail, NOTIFICATION_TYPES } from "./config";
+import {
+  contactEmail,
+  NOTIFICATION_TYPES,
+  supportAdminBridgeSecret,
+} from "./config";
 import { normativeSearch } from "./ai_normative_search";
 import { callAnalysis } from "./ai_call_analysis";
 import { roleplayStep } from "./ai_roleplay_step";
@@ -17,6 +22,7 @@ import { getAiUsageStats } from "./ai_get_usage_stats";
 import {
   db,
   formatDateTime,
+  loadAdminDeviceTargets,
   loadItineraryTarget,
   loadJobSeekerTargets,
   loadProductNotificationTargets,
@@ -43,11 +49,15 @@ async function notifyAnnouncement(
     message.length > 240 ? `${message.substring(0, 237)}...` : message ||
       "Nuovo aggiornamento disponibile";
 
-  const targets = await loadProductNotificationTargets(target);
+  const targets = await loadProductNotificationTargets(
+    // "all" → solo pubblici (richiesta prodotto); altri target restano filtrati.
+    target === "all" ? "public" : target,
+  );
   await sendPushToTargets(targets, {
     title,
     body,
     type: NOTIFICATION_TYPES.ANNOUNCEMENT,
+    badge: 1,
     data: { announcementId: docId },
   });
 
@@ -95,6 +105,7 @@ export const onCourseCreated = onDocumentCreated(
       title: "Nuovo corso su CreditForm",
       body: title,
       type: NOTIFICATION_TYPES.COURSE,
+      badge: 1,
       data: { courseId: event.params.courseId },
     });
 
@@ -127,6 +138,179 @@ export const onJobOfferPublished = onDocumentUpdated(
       offerId: event.params.offerId,
       recipients: targets.length,
     });
+  },
+);
+
+/** Messaggio su Assistenza diretta → push admin (user) o badge utente (admin). */
+export const onSupportUserMessageCreated = onDocumentCreated(
+  { document: "support/{ticketId}/messages/{messageId}", region },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+
+    const ticketId = event.params.ticketId;
+    const ticketSnap = await db.collection("support").doc(ticketId).get();
+    const ticket = ticketSnap.data() ?? {};
+    const subject = (ticket.subject ?? "Assistenza diretta").toString().trim();
+    const text = (data.text ?? "").toString().trim();
+    const body =
+      text.length > 0
+        ? text.length > 160
+          ? `${text.substring(0, 157)}...`
+          : text
+        : "Nuovo messaggio di supporto";
+    const sender = (data.sender ?? "").toString();
+
+    if (sender === "user") {
+      const targets = await loadAdminDeviceTargets();
+      await sendPushToTargets(targets, {
+        title: subject || "Assistenza diretta",
+        body,
+        type: NOTIFICATION_TYPES.SUPPORT_MESSAGE,
+        badge: 1,
+        data: {
+          ticketId,
+          messageId: event.params.messageId,
+        },
+      });
+      logger.info("Support message push sent", {
+        ticketId,
+        recipients: targets.length,
+      });
+      return;
+    }
+
+    // Risposta admin → badge icona utente CreditCalc.
+    const userId = (ticket.userId ?? "").toString().trim();
+    if (!userId) return;
+    await sendPushToUser(userId, {
+      title: subject || "Assistenza diretta",
+      body,
+      type: NOTIFICATION_TYPES.SUPPORT_REPLY,
+      badge: 1,
+      data: {
+        ticketId,
+        messageId: event.params.messageId,
+      },
+    });
+    logger.info("Support reply push sent", { ticketId, userId });
+  },
+);
+
+/** Nuovo messaggio community → badge al creatore del topic (se non è l'autore). */
+export const onCommunityMessageCreated = onDocumentCreated(
+  { document: "community/{topicId}/messages/{messageId}", region },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+
+    const senderId = (data.userId ?? "").toString().trim();
+    if (!senderId) return;
+
+    const topicId = event.params.topicId;
+    const topicSnap = await db.collection("community").doc(topicId).get();
+    const topic = topicSnap.data();
+    if (!topic || topic.status !== "approved") return;
+
+    const ownerId = (topic.userId ?? "").toString().trim();
+    if (!ownerId || ownerId === senderId) return;
+
+    const text = (data.text ?? data.message ?? "").toString().trim();
+    const body =
+      text.length > 0
+        ? text.length > 160
+          ? `${text.substring(0, 157)}...`
+          : text
+        : "Nuova risposta in community";
+    const title = (topic.title ?? "Community").toString().trim() || "Community";
+
+    await sendPushToUser(ownerId, {
+      title,
+      body,
+      type: NOTIFICATION_TYPES.COMMUNITY_MESSAGE,
+      badge: 1,
+      data: {
+        topicId,
+        messageId: event.params.messageId,
+      },
+    });
+    logger.info("Community reply push sent", { topicId, ownerId });
+  },
+);
+
+/** Nuovo roleplay → badge utenti con notifiche prodotto. */
+export const onRoleplayCreated = onDocumentCreated(
+  { document: "roleplay/{roleplayId}", region },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+
+    const title =
+      (data.title ?? data.name ?? "Nuova simulazione roleplay").toString();
+    const targets = await loadProductNotificationTargets();
+    await sendPushToTargets(targets, {
+      title: "Nuovo Role Play",
+      body: title,
+      type: NOTIFICATION_TYPES.ROLEPLAY,
+      badge: 1,
+      data: { roleplayId: event.params.roleplayId },
+    });
+    logger.info("Roleplay push sent", {
+      roleplayId: event.params.roleplayId,
+      recipients: targets.length,
+    });
+  },
+);
+
+/**
+ * Bridge da progetto Outfit: stesso push/badge admin senza token FCM Outfit.
+ * Header: x-support-bridge-secret
+ * Body JSON: { title?, body?, ticketId?, messageId? }
+ */
+export const notifyAdminSupportBridge = onRequest(
+  { region, cors: false },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+
+    const secret = (req.get("x-support-bridge-secret") || "").trim();
+    if (!secret || secret !== supportAdminBridgeSecret.value()) {
+      res.status(403).send("Forbidden");
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const title =
+      typeof body.title === "string" && body.title.trim()
+        ? body.title.trim()
+        : "Assistenza MOODFIT";
+    const text =
+      typeof body.body === "string" ? body.body.trim() : "Nuovo messaggio di supporto";
+    const ticketId =
+      typeof body.ticketId === "string" ? body.ticketId.trim() : "";
+    const messageId =
+      typeof body.messageId === "string" ? body.messageId.trim() : "";
+
+    const targets = await loadAdminDeviceTargets();
+    await sendPushToTargets(targets, {
+      title,
+      body: text,
+      type: NOTIFICATION_TYPES.SUPPORT_MESSAGE,
+      badge: 1,
+      data: {
+        source: "outfit",
+        ticketId,
+        messageId,
+      },
+    });
+
+    logger.info("Outfit support bridge push sent", {
+      ticketId,
+      recipients: targets.length,
+    });
+    res.status(200).json({ ok: true, recipients: targets.length });
   },
 );
 
@@ -208,6 +392,8 @@ async function sendReminderPushes(): Promise<void> {
 
   for (const doc of snap.docs) {
     const data = doc.data();
+    if ((data.status ?? "planned") !== "planned") continue;
+
     const userId = (data.userId ?? "").toString();
     if (!userId) continue;
 
@@ -264,7 +450,9 @@ export const onFieldReminderRescheduled = onDocumentUpdated(
 
     const beforeAt = before.remindAt?.toMillis?.() ?? 0;
     const afterAt = after.remindAt?.toMillis?.() ?? 0;
-    if (beforeAt === afterAt) return;
+    const statusChanged = before.status !== after.status;
+
+    if (!statusChanged && beforeAt === afterAt) return;
     if (after.pushSent === false) return;
 
     await event.data?.after.ref.update({

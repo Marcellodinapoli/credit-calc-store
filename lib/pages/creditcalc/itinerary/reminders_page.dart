@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_card_theme.dart';
 import '../../../widgets/field_visit_day_picker.dart';
 import '../../../widgets/field_visit_link_picker.dart';
+import '../../../widgets/voice_note_field.dart';
 import '../../../models/field_reminder.dart';
 import '../../../services/field_reminder_service.dart';
 import '../../../services/installment_monitor_service.dart';
+import '../../../services/itinerary_nav_badge_notifier.dart';
 import '../../../widgets/pdr_card_details.dart';
 import 'itinerary_page_shell.dart';
 
@@ -19,7 +21,9 @@ enum _ReminderMonthFilter {
 }
 
 class RemindersPage extends StatefulWidget {
-  const RemindersPage({super.key});
+  const RemindersPage({super.key, this.focusReminderId});
+
+  final String? focusReminderId;
 
   @override
   State<RemindersPage> createState() => _RemindersPageState();
@@ -30,6 +34,16 @@ class _RemindersPageState extends State<RemindersPage> {
   _ReminderMonthFilter _monthFilter = _ReminderMonthFilter.currentMonth;
 
   static const _shell = ItineraryPageShell();
+
+  @override
+  void initState() {
+    super.initState();
+    ItineraryNavBadgeNotifier.instance.clearReminders();
+    final id = widget.focusReminderId?.trim() ?? '';
+    if (id.isNotEmpty) {
+      _monthFilter = _ReminderMonthFilter.all;
+    }
+  }
 
   bool _isCurrentMonth(DateTime date) {
     final now = DateTime.now();
@@ -110,56 +124,104 @@ class _RemindersPageState extends State<RemindersPage> {
 
   Widget _reminderCard(FieldReminder item, DateTime now) {
     final isPast = item.remindAt.isBefore(now);
+    final accent = item.status == FieldReminderStatus.planned && isPast
+        ? const Color(0xFFEF6C00)
+        : _statusColor(item.status);
 
     return Card(
-      color: AppCardTheme.surface,
+      color: _cardColor(item.status),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppCardTheme.radius),
+        side: BorderSide(color: accent.withValues(alpha: 0.35)),
+      ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: (isPast ? Colors.orange : Colors.blue)
-              .withValues(alpha: 0.15),
+          backgroundColor: accent.withValues(alpha: 0.18),
           child: Icon(
-            isPast ? Icons.notifications_active : Icons.alarm,
-            color: isPast ? Colors.orange : Colors.blue,
+            item.status == FieldReminderStatus.completed
+                ? Icons.check_circle
+                : item.status == FieldReminderStatus.cancelled
+                    ? Icons.cancel
+                    : (isPast ? Icons.notifications_active : Icons.alarm),
+            color: accent,
           ),
         ),
         title: Text(
           item.title,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: item.status == FieldReminderStatus.cancelled
+                ? Colors.black54
+                : null,
+            decoration: item.status == FieldReminderStatus.cancelled
+                ? TextDecoration.lineThrough
+                : null,
+          ),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_formatDateTime(item.remindAt)),
+            Text(
+              '${_formatDateTime(item.remindAt)} · '
+              '${fieldReminderStatusLabel(item.status)}',
+            ),
             PdrCardDetailsLines(
               detailsFuture:
                   InstallmentMonitorService.resolvePdrDetailsForReminder(item),
             ),
-            if (item.pushSent)
+            if (item.pushSent && item.status == FieldReminderStatus.planned)
               const Text(
                 'Notifica inviata',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.green,
+                  color: Color(0xFF2E7D32),
                 ),
               ),
           ],
         ),
         isThreeLine: true,
         onTap: () => _openEditor(reminder: item),
+        onLongPress: () => _setReminderStatus(
+          item,
+          item.status == FieldReminderStatus.completed
+              ? FieldReminderStatus.planned
+              : FieldReminderStatus.completed,
+        ),
         trailing: PopupMenuButton<String>(
           onSelected: (action) async {
             if (action == 'edit') {
               await _openEditor(reminder: item);
+            } else if (action == 'completed') {
+              await _setReminderStatus(item, FieldReminderStatus.completed);
+            } else if (action == 'cancelled') {
+              await _setReminderStatus(item, FieldReminderStatus.cancelled);
+            } else if (action == 'planned') {
+              await _setReminderStatus(item, FieldReminderStatus.planned);
             } else if (action == 'delete') {
               await FieldReminderService.delete(item.id);
             }
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(
+          itemBuilder: (_) => [
+            const PopupMenuItem(
               value: 'edit',
               child: Text('Modifica'),
             ),
-            PopupMenuItem(
+            if (item.status != FieldReminderStatus.completed)
+              const PopupMenuItem(
+                value: 'completed',
+                child: Text('Segna completato'),
+              ),
+            if (item.status != FieldReminderStatus.cancelled)
+              const PopupMenuItem(
+                value: 'cancelled',
+                child: Text('Segna annullato'),
+              ),
+            if (item.status != FieldReminderStatus.planned)
+              const PopupMenuItem(
+                value: 'planned',
+                child: Text('Rimetti in programma'),
+              ),
+            const PopupMenuItem(
               value: 'delete',
               child: Text('Elimina'),
             ),
@@ -167,6 +229,63 @@ class _RemindersPageState extends State<RemindersPage> {
         ),
       ),
     );
+  }
+
+  Color _statusColor(FieldReminderStatus status) {
+    switch (status) {
+      case FieldReminderStatus.planned:
+        return const Color(0xFF1565C0);
+      case FieldReminderStatus.completed:
+        return const Color(0xFF2E7D32);
+      case FieldReminderStatus.cancelled:
+        return const Color(0xFF757575);
+    }
+  }
+
+  Color _cardColor(FieldReminderStatus status) {
+    switch (status) {
+      case FieldReminderStatus.planned:
+        return AppCardTheme.surface;
+      case FieldReminderStatus.completed:
+        return const Color(0xFFE8F5E9);
+      case FieldReminderStatus.cancelled:
+        return const Color(0xFFEEEEEE);
+    }
+  }
+
+  static bool _sameMinute(DateTime a, DateTime b) =>
+      a.year == b.year &&
+      a.month == b.month &&
+      a.day == b.day &&
+      a.hour == b.hour &&
+      a.minute == b.minute;
+
+  Future<void> _setReminderStatus(
+    FieldReminder reminder,
+    FieldReminderStatus status,
+  ) async {
+    setState(() => _busy = true);
+    try {
+      await FieldReminderService.updateStatus(reminder.id, status);
+      if (!mounted) return;
+      final notifyOff = status != FieldReminderStatus.planned;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            notifyOff
+                ? 'Stato: ${fieldReminderStatusLabel(status)}. Notifica disattivata.'
+                : 'Stato: ${fieldReminderStatusLabel(status)}. Notifica riattivata.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Aggiornamento non riuscito: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Widget _buildFilteredList(List<FieldReminder> items) {
@@ -302,6 +421,7 @@ class _RemindersPageState extends State<RemindersPage> {
     var remindAt = reminder?.remindAt ??
         DateTime.now().add(const Duration(hours: 1));
     String? visitId = reminder?.visitId;
+    var status = reminder?.status ?? FieldReminderStatus.planned;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -335,9 +455,34 @@ class _RemindersPageState extends State<RemindersPage> {
                           checkAgendaConflict: false,
                         );
                         if (picked == null) return;
-                        setLocal(() => remindAt = picked);
+                        setLocal(() {
+                          remindAt = picked;
+                          final original = reminder?.remindAt;
+                          if (original != null &&
+                              !_sameMinute(picked, original)) {
+                            status = FieldReminderStatus.planned;
+                          }
+                        });
                       },
                     ),
+                  ),
+                  DropdownButtonFormField<FieldReminderStatus>(
+                    value: status,
+                    decoration: const InputDecoration(
+                      labelText: 'Stato',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: FieldReminderStatus.values
+                        .map(
+                          (s) => DropdownMenuItem(
+                            value: s,
+                            child: Text(fieldReminderStatusLabel(s)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) setLocal(() => status = v);
+                    },
                   ),
                   const SizedBox(height: 12),
                   FieldVisitLinkPicker(
@@ -345,14 +490,7 @@ class _RemindersPageState extends State<RemindersPage> {
                     onChanged: (v) => setLocal(() => visitId = v),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: notesCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Note (opzionale)',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 3,
-                  ),
+                  VoiceNoteField(controller: notesCtrl),
                 ],
               ),
             ),
@@ -380,26 +518,55 @@ class _RemindersPageState extends State<RemindersPage> {
       return;
     }
 
+    final rescheduled =
+        reminder != null && !_sameMinute(remindAt, reminder.remindAt);
+    final effectiveStatus =
+        rescheduled ? FieldReminderStatus.planned : status;
+
     setState(() => _busy = true);
     try {
       final result = await FieldReminderService.save(
         id: reminder?.id,
         title: titleCtrl.text,
         remindAt: remindAt,
+        status: effectiveStatus,
         notes: _notesForSave(reminder, notesCtrl.text),
         visitId: visitId,
       );
       if (!mounted) return;
 
       final schedule = result.schedule;
-      if (schedule.scheduled && schedule.notifyAt != null) {
+      if (rescheduled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              schedule.scheduled && schedule.notifyAt != null
+                  ? 'Promemoria riprogrammato e rimesso in programma. '
+                      'Avviso alle '
+                      '${schedule.notifyAt!.hour.toString().padLeft(2, '0')}:'
+                      '${schedule.notifyAt!.minute.toString().padLeft(2, '0')}.'
+                  : 'Promemoria riprogrammato e rimesso in programma.',
+            ),
+          ),
+        );
+      } else if (effectiveStatus != FieldReminderStatus.planned) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Promemoria salvato (${fieldReminderStatusLabel(effectiveStatus)}). '
+              'Notifica disattivata.',
+            ),
+          ),
+        );
+      } else if (schedule.scheduled && schedule.notifyAt != null) {
         final at = schedule.notifyAt!;
         final h = at.hour.toString().padLeft(2, '0');
         final m = at.minute.toString().padLeft(2, '0');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Promemoria salvato. Avviso programmato alle $h:$m.',
+              'Promemoria salvato. Avviso programmato alle $h:$m '
+              '(e all\'orario del promemoria).',
             ),
           ),
         );

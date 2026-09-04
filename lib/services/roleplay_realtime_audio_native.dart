@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -305,6 +306,13 @@ class RoleplayRealtimeAudioNative implements RoleplayRealtimeAudio {
 
   @override
   Future<void> flushPlayback() async {
+    // Windows: setDataIsEnded mentre il BufferStream è ancora in play
+    // blocca l'intera app (flutter_soloud #426). stop+dispose è sicuro.
+    if (!kIsWeb && Platform.isWindows) {
+      await stopPlayback();
+      return;
+    }
+
     final stream = _stream;
     _stream = null;
     _handle = null;

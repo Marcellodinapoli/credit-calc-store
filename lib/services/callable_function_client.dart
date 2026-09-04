@@ -32,6 +32,8 @@ abstract final class CallableFunctionClient {
     return result.data;
   }
 
+  static const _httpTimeout = Duration(seconds: 30);
+
   static Future<dynamic> _callViaHttp(
     String name,
     Map<String, dynamic> data,
@@ -41,19 +43,21 @@ abstract final class CallableFunctionClient {
       throw StateError('Utente non autenticato.');
     }
 
-    final token = await user.getIdToken();
+    final token = await user.getIdToken().timeout(_httpTimeout);
     final url = Uri.parse(
       'https://$_region-$_projectId.cloudfunctions.net/$name',
     );
 
-    final response = await http.post(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'data': data}),
-    );
+    final response = await http
+        .post(
+          url,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({'data': data}),
+        )
+        .timeout(_httpTimeout);
 
     Map<String, dynamic> payload;
     try {

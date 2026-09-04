@@ -5,8 +5,10 @@ import 'package:credit_calc_core/credit_calc_core.dart'
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../auth/biometric_lock_gate.dart';
 import '../core/dimensions.dart';
 import '../offline/credit_calc_runtime.dart';
+import '../offline/services/connectivity_service.dart';
 import '../session/credit_core_session_runtime.dart';
 import '../pages/creditcalc/commissions_page.dart';
 import '../pages/creditcalc/credit_calc_settings_page.dart';
@@ -15,6 +17,7 @@ import '../pages/creditcalc/develop_page.dart';
 import '../pages/creditcalc/itinerary/itinerary_hub_page.dart';
 import '../services/account_menu_badge_controller.dart';
 import '../services/itinerary_nav_badge_notifier.dart';
+import '../services/local_notifications_service.dart';
 import '../services/notification_navigation.dart';
 import '../ui/layout/page_shell.dart';
 import '../widgets/account_menu_badge_icon_button.dart';
@@ -28,10 +31,7 @@ import 'credit_calc_shell_nav.dart';
 const double _kItineraryNavBadgeSmallSize = 12;
 const double _kItineraryNavBadgeLargeSize = 32;
 
-Widget _itineraryNavBadge({
-  required bool visible,
-  required Widget child,
-}) {
+Widget _itineraryNavBadge({required bool visible, required Widget child}) {
   return Badge(
     isLabelVisible: visible,
     smallSize: _kItineraryNavBadgeSmallSize,
@@ -66,6 +66,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     _accountMenuBadgeController.start();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NotificationNavigation.markShellReady();
+      unawaited(LocalNotificationsService.syncItineraryBadgesFromTray());
     });
   }
 
@@ -73,8 +74,9 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
   void dispose() {
     NotificationNavigation.markShellUnavailable();
     CreditCalcRuntime.writeBlockedMessage.removeListener(_onWriteBlocked);
-    creditCalcReturnToCreditorsRequest
-        .removeListener(_onReturnToCreditorsRequest);
+    creditCalcReturnToCreditorsRequest.removeListener(
+      _onReturnToCreditorsRequest,
+    );
     _accountMenuBadgeController.stop();
     super.dispose();
   }
@@ -105,18 +107,75 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
     );
   }
 
-  Future<void> _signOutAccount() async {
+  Future<void> _logout() async {
+    // Timeout stretti: in modalità aereo non tenere bloccata la UI prima del dialog.
+    final online = await ConnectivityService.isOnline(
+      timeout: const Duration(seconds: 2),
+    ).timeout(const Duration(seconds: 3), onTimeout: () => false);
+    final canSoftLock = await BiometricLockGate.canLockWithBiometric().timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => false,
+    );
+    if (!mounted) return;
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Esci'),
+        content: Text(
+          _logoutDialogMessage(softLock: canSoftLock, online: online),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annulla'),
+          ),
+          if (canSoftLock && online)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'lock'),
+              child: const Text('Blocca app'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              ctx,
+              // Online: esci sempre dall'account. Offline+biometria: solo blocco.
+              online || !canSoftLock ? 'signout' : 'lock',
+            ),
+            child: Text(
+              online || !canSoftLock ? 'Esci dall\'account' : 'Blocca app',
+            ),
+          ),
+        ],
+      ),
+    );
+    if (action == null) return;
+
+    if (action == 'lock') {
+      BiometricLockGate.lockAgain();
+      return;
+    }
+
+    if (!mounted) return;
     try {
-      await CreditCoreSessionRuntime.signOutWithSessionRelease();
+      await CreditCoreSessionRuntime.signOutAndClearNavigation(context);
     } catch (_) {}
   }
 
+  String _logoutDialogMessage({required bool softLock, required bool online}) {
+    if (softLock && online) {
+      return 'Esci dall\'account → chiude la sessione sul dispositivo\n'
+          'Blocca app → account resta attivo anche offline';
+    }
+    if (softLock) {
+      return 'Blocca app → account resta attivo anche offline';
+    }
+    return 'Vuoi uscire dall\'account CreditCore?';
+  }
+
   void _openAnnouncements() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const AnnouncementsPage(),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const AnnouncementsPage()));
   }
 
   void _showAccountMenu() {
@@ -126,7 +185,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
       useSafeArea: true,
       builder: (ctx) => CreditCoreAccountMenuSheet(
         onAnnouncements: _openAnnouncements,
-        onLogout: _signOutAccount,
+        onLogout: _logout,
       ),
     );
   }
@@ -175,7 +234,7 @@ class _CreditCalcShellState extends State<CreditCalcShell> {
           section: section,
           onSectionChanged: _onSectionChanged,
           onAnnouncements: _openAnnouncements,
-          onLogout: _signOutAccount,
+          onLogout: _logout,
           onSettings: _openSettings,
           child: _sectionPage(section),
         );
@@ -391,7 +450,8 @@ class _SideNav extends StatelessWidget {
                     icon: Icons.payments,
                     label: 'Provvigioni',
                     selected: section == CreditCalcNavItem.commissions,
-                    onTap: () => onSectionChanged(CreditCalcNavItem.commissions),
+                    onTap: () =>
+                        onSectionChanged(CreditCalcNavItem.commissions),
                   ),
                   _NavTile(
                     icon: Icons.route,
@@ -501,41 +561,47 @@ class _BrandTitle extends StatelessWidget {
       future: DesktopAppUpdateButton.packageInfoFuture,
       builder: (context, snap) {
         final version = snap.data?.version.split('+').first;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text.rich(
-              TextSpan(
-                children: const [
-                  TextSpan(
-                    text: 'Credit',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
+        // FittedBox: evita overflow AppBar quando le actions (Aggiorna, menu…)
+        // lasciano poco spazio al titolo + versione.
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text.rich(
+                TextSpan(
+                  children: const [
+                    TextSpan(
+                      text: 'Credit',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
                     ),
-                  ),
-                  TextSpan(
-                    text: 'Calc',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: ProjectColors.calc,
+                    TextSpan(
+                      text: 'Calc',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: ProjectColors.calc,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            if (version != null) ...[
-              const SizedBox(width: 8),
-              Text(
-                'v$version',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade600,
+                  ],
                 ),
               ),
+              if (version != null) ...[
+                const SizedBox(width: 8),
+                Text(
+                  'v$version',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         );
       },
     );

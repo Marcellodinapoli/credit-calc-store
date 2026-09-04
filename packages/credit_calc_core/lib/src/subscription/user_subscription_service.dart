@@ -109,23 +109,38 @@ abstract final class UserSubscriptionService {
           companyRef: null,
         );
       }
-      final companyDoc =
-          await _firestore.collection('companies').doc(companyId).get();
-      return _SubscriptionContext(
-        registerType: 'company',
-        canManage: false,
-        subscription: _subscriptionFrom(companyDoc.data()),
-        userRef: null,
-        companyRef: null,
-      );
+      try {
+        final companyDoc =
+            await _firestore.collection('companies').doc(companyId).get();
+        return _SubscriptionContext(
+          registerType: 'company',
+          canManage: false,
+          subscription: _subscriptionFrom(companyDoc.data()),
+          userRef: null,
+          companyRef: null,
+        );
+      } catch (_) {
+        return _SubscriptionContext(
+          registerType: type,
+          canManage: false,
+          subscription: _subscriptionFrom(userData),
+          userRef: null,
+          companyRef: null,
+        );
+      }
     }
 
-    final companyDoc =
-        await _firestore.collection('companies').doc(uid).get();
-    final isCompanyAccount = type == 'company' || companyDoc.exists;
+    DocumentSnapshot<Map<String, dynamic>>? companyDoc;
+    try {
+      companyDoc = await _firestore.collection('companies').doc(uid).get();
+    } catch (_) {
+      companyDoc = null;
+    }
+    final isCompanyAccount =
+        type == 'company' || (companyDoc?.exists ?? false);
 
     if (isCompanyAccount) {
-      final sub = companyDoc.exists
+      final sub = companyDoc != null && companyDoc.exists
           ? _subscriptionFrom(companyDoc.data())
           : _subscriptionFrom(userData);
       return _SubscriptionContext(
@@ -133,7 +148,7 @@ abstract final class UserSubscriptionService {
         canManage: true,
         subscription: sub,
         userRef: _firestore.collection('users').doc(uid),
-        companyRef: companyDoc.exists
+        companyRef: companyDoc != null && companyDoc.exists
             ? _firestore.collection('companies').doc(uid)
             : null,
       );

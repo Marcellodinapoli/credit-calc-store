@@ -5,6 +5,7 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'notification_navigation.dart';
+import 'itinerary_nav_badge_notifier.dart';
 
 /// Notifiche di sistema per foreground FCM, promemoria itinerario e push desktop.
 class LocalNotificationsService {
@@ -68,6 +69,16 @@ class LocalNotificationsService {
           _channelName,
           description: 'Novità su offerte, corsi e funzioni CreditCore',
           importance: Importance.high,
+          showBadge: true,
+        ),
+      );
+      await android?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'creditcore_support',
+          'Assistenza e community',
+          description: 'Risposte assistenza e community',
+          importance: Importance.high,
+          showBadge: true,
         ),
       );
       await android?.createNotificationChannel(
@@ -208,7 +219,7 @@ class LocalNotificationsService {
       payload: payload,
       channelId: _channelId,
       channelName: _channelName,
-      showAppIconBadge: false,
+      showAppIconBadge: true,
     );
   }
 
@@ -217,6 +228,7 @@ class LocalNotificationsService {
     required String body,
     String? payload,
   }) {
+    _markItineraryBadgeFromPayload(payload);
     return _showNotification(
       title: title,
       body: body,
@@ -225,6 +237,32 @@ class LocalNotificationsService {
       channelName: _itineraryChannelName,
       showAppIconBadge: true,
     );
+  }
+
+  static void _markItineraryBadgeFromPayload(String? payload) {
+    if (payload == null || payload.trim().isEmpty) return;
+    final raw = payload.trim();
+    final colon = raw.indexOf(':');
+    final type = colon > 0 ? raw.substring(0, colon).trim() : 'field_visit';
+    ItineraryNavBadgeNotifier.instance.markFromNotificationType(type);
+  }
+
+  /// Allinea i badge itinerario alle notifiche ancora visibili nel tray.
+  static Future<void> syncItineraryBadgesFromTray() async {
+    if (kIsWeb || !_initialized) return;
+    try {
+      final active = await _plugin.getActiveNotifications();
+      for (final n in active) {
+        final payload = n.payload;
+        if (payload == null || payload.trim().isEmpty) {
+          if (n.channelId == _itineraryChannelId) {
+            ItineraryNavBadgeNotifier.instance.markAppointments();
+          }
+          continue;
+        }
+        _markItineraryBadgeFromPayload(payload);
+      }
+    } catch (_) {}
   }
 
   static Future<void> _showNotification({
@@ -251,10 +289,12 @@ class LocalNotificationsService {
       presentSound: true,
       badgeNumber: showAppIconBadge ? 1 : null,
     );
+    final windowsDetails = WindowsNotificationDetails();
     final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
       macOS: iosDetails,
+      windows: windowsDetails,
     );
 
     await _plugin.show(

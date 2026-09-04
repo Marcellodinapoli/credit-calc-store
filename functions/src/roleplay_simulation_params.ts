@@ -6,6 +6,7 @@ const PERSONALITIES = [
   "manipolatore",
   "emotivo",
   "razionale",
+  "realistico",
 ] as const;
 
 export type RoleplayDifficulty = (typeof DIFFICULTIES)[number];
@@ -55,6 +56,12 @@ function personalityHint(value: RoleplayPersonality): string {
       return "reazioni emotive marcate (ansia, stress, frustrazione).";
     case "razionale":
       return "freddo e procedurale, chiede dettagli e contesta con logica.";
+    case "realistico":
+      return (
+        "misto realistico: durante la conversazione alterna e combina tratti di " +
+        "aggressivo, collaborativo, diffidente, emotivo e manipolatore; " +
+        "non restare su un solo stile."
+      );
     default:
       return "aperto al confronto, propone soluzioni e chiede chiarimenti.";
   }
@@ -87,6 +94,8 @@ function personalityLabel(value: RoleplayPersonality): string {
       return "Emotivo";
     case "razionale":
       return "Razionale";
+    case "realistico":
+      return "Realistico/Misto";
     default:
       return "Collaborativo";
   }

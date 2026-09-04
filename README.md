@@ -15,13 +15,13 @@ flutter run
 
 ## Build Windows (exe + installer)
 
-Versione attuale: **1.0.6**
+Versione attuale: **1.0.41**
 
 Output fisso (come `creditcalc-tool`):
 
 ```
-dist/CreditCalc-1.0.6-win64/CreditCalc.exe
-dist/CreditCalc-1.0.6-Setup.exe
+dist/CreditCalc-1.0.41-win64/CreditCalc.exe
+dist/CreditCalc-1.0.41-Setup.exe
 ```
 
 Per compilarlo (richiede **Inno Setup 6**):

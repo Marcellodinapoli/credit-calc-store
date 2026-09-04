@@ -74,6 +74,12 @@ match /security_logs/{docId} {
 
       allow delete: if false;
     }
+
+    // Token FCM BackOffice Admin (push assistenza + login)
+    match /devices/{deviceId} {
+      allow read, create, update, delete: if request.auth != null
+        && request.auth.token.admin == true;
+    }
   
 
 // ------------------------------------------------------------------

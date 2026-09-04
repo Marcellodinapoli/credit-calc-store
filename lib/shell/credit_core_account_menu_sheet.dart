@@ -424,6 +424,7 @@ class _CreditCoreAccountMenuSheetState extends State<CreditCoreAccountMenuSheet>
           _item(
             icon: Icons.notifications_outlined,
             title: 'Notifiche',
+            showBadge: badges.announcements,
             onTap: () => _closeAnd(widget.onAnnouncements),
           ),
         ];

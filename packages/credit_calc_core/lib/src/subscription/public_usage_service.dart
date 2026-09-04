@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'public_plan_limits.dart';
 import 'public_plan_limits_config_service.dart';
@@ -109,21 +111,88 @@ abstract final class PublicUsageService {
     return UserSubscriptionService.effectivePlanIdForLimits(subscription);
   }
 
+  static const _userContextCachePrefix = 'public_usage_user_ctx_v1_';
+
+  /// Precarica e mette in cache il piano utente (chiamare online al bootstrap).
+  static Future<void> prefetchUserContext() async {
+    await _userContext();
+  }
+
+  static Future<void> _cacheUserContext(
+    String uid,
+    ({String type, String planId, bool couponBenefitActive}) ctx,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '$_userContextCachePrefix$uid',
+        jsonEncode({
+          'type': ctx.type,
+          'planId': ctx.planId,
+          'couponBenefitActive': ctx.couponBenefitActive,
+        }),
+      );
+    } catch (_) {}
+  }
+
+  static Future<({String type, String planId, bool couponBenefitActive})?>
+      _readCachedUserContext(String uid) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('$_userContextCachePrefix$uid');
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final map = Map<String, dynamic>.from(decoded);
+      return (
+        type: (map['type'] ?? 'public').toString(),
+        planId: (map['planId'] ?? 'free').toString(),
+        couponBenefitActive: map['couponBenefitActive'] == true,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<({String type, String planId, bool couponBenefitActive})?>
       _userContext() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return null;
-    final snap = await _firestore.collection('users').doc(uid).get();
-    final data = snap.data() ?? {};
-    final type = (data['type'] ?? 'public').toString().trim().toLowerCase();
-    final subscription =
-        await UserSubscriptionService.loadEnrichedSubscription(uid);
-    return (
-      type: type,
-      planId: _effectivePlanId(subscription),
-      couponBenefitActive:
-          UserSubscriptionService.isCouponBenefitActive(subscription),
-    );
+
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .doc(uid)
+          .get()
+          .timeout(const Duration(seconds: 5));
+      final data = snap.data() ?? {};
+      final type = (data['type'] ?? 'public').toString().trim().toLowerCase();
+      final subscription = await UserSubscriptionService.loadEnrichedSubscription(
+        uid,
+      ).timeout(const Duration(seconds: 5));
+      final ctx = (
+        type: type,
+        planId: _effectivePlanId(subscription),
+        couponBenefitActive:
+            UserSubscriptionService.isCouponBenefitActive(subscription),
+      );
+      unawaited(_cacheUserContext(uid, ctx));
+      return ctx;
+    } catch (_) {
+      final cached = await _readCachedUserContext(uid);
+      if (cached != null) return cached;
+
+      // Store / dispositivo offline senza cache: non bloccare salvataggi locali
+      // (provvigioni, schemi, ecc.). I limiti torneranno precisi appena online.
+      if (PublicUsageLocalDataAccess.instance != null) {
+        return (
+          type: 'public',
+          planId: 'plus',
+          couponBenefitActive: false,
+        );
+      }
+      return null;
+    }
   }
 
   static bool shouldEnforceForUserType(String type) {

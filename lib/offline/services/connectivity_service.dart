@@ -8,7 +8,16 @@ abstract final class ConnectivityService {
   static final _connectivity = Connectivity();
 
   static Future<bool> isOnline({Duration? timeout}) async {
-    final results = await _connectivity.checkConnectivity();
+    final maxWait = timeout ?? const Duration(seconds: 6);
+    List<ConnectivityResult> results;
+    try {
+      // Su alcuni device in modalità aereo checkConnectivity può restare appeso.
+      results = await _connectivity
+          .checkConnectivity()
+          .timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      return false;
+    }
     // Lista vuota: su Windows connectivity_plus può non restituire interfacce.
     final explicitOffline = results.isNotEmpty &&
         results.every((r) => r == ConnectivityResult.none);
@@ -18,7 +27,6 @@ abstract final class ConnectivityService {
     }
     if (kIsWeb) return !explicitOffline;
     final probe = _probeReachability(hasLink: hasLink);
-    final maxWait = timeout ?? const Duration(seconds: 6);
     try {
       return await probe.timeout(maxWait);
     } on TimeoutException {

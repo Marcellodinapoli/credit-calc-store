@@ -21,6 +21,8 @@ final class AccountMenuBadgeController {
   int _coursesLastSeenMs = 0;
   int _warmupLastSeenMs = 0;
   int _jobOffersLastSeenMs = 0;
+  String _userType = 'public';
+  Set<String> _seenAnnouncementIds = {};
 
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _supportMessages = {};
   final Map<String, QuerySnapshot<Map<String, dynamic>>> _communityMessages = {};
@@ -28,6 +30,7 @@ final class AccountMenuBadgeController {
   QuerySnapshot<Map<String, dynamic>>? _roleplay;
   QuerySnapshot<Map<String, dynamic>>? _jobOffers;
   QuerySnapshot<Map<String, dynamic>>? _warmupApproved;
+  QuerySnapshot<Map<String, dynamic>>? _announcements;
 
   Timer? _recomputeTimer;
   String? _uid;
@@ -76,12 +79,31 @@ final class AccountMenuBadgeController {
     _roleplay = null;
     _jobOffers = null;
     _warmupApproved = null;
+    _announcements = null;
+    _seenAnnouncementIds = {};
+    _userType = 'public';
   }
 
   void _attachListeners(String uid) {
     _subs.add(
       _firestore.collection('users').doc(uid).snapshots().listen((snap) {
-        _applyReadState(snap.data()?['readState']);
+        final data = snap.data();
+        _userType = (data?['type'] ?? 'public').toString().trim().isEmpty
+            ? 'public'
+            : (data?['type'] ?? 'public').toString().trim();
+        _applyReadState(data?['readState']);
+        _scheduleRecompute();
+      }),
+    );
+
+    _subs.add(
+      _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('seen_announcements')
+          .snapshots()
+          .listen((snap) {
+        _seenAnnouncementIds = snap.docs.map((d) => d.id).toSet();
         _scheduleRecompute();
       }),
     );
@@ -174,6 +196,18 @@ final class AccountMenuBadgeController {
         _scheduleRecompute();
       }),
     );
+
+    // Annunci: badge menù solo per utenti pubblici.
+    _subs.add(
+      _firestore
+          .collection('announcements')
+          .where('active', isEqualTo: true)
+          .snapshots()
+          .listen((snap) {
+        _announcements = snap;
+        _scheduleRecompute();
+      }),
+    );
   }
 
   void _syncChildListeners({
@@ -231,6 +265,7 @@ final class AccountMenuBadgeController {
       warmup: _hasWarmupUnread(uid),
       roleplay: _hasRoleplayUnread(),
       jobOffers: _hasJobOffersUnread(),
+      announcements: _hasAnnouncementsUnread(),
     );
   }
 
@@ -304,6 +339,18 @@ final class AccountMenuBadgeController {
           createdAt.millisecondsSinceEpoch > _jobOffersLastSeenMs) {
         return true;
       }
+    }
+    return false;
+  }
+
+  /// Solo utenti pubblici: annunci attivi non ancora in seen_announcements.
+  bool _hasAnnouncementsUnread() {
+    if (_userType != 'public') return false;
+    for (final doc in _announcements?.docs ?? const []) {
+      if (_seenAnnouncementIds.contains(doc.id)) continue;
+      final target = (doc.data()['target'] ?? 'all').toString();
+      if (target != 'all' && target != 'public') continue;
+      return true;
     }
     return false;
   }

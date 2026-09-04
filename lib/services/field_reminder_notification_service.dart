@@ -18,10 +18,15 @@ class FieldReminderScheduleResult {
 }
 
 abstract final class FieldReminderNotificationService {
+  /// Preavviso locale (allineato al push cloud ~5 min prima).
   static const Duration advance = Duration(minutes: 5);
 
   static int notificationIdFor(String reminderId) =>
       reminderId.hashCode & 0x7fffffff;
+
+  /// Secondo avviso all'orario del promemoria (come le visite).
+  static int atTimeNotificationIdFor(String reminderId) =>
+      (notificationIdFor(reminderId) ^ 0x00A11A1D) & 0x7fffffff;
 
   static DateTime? resolveNotifyAt(DateTime remindAt) {
     if (!remindAt.isAfter(DateTime.now())) return null;
@@ -43,6 +48,11 @@ abstract final class FieldReminderNotificationService {
       );
     }
 
+    if (!reminder.isActiveForNotification) {
+      await cancelForReminder(reminder.id);
+      return const FieldReminderScheduleResult(scheduled: false);
+    }
+
     final productEnabled = await ProductNotificationsService.loadEnabled(uid);
     final itineraryEnabled =
         await ItineraryNotificationsService.loadEnabled(uid);
@@ -57,14 +67,13 @@ abstract final class FieldReminderNotificationService {
 
     final notifyAt = resolveNotifyAt(reminder.remindAt);
     if (notifyAt == null) {
+      await cancelForReminder(reminder.id);
       return const FieldReminderScheduleResult(
         scheduled: false,
         issue: 'L\'orario del promemoria è già trascorso.',
       );
     }
 
-    // Nessun dialog sistema qui: i permessi si chiedono solo quando l'utente
-    // attiva «Notifiche itinerario» (Area personale → Notifiche).
     final hasPermission = await LocalNotificationsService.ensurePermission(
       allowPrompt: false,
     );
@@ -78,18 +87,36 @@ abstract final class FieldReminderNotificationService {
     }
 
     final timeLabel = _formatTime(reminder.remindAt);
-    final body = reminder.notes?.trim().isNotEmpty == true
-        ? reminder.notes!.trim()
-        : 'Scadenza alle $timeLabel';
+    final notes = reminder.notes?.trim() ?? '';
+    final preBody =
+        notes.isNotEmpty ? notes : 'Scadenza alle $timeLabel';
+    final atBody = notes.isNotEmpty
+        ? '$notes · è ora ($timeLabel)'
+        : 'È l\'orario del promemoria ($timeLabel)';
 
     try {
+      await cancelForReminder(reminder.id);
+
       await LocalNotificationsService.scheduleItineraryReminder(
         id: notificationIdFor(reminder.id),
         title: reminder.title,
-        body: body,
+        body: preBody,
         when: notifyAt,
         payload: 'field_reminder:${reminder.id}',
       );
+
+      final atTime = reminder.remindAt;
+      if (atTime.isAfter(DateTime.now().add(const Duration(seconds: 90))) &&
+          atTime.difference(notifyAt).inSeconds > 60) {
+        await LocalNotificationsService.scheduleItineraryReminder(
+          id: atTimeNotificationIdFor(reminder.id),
+          title: reminder.title,
+          body: atBody,
+          when: atTime,
+          payload: 'field_reminder:${reminder.id}',
+        );
+      }
+
       return FieldReminderScheduleResult(
         scheduled: true,
         notifyAt: notifyAt,
@@ -109,6 +136,9 @@ abstract final class FieldReminderNotificationService {
     await LocalNotificationsService.cancelScheduled(
       notificationIdFor(reminderId),
     );
+    await LocalNotificationsService.cancelScheduled(
+      atTimeNotificationIdFor(reminderId),
+    );
   }
 
   static Future<void> syncAllForCurrentUser() async {
@@ -125,6 +155,10 @@ abstract final class FieldReminderNotificationService {
 
     final reminders = await FieldReminderService.fetchAllForUserId(uid);
     for (final reminder in reminders) {
+      if (!reminder.isActiveForNotification) {
+        await cancelForReminder(reminder.id);
+        continue;
+      }
       await scheduleIfEnabled(reminder);
     }
   }

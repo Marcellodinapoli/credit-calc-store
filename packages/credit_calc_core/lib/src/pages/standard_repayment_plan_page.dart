@@ -2279,7 +2279,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       );
     }
 
-    final remainingN = maxTotal - modulatedMonths;
+    final remainingSlots = maxTotal - modulatedMonths;
 
     if (residual <= 0.009) {
       return _ManualSizingValidation(
@@ -2292,32 +2292,97 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       );
     }
 
-    final mesiDisp = _availablePlanMonths();
-    if (mesiDisp != null && modulatedMonths + remainingN > mesiDisp) {
+    if (remainingSlots < 1) {
       return _ManualSizingValidation(
         isValid: false,
         message:
-            'Il piano complessivo dura ${modulatedMonths + remainingN} mesi '
-            '($modulatedMonths personalizzati + $remainingN sul residuo), oltre i '
+            'Non restano dilazioni disponibili sul residuo entro il massimo '
+            'di fascia/età ($maxTotal).',
+        showError: showError,
+      );
+    }
+
+    final residualN = _residualInstallmentCountForModulated(
+      residual: residual,
+      minInstallment: minRata,
+      maxRemainingSlots: remainingSlots,
+    );
+    if (residualN == null) {
+      return _ManualSizingValidation(
+        isValid: false,
+        message:
+            'Il residuo di ${EuroFormat.format(residual)} non può essere '
+            'dilazionato rispettando il minimo rata '
+            '(${EuroFormat.format(minRata)}) entro $remainingSlots mesi '
+            'disponibili (fascia/età).',
+        showError: showError,
+      );
+    }
+
+    final mesiDisp = _availablePlanMonths();
+    if (mesiDisp != null && modulatedMonths + residualN > mesiDisp) {
+      return _ManualSizingValidation(
+        isValid: false,
+        message:
+            'Il piano complessivo dura ${modulatedMonths + residualN} mesi '
+            '($modulatedMonths personalizzati + $residualN sul residuo), oltre i '
             '$mesiDisp mesi disponibili per età del debitore.',
         showError: showError,
       );
     }
 
-    if (residual / remainingN + 1e-9 < minRata &&
-        _modalitaRate != _RepaymentSplitMode.lastAdjustment) {
-      return _ManualSizingValidation(
-        isValid: false,
-        message:
-            'Sul residuo di ${EuroFormat.format(residual)} in $remainingN dilazioni '
-            'la rata media (${EuroFormat.format(residual / remainingN)}) sarebbe sotto '
-            'il minimo (${EuroFormat.format(minRata)}). Accorcia le fasi personalizzate '
-            'o usa la modalità conguaglio.',
-        showError: showError,
-      );
-    }
-
     return _ManualSizingValidation.ok;
+  }
+
+  /// Dilazioni sul residuo modulato:
+  /// 1) prova con i mesi ancora disponibili (fascia PDR / età);
+  /// 2) se la rata scende sotto il minimo creditore, alternativa =
+  ///    divisione del residuo per l'importo minimo (cap ai mesi disponibili).
+  int? _residualInstallmentCountForModulated({
+    required double residual,
+    required double minInstallment,
+    required int maxRemainingSlots,
+  }) {
+    if (residual <= 0.009 || maxRemainingSlots < 1) return null;
+
+    final minRata = minInstallment > 0 ? minInstallment : 0.01;
+    if (residual + 1e-9 < minRata) return null;
+
+    // Tentativo standard: usa tutti i mesi disponibili sul residuo.
+    final byAvailableMonths = _RepaymentInstallmentPlan.build(
+      netAmount: residual,
+      maxInstallments: maxRemainingSlots,
+      minInstallment: minRata,
+      mode: _modalitaRate,
+      fixedInstallmentCount: maxRemainingSlots,
+    );
+    if (byAvailableMonths != null) return maxRemainingSlots;
+
+    // Alternativa: dividi il residuo per il minimo importo rata.
+    final byMinAmount = _modalitaRate == _RepaymentSplitMode.lastAdjustment
+        ? _RepaymentInstallmentPlan.installmentCountForLastAdjustment(
+            netAmount: residual,
+            minInstallment: minRata,
+          )
+        : _RepaymentInstallmentPlan.installmentCountForMinAmount(
+            netAmount: residual,
+            minInstallment: minRata,
+          );
+    if (byMinAmount == null || byMinAmount < 1) return null;
+
+    // Non superare i mesi ancora consentiti da fascia/età.
+    final n = byMinAmount <= maxRemainingSlots
+        ? byMinAmount
+        : maxRemainingSlots;
+
+    final probe = _RepaymentInstallmentPlan.build(
+      netAmount: residual,
+      maxInstallments: n,
+      minInstallment: minRata,
+      mode: _modalitaRate,
+      fixedInstallmentCount: n,
+    );
+    return probe?.installmentCount;
   }
 
   void _commitModulatedValidation() {
@@ -3192,6 +3257,7 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
     final dilazioneAmount = input.residualDilazioneAmount;
     late final int remainingN;
     double? chosenRata;
+    var usedMinAmountAlternative = false;
     if (dilazioneAmount != null) {
       chosenRata = dilazioneAmount;
       final n = _dilazioneCountForDesiredAmount(
@@ -3201,11 +3267,32 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
       );
       if (n == null) return;
       remainingN = n;
+    } else if (input.residualDilazioneMonths != null) {
+      remainingN = input.residualDilazioneMonths!;
     } else {
-      remainingN = input.residualDilazioneMonths ??
-          (effectiveMax - modulatedMonths);
+      final maxRemaining = effectiveMax - modulatedMonths;
+      final n = _residualInstallmentCountForModulated(
+        residual: residual,
+        minInstallment: _creditor!.minInstallmentAmount,
+        maxRemainingSlots: maxRemaining,
+      );
+      if (n == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Impossibile dilazionare il residuo di '
+              '${EuroFormat.format(residual)} rispettando il minimo rata '
+              '(${EuroFormat.format(_creditor!.minInstallmentAmount)}).',
+            ),
+          ),
+        );
+        return;
+      }
+      remainingN = n;
+      usedMinAmountAlternative = n < maxRemaining;
     }
-    _cappedToAvailableMonths = effectiveMax < _matchedPdrBand!.installments;
+    _cappedToAvailableMonths = effectiveMax < _matchedPdrBand!.installments ||
+        usedMinAmountAlternative;
 
     final finalPlan = _RepaymentInstallmentPlan.build(
       netAmount: residual,
@@ -4201,10 +4288,21 @@ class _StandardRepaymentPlanPageState extends State<StandardRepaymentPlanPage> {
         Padding(
           padding: const EdgeInsets.only(top: 4, bottom: 4),
           child: Text(
-            'Sul residuo sono state usate ${mod.finalInstallmentCount} dilazioni '
-            'su ${_matchedPdrBand!.installments - mod.modulatedMonths} mesi '
-            'residui della fascia (limite età: '
-            '${_availablePlanMonths()} mesi disponibili).',
+            () {
+              final maxRemaining = _effectiveMaxInstallments(_matchedPdrBand!) -
+                  mod.modulatedMonths;
+              if (mod.finalInstallmentCount < maxRemaining) {
+                return 'Sul residuo, con i $maxRemaining mesi ancora disponibili '
+                    'la rata sarebbe sotto il minimo del creditore '
+                    '(${EuroFormat.format(_creditor!.minInstallmentAmount)}): '
+                    'sono state usate ${mod.finalInstallmentCount} dilazioni '
+                    'calcolate dividendo il residuo per l\'importo minimo.';
+              }
+              return 'Sul residuo sono state usate ${mod.finalInstallmentCount} dilazioni '
+                  'su $maxRemaining mesi residui consentiti (limite età: '
+                  '${_availablePlanMonths()} mesi disponibili; fascia PDR: '
+                  '${_matchedPdrBand!.installments}).';
+            }(),
             style: TextStyle(
               fontSize: 12,
               height: 1.4,

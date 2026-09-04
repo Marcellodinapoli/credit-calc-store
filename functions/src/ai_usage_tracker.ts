@@ -323,6 +323,7 @@ async function writeUsageLog(params: {
     cachedAudioTokens: modality.cachedAudioTokens ?? 0,
     whisperSeconds: Math.max(0, params.whisperSeconds ?? 0),
     estimatedCost: params.estimatedCostUsd,
+    estimatedCostUsd: params.estimatedCostUsd,
     responseTimeMs: Math.max(0, params.responseTimeMs ?? 0),
     error: params.error ?? null,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),

@@ -141,14 +141,16 @@ class _RoleplayPageState extends State<RoleplayPage> {
         RoleplaySessionFactory.resolveProvider(simulationData);
     final engine = RoleplaySessionFactory.activeEngine(normalizedProvider);
 
-    await _ensureSession(engine);
-
+    // Overlay subito: su Windows la connessione/token può richiedere secondi
+    // e senza feedback sembra che l'app si sia bloccata.
     _currentSimulation = simulationData;
     _currentSimulationId = simulationId;
     _currentSimulationCategory = category;
     _simulationStartedAt = DateTime.now();
+    if (mounted) setState(() {});
 
-    setState(() {});
+    await _ensureSession(engine);
+    if (!mounted) return;
 
     final sessionId = '${simulationId}_${DateTime.now().millisecondsSinceEpoch}';
     await _session!.start(
@@ -266,7 +268,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
           Expanded(child: _buildSimulations(category)),
         ],
       ),
-          if (_isSimulationActive && _currentSimulation != null)
+          if (_currentSimulation != null)
             RoleplayCallOverlay(
               title: (_currentSimulation!['title'] ?? 'Simulazione').toString(),
               practiceData:
@@ -426,7 +428,7 @@ class _RoleplayPageState extends State<RoleplayPage> {
               personality: personality,
               isNew: isNew,
               completed: _simulationDetails[doc.id]?.hasConversation == true,
-              simulationActive: _isSimulationActive,
+              simulationActive: _currentSimulation != null,
               detail: _simulationDetails[doc.id],
               onOpenSimulation: () => _startSimulation(
                 simulationPayload,

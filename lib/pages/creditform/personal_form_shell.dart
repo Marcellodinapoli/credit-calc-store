@@ -54,7 +54,7 @@ class _PersonalFormShellState extends State<PersonalFormShell> {
   }
 
   Future<void> _logout() async {
-    await CreditCoreSessionRuntime.signOutWithSessionRelease();
+    await CreditCoreSessionRuntime.signOutAndClearNavigation(context);
   }
 
   void _openAnnouncements() {

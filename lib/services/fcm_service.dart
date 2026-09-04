@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
 import 'fcm_background_handler.dart';
+import 'itinerary_nav_badge_notifier.dart';
 import 'local_notifications_service.dart';
 import 'notification_navigation.dart';
 import 'product_notifications_service.dart';
@@ -80,6 +81,7 @@ class FcmService {
 
     final localPayload = _localPayloadForData(data);
     if (type == 'field_visit' || type == 'field_reminder') {
+      ItineraryNavBadgeNotifier.instance.markFromNotificationType(type);
       await LocalNotificationsService.showItineraryNotification(
         title: title,
         body: body,
@@ -101,6 +103,9 @@ class FcmService {
     final id = data['announcementId'] ??
         data['offerId'] ??
         data['courseId'] ??
+        data['roleplayId'] ??
+        data['ticketId'] ??
+        data['topicId'] ??
         data['visitId'] ??
         data['reminderId'] ??
         data['id'];

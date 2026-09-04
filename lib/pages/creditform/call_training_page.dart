@@ -106,6 +106,29 @@ CallTrainingConfig callTrainingConfigFor(String phaseKey) {
             'non divulgare dati sensibili, al massimo nome e cognome, chiedere '
             'recapito telefonico o richiamata dal debitore.',
       );
+    case 'Motivo_della_chiamata':
+      return CallTrainingConfig(
+        phaseKey: phaseKey,
+        sectionTitle: 'Motivo della chiamata',
+        color: Colors.teal.shade700,
+        targetPersonName: 'Rossi Andrea',
+        responseGuidance:
+            'Debitore: Rossi Andrea. Spiega in modo chiaro e professionale '
+            'il motivo della chiamata (insoluto / recupero crediti), senza '
+            'ancora aprire la negoziazione su importi e scadenze.',
+        customerLine: 'Va bene, mi dica pure il motivo della chiamata.',
+        decodifica:
+            'Ti sei presentato: ora il debitore vuole sapere perché lo stai '
+            'chiamando. È il momento di chiarire il motivo del contatto.',
+        spiegazione:
+            'Obiettivo: comunicare a Rossi Andrea il motivo della chiamata '
+            '(posizione insoluta / recupero crediti) con chiarezza e tono '
+            'professionale, senza entrare ancora nella negoziazione.',
+        evaluationCriteria:
+            'Motivo della chiamata chiaro: indicare insoluto o recupero crediti '
+            'con tono professionale. Non anticipare importi, scadenze o richieste '
+            'di pagamento tipiche della negoziazione.',
+      );
     case 'Negoziazione':
       return CallTrainingConfig(
         phaseKey: phaseKey,
@@ -257,10 +280,21 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
     switch (_cfg.phaseKey) {
       case 'Presentazione_standard':
         return const ['Approccio'];
-      case 'Negoziazione':
+      case 'Motivo_della_chiamata':
         return const ['Approccio', 'Presentazione_standard'];
+      case 'Negoziazione':
+        return const [
+          'Approccio',
+          'Presentazione_standard',
+          'Motivo_della_chiamata',
+        ];
       case 'Chiusura':
-        return const ['Approccio', 'Presentazione_standard', 'Negoziazione'];
+        return const [
+          'Approccio',
+          'Presentazione_standard',
+          'Motivo_della_chiamata',
+          'Negoziazione',
+        ];
       default:
         return const [];
     }
@@ -473,6 +507,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
   String get _step0ResponseLabel {
     switch (_cfg.phaseKey) {
       case 'Presentazione_standard':
+      case 'Motivo_della_chiamata':
       case 'Negoziazione':
       case 'Chiusura':
         return 'Risposta del debitore';
@@ -488,6 +523,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
     switch (_cfg.phaseKey) {
       case 'Presentazione_standard':
         return 'Il debitore continua così la conversazione:';
+      case 'Motivo_della_chiamata':
       case 'Negoziazione':
       case 'Chiusura':
         return 'Il debitore risponde così:';
@@ -769,6 +805,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
         const SizedBox(height: 8),
         Text(
           _cfg.phaseKey == 'Presentazione_standard' ||
+                  _cfg.phaseKey == 'Motivo_della_chiamata' ||
                   _cfg.phaseKey == 'Negoziazione' ||
                   _cfg.phaseKey == 'Chiusura'
               ? 'Leggi la replica del debitore e registra la tua risposta: '
@@ -812,6 +849,7 @@ class _CallTrainingPageState extends State<CallTrainingPage> {
             const SizedBox(width: 8),
             Text(
               _cfg.phaseKey == 'Presentazione_standard' ||
+                      _cfg.phaseKey == 'Motivo_della_chiamata' ||
                       _cfg.phaseKey == 'Negoziazione' ||
                       _cfg.phaseKey == 'Chiusura'
                   ? 'Debitore'

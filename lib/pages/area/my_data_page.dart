@@ -1092,7 +1092,8 @@ class _MyDataPageState extends State<MyDataPage> {
                     'disabledAt': FieldValue.serverTimestamp(),
                   });
 
-                  await CreditCoreSessionRuntime.signOutWithSessionRelease();
+                  if (!context.mounted) return;
+                  await CreditCoreSessionRuntime.signOutAndClearNavigation(context);
                 } else {
                   await _deleteAllUserData(user);
                   await user.delete();

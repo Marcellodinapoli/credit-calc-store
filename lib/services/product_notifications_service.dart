@@ -24,7 +24,8 @@ class ProductNotificationsService {
   }
 
   /// Attiva/disattiva le notifiche. Chiede il permesso solo con [enabled] true
-  /// (es. toggle manuale in Area personale → Aggiornamenti).
+  /// (es. toggle manuale in Area personale → Notifiche).
+  /// Su mobile non salva `enabled=true` senza token FCM valido.
   static Future<ProductNotificationsResult> setEnabled({
     required String uid,
     required bool enabled,
@@ -57,29 +58,25 @@ class ProductNotificationsService {
         ? await _requestPermissionAndToken()
         : await _readTokenIfPermitted();
 
-    if (requestPermission &&
-        enabled &&
-        tokenResult.permissionIssue != null &&
-        (tokenResult.token == null || tokenResult.token!.isEmpty)) {
-      await ref.set(data, SetOptions(merge: true));
+    final token = tokenResult.token?.trim() ?? '';
+    if (token.isEmpty) {
+      // Non lasciare enabled=true senza token: le CF non invierebbero mai push.
       return ProductNotificationsResult(
-        success: true,
-        permissionIssue: tokenResult.permissionIssue,
+        success: false,
+        permissionIssue: tokenResult.permissionIssue ??
+            'Permesso notifiche mancante o token non registrato. '
+                'Attiva le notifiche dalle impostazioni del telefono e riprova.',
         tokenRegistered: false,
       );
     }
 
-    if (tokenResult.token != null && tokenResult.token!.isNotEmpty) {
-      data[fieldToken] = tokenResult.token;
-      data[fieldPushPlatform] = pushPlatformLabel;
-    }
-
+    data[fieldToken] = token;
+    data[fieldPushPlatform] = pushPlatformLabel;
     await ref.set(data, SetOptions(merge: true));
 
-    return ProductNotificationsResult(
+    return const ProductNotificationsResult(
       success: true,
-      permissionIssue: tokenResult.permissionIssue,
-      tokenRegistered: tokenResult.token != null && tokenResult.token!.isNotEmpty,
+      tokenRegistered: true,
     );
   }
 
@@ -126,6 +123,7 @@ class ProductNotificationsService {
     if (!await _hasFcmPermission()) return;
 
     try {
+      await _messaging.setAutoInitEnabled(true);
       final token = await _messaging.getToken();
       if (token == null || token.isEmpty) return;
       await syncToken(uid: uid, token: token);
@@ -134,6 +132,45 @@ class ProductNotificationsService {
         debugPrint('FCM refresh token: $e');
       }
     }
+  }
+
+  /// Stato preferenza senza dialog permessi (solo lettura + refresh token silenzioso).
+  static Future<ProductNotificationsHealth> loadStatus(String uid) async {
+    final doc = await _firestore.collection('users').doc(uid).get();
+    final data = doc.data() ?? {};
+    final enabled = data[fieldEnabled] == true;
+    final existingToken =
+        data[fieldToken] is String ? (data[fieldToken] as String).trim() : '';
+
+    if (!enabled) {
+      return const ProductNotificationsHealth(
+        enabled: false,
+        tokenRegistered: false,
+      );
+    }
+
+    // Se il permesso c'è già, aggiorna il token in silenzio (niente dialog).
+    await refreshTokenIfEnabled(uid);
+
+    if (supportsDesktopLocalPush) {
+      final platform = (await _firestore.collection('users').doc(uid).get())
+          .data()?[fieldPushPlatform];
+      return ProductNotificationsHealth(
+        enabled: true,
+        tokenRegistered: platform == 'windows',
+      );
+    }
+
+    final after = await _firestore.collection('users').doc(uid).get();
+    final tokenAfter = after.data()?[fieldToken];
+    final registered = tokenAfter is String && tokenAfter.trim().isNotEmpty
+        ? true
+        : existingToken.isNotEmpty;
+
+    return ProductNotificationsHealth(
+      enabled: true,
+      tokenRegistered: registered,
+    );
   }
 
   /// Aggiorna solo il token (es. refresh FCM) se le notifiche sono attive.
@@ -243,4 +280,16 @@ class ProductNotificationsResult {
   final bool success;
   final String? permissionIssue;
   final bool tokenRegistered;
+}
+
+class ProductNotificationsHealth {
+  const ProductNotificationsHealth({
+    required this.enabled,
+    required this.tokenRegistered,
+    this.message,
+  });
+
+  final bool enabled;
+  final bool tokenRegistered;
+  final String? message;
 }

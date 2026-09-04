@@ -168,24 +168,30 @@ class SessionService {
   Future<void> releaseIfHolder() async {
     try {
       final localDeviceId = await _deviceId();
-      final snap = await _ref.get(const GetOptions(source: Source.server));
+      final snap = await _ref
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 2));
       final remote = _readAppSession(snap.data());
       if (remote == null || remote.deviceId != localDeviceId) return;
 
-      await _ref.update({'appSession': FieldValue.delete()});
+      await _ref
+          .update({'appSession': FieldValue.delete()})
+          .timeout(const Duration(seconds: 2));
     } on FirebaseException catch (e) {
       if (e.code == 'not-found') return;
       if (kDebugMode) {
         debugPrint('SessionService.releaseIfHolder: ${e.code} ${e.message}');
       }
       try {
-        await _ref.set(
-          {
-            'userId': userId,
-            'appSession': {'active': false},
-          },
-          SetOptions(merge: true),
-        );
+        await _ref
+            .set(
+              {
+                'userId': userId,
+                'appSession': {'active': false},
+              },
+              SetOptions(merge: true),
+            )
+            .timeout(const Duration(seconds: 2));
       } catch (_) {}
     } catch (e) {
       if (kDebugMode) debugPrint('SessionService.releaseIfHolder: $e');

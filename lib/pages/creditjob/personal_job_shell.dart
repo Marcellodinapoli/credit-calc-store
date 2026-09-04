@@ -55,7 +55,7 @@ class _PersonalJobShellState extends State<PersonalJobShell> {
   }
 
   Future<void> _logout() async {
-    await CreditCoreSessionRuntime.signOutWithSessionRelease();
+    await CreditCoreSessionRuntime.signOutAndClearNavigation(context);
   }
 
   void _openAnnouncements() {

@@ -3,9 +3,11 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../pages/area/personal_area_menu.dart';
 import '../pages/creditform/personal_form_menu.dart';
 import '../pages/creditjob/personal_job_menu.dart';
-import '../shell/credit_calc_shell_nav.dart';
+import 'itinerary_deep_link.dart';
+import 'itinerary_nav_badge_notifier.dart';
 
 /// Navigazione deep-link da tap su notifiche FCM / locali.
 class NotificationNavigation {
@@ -82,6 +84,13 @@ class NotificationNavigation {
         return 'visitId';
       case 'field_reminder':
         return 'reminderId';
+      case 'support_reply':
+      case 'support_message':
+        return 'ticketId';
+      case 'community_message':
+        return 'topicId';
+      case 'roleplay':
+        return 'roleplayId';
       default:
         return 'id';
     }
@@ -106,12 +115,26 @@ class NotificationNavigation {
       case 'course':
         PersonalFormMenuItem.courses.open(nav.context);
         return;
+      case 'roleplay':
+        PersonalFormMenuItem.roleplay.open(nav.context);
+        return;
       case 'job_offer':
         PersonalJobMenuItem.jobOffers.open(nav.context);
         return;
+      case 'support_reply':
+      case 'support_message':
+        PersonalAreaMenuItem.directSupport.open(nav.context);
+        return;
+      case 'community_message':
+        PersonalAreaMenuItem.community.open(nav.context);
+        return;
       case 'field_visit':
+        ItineraryNavBadgeNotifier.instance.markAppointments();
+        ItineraryDeepLink.openAppointments(visitId: data['visitId']);
+        return;
       case 'field_reminder':
-        creditCalcActiveSection.value = CreditCalcNavItem.tools;
+        ItineraryNavBadgeNotifier.instance.markReminders();
+        ItineraryDeepLink.openReminders(reminderId: data['reminderId']);
         return;
       default:
         if (kDebugMode) {

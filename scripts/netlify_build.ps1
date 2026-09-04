@@ -20,6 +20,9 @@ if (-not (Test-Path "web\index.html")) {
 
 Write-Host "==> flutter build web --release"
 flutter build web --release
+if ($LASTEXITCODE -ne 0) {
+  throw "Build fallita: flutter build web --release exit $LASTEXITCODE"
+}
 
 if (-not (Test-Path "build\web\index.html")) {
   throw "Build fallita: manca build\web\index.html"

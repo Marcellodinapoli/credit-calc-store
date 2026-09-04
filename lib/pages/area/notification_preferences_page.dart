@@ -56,12 +56,13 @@ class _NotificationPreferencesPageState
       return;
     }
 
-    final enabled = await ProductNotificationsService.loadEnabled(uid);
+    // Nessun dialog permessi qui: solo lettura. Il permesso si chiede sullo switch.
+    final health = await ProductNotificationsService.loadStatus(uid);
     final itineraryEnabled =
         await ItineraryNotificationsService.loadItineraryField(uid);
     if (!mounted) return;
     setState(() {
-      _enabled = enabled;
+      _enabled = health.enabled;
       _itineraryEnabled = itineraryEnabled;
       _loading = false;
     });
@@ -76,9 +77,11 @@ class _NotificationPreferencesPageState
       _enabled = value;
     });
 
+    // Unico punto in cui si chiedono i permessi per le push esterne.
     final result = await ProductNotificationsService.setEnabled(
       uid: uid,
       enabled: value,
+      requestPermission: value,
     );
 
     if (!mounted) return;
@@ -87,11 +90,22 @@ class _NotificationPreferencesPageState
 
     if (!result.success) {
       setState(() => _enabled = !value);
-      _showSnack('Non è stato possibile salvare la preferenza. Riprova.');
+      _showSnack(
+        result.permissionIssue ??
+            'Non è stato possibile salvare la preferenza. Riprova.',
+      );
       return;
     }
 
     if (value) {
+      if (!result.tokenRegistered) {
+        setState(() => _enabled = false);
+        _showSnack(
+          result.permissionIssue ??
+              'Permesso notifiche mancante: attiva le notifiche dalle impostazioni del dispositivo.',
+        );
+        return;
+      }
       _showSnack('Notifiche attivate.');
     } else {
       await ItineraryNotificationsService.setEnabled(uid: uid, enabled: false);
@@ -125,7 +139,7 @@ class _NotificationPreferencesPageState
           _savingItinerary = false;
         });
         _showSnack(
-          'Permesso notifiche necessario. Attivalo dalle impostazioni del telefono.',
+          'Permesso notifiche necessario. Attivalo dalle impostazioni del dispositivo.',
         );
         return;
       }
@@ -188,7 +202,8 @@ class _NotificationPreferencesPageState
                             style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                           subtitle: const Text(
-                            'Attiva o disattiva in qualsiasi momento.',
+                            'Push esterne (corsi, annunci, assistenza, community, roleplay). '
+                            'Il permesso del telefono viene chiesto solo quando attivi questo switch.',
                           ),
                           value: _enabled,
                           onChanged:
@@ -236,11 +251,24 @@ class _NotificationPreferencesPageState
                   ),
                   _bullet(
                     context,
-                    'nuove funzioni o aggiornamenti importanti della piattaforma;',
+                    'nuovi roleplay e aggiornamenti CreditForm;',
+                  ),
+                  _bullet(
+                    context,
+                    'annunci (utenti pubblici) e risposte in assistenza/community;',
                   ),
                   _bullet(
                     context,
                     'promemoria itinerario e avvisi pre-visita (se attivati).',
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Nota: «Privacy e consensi» non attiva le push. '
+                    'Serve questa pagina («Ricevi notifiche») e il permesso '
+                    'del sistema operativo.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   _infoBox(

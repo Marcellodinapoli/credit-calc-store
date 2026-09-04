@@ -579,6 +579,7 @@ abstract final class InstallmentMonitorService {
     var count = 0;
     for (final reminder in reminders) {
       if (!isRateizzoReminder(reminder)) continue;
+      if (reminder.status != FieldReminderStatus.planned) continue;
       final day = DateTime(
         reminder.remindAt.year,
         reminder.remindAt.month,
@@ -801,7 +802,7 @@ abstract final class InstallmentMonitorService {
           );
           reminderIds.add(result.id);
         } else {
-          final visitId = await FieldVisitService.save(
+          final visitResult = await FieldVisitService.save(
             companyName: practice.companyName,
             address: plan.visitAddress.trim(),
             scheduledAt: scheduledAt,
@@ -810,7 +811,7 @@ abstract final class InstallmentMonitorService {
             calculationId: linkedEntryId,
             notes: notes,
           );
-          visitIds.add(visitId);
+          visitIds.add(visitResult.id);
         }
       }
       if (linkedEntryId.isNotEmpty) {
@@ -854,7 +855,7 @@ abstract final class InstallmentMonitorService {
         );
         reminderIds.add(result.id);
       } else {
-        final visitId = await FieldVisitService.save(
+        final visitResult = await FieldVisitService.save(
           companyName: practice.companyName,
           address: plan.visitAddress.trim(),
           scheduledAt: scheduledAt,
@@ -863,7 +864,7 @@ abstract final class InstallmentMonitorService {
           calculationId: entry.id,
           notes: notes,
         );
-        visitIds.add(visitId);
+        visitIds.add(visitResult.id);
       }
       commissionEntryIds.add(entry.id);
     }

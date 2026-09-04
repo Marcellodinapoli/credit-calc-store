@@ -136,6 +136,7 @@ class _TelefonataTabState extends State<TelefonataTab> {
     "Presentazione": false,
     "Presentazione_standard": false,
     "Presentazione_privacy": false,
+    "Motivo_della_chiamata": false,
     "Negoziazione": false,
     "Chiusura": false,
   };
@@ -193,11 +194,14 @@ class _TelefonataTabState extends State<TelefonataTab> {
         return true;
       case "Presentazione":
         return _completed["Approccio"]!;
-      case "Negoziazione":
+      case "Motivo_della_chiamata":
         return _completed["Presentazione_standard"]! &&
             _completed["Presentazione_privacy"]!;
+      case "Negoziazione":
+        return _completed["Motivo_della_chiamata"]!;
       case "Chiusura":
-        return _completed["Negoziazione"]!;
+        return _completed["Motivo_della_chiamata"]! &&
+            _completed["Negoziazione"]!;
       default:
         return false;
     }
@@ -305,6 +309,16 @@ class _TelefonataTabState extends State<TelefonataTab> {
             ),
           ),
 
+          const SizedBox(height: 16),
+
+          PhaseCard(
+            title: "Motivo della chiamata",
+            subtitle: "Approfondisce il motivo della telefonata",
+            color: Colors.teal,
+            completed: _completed["Motivo_della_chiamata"]!,
+            enabled: _isEnabled("Motivo_della_chiamata"),
+            onTap: () => _openPhase("Motivo_della_chiamata"),
+          ),
           const SizedBox(height: 16),
 
           PhaseCard(

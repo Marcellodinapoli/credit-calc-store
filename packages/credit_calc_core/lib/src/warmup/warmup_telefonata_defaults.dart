@@ -11,6 +11,7 @@ abstract final class WarmupTelefonataDefaults {
     'Approccio',
     'Presentazione_standard',
     'Presentazione_privacy',
+    'Motivo_della_chiamata',
     'Negoziazione',
     'Chiusura',
   ];
@@ -129,11 +130,47 @@ abstract final class WarmupTelefonataDefaults {
           'sensibili a terzi. Nell\'esempio (versione_migliorata) non includere '
           'riferimenti alla società, al debito o al motivo della chiamata.',
     },
+    'Motivo_della_chiamata': {
+      'phaseKey': 'Motivo_della_chiamata',
+      'sectionTitle': 'Motivo della chiamata',
+      'group': '',
+      'order': 3,
+      'enabled': true,
+      'colorValue': 0xFF00897B,
+      'customerLine': 'Va bene, mi dica pure il motivo della chiamata.',
+      'targetPersonName': 'Rossi Andrea',
+      'callingOnBehalfOf': '',
+      'responseGuidance':
+          'Debitore: Rossi Andrea. Spiega in modo chiaro e professionale '
+          'il motivo della chiamata (insoluto / recupero crediti), senza '
+          'ancora aprire la negoziazione su importi e scadenze.',
+      'decodifica':
+          'Ti sei presentato: ora il debitore vuole sapere perché lo stai '
+          'chiamando. È il momento di chiarire il motivo del contatto.',
+      'spiegazione':
+          'Obiettivo: comunicare a Rossi Andrea il motivo della chiamata '
+          '(posizione insoluta / recupero crediti) con chiarezza e tono '
+          'professionale, senza entrare ancora nella negoziazione.',
+      'evaluationCriteria':
+          'Motivo della chiamata chiaro: indicare insoluto o recupero crediti '
+          'con tono professionale. Non anticipare importi, scadenze o richieste '
+          'di pagamento tipiche della negoziazione.',
+      'systemPrompt': defaultSystemPrompt,
+      'phaseInstruction':
+          'IMPORTANTE: in fase Motivo della chiamata il debitore è già '
+          'identificato e l\'operatore si è già presentato. Deve spiegare '
+          'SOLO il motivo del contatto (insoluto / recupero crediti). '
+          'NON chiedere di nuovo l\'identità e NON ri-presentarsi. '
+          'NON anticipare importi, rate, scadenze o richieste di pagamento '
+          '(quelle appartengono a Negoziazione). Nell\'esempio '
+          '(versione_migliorata) proponi una spiegazione breve del motivo, '
+          'senza negoziazione.',
+    },
     'Negoziazione': {
       'phaseKey': 'Negoziazione',
       'sectionTitle': 'Negoziazione',
       'group': '',
-      'order': 3,
+      'order': 4,
       'enabled': true,
       'colorValue': 0xFF5E35B1,
       'customerLine': 'Salve, mi dica.',
@@ -166,7 +203,7 @@ abstract final class WarmupTelefonataDefaults {
       'phaseKey': 'Chiusura',
       'sectionTitle': 'Chiusura',
       'group': '',
-      'order': 4,
+      'order': 5,
       'enabled': true,
       'colorValue': 0xFF43A047,
       'customerLine':
